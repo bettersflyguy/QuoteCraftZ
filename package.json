@@ -1,0 +1,35 @@
+{
+  "name": "ezlynx-quote-bridge",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fluentui/react-components": "^9.74.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.7.1",
+    "@types/chrome": "^0.2.6",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
