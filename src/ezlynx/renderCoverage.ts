@@ -1,9 +1,9 @@
 const MAX = 5000;
 
 export interface RawQuoteLike {
-  coverages?: { name: string; value: string }[];
-  homeCoveragePremiums?: { code: string; name: string; limits: string; amountText: string }[];
-  endorsementPremiums?: { name: string; limits: string; amountText: string }[];
+  coverages?: { name: string; value: string }[] | null;
+  homeCoveragePremiums?: { code: string; name: string; limits: string; amountText: string }[] | null;
+  endorsementPremiums?: { name: string; limits: string; amountText: string }[] | null;
 }
 
 /** Renders the COVERAGE cell text. Values pass through VERBATIM (spec invariant). */

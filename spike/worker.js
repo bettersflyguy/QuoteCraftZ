@@ -24,7 +24,8 @@ async function acquireToken(orgUrl, interactiveNote) {
   const t0 = Date.now();
   const authUrl = `${AUTHORITY}/oauth2/v2.0/authorize?` + new URLSearchParams({
     client_id: CLIENT_ID, response_type: "code", redirect_uri: redirectUri,
-    scope, code_challenge: challenge, code_challenge_method: "S256"
+    scope, code_challenge: challenge, code_challenge_method: "S256",
+    prompt: "select_account"
   });
   const cb = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
   const elapsed = Date.now() - t0;
