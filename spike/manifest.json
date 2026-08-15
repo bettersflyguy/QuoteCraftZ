@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "EZLynx Quote Bridge SPIKE",
+  "version": "0.0.1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk8unQsRrBQaoXnMmaSUe734iDVuH7x+JJFQ6keXKeJosNSc9j8j4YnNjQwz21Nd1HyrkxXDL4glKpw5RH3RqgsayH/x2jWvnGsohkGT9EqBdZjaXlm98QuGJ6AWs8nbcPMq11U5SA+lUMM4DfbsVFeXGkPS+x63RdtxMX9R1CULs1WXa+K8O/dct/mUpCJbh1YlG4IkFzsYiz4aN1G+1MEWTjFSssBH6YWpzljhsygMhhxWyL7TkarvkTLK4Bd7iZVMWLen6t5F24YML+s5NPyBOT2dqsWUCuTI+w2jEyO7XtqBe19NQDn+i5lhvQUnr1KUXoGMjlExIyklKlHWGywIDAQAB",
+  "permissions": [
+    "identity",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.crm.dynamics.com/*",
+    "https://login.microsoftonline.com/*"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {}
+}
