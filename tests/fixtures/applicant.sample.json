@@ -1,0 +1,21 @@
+{
+  "id": 219851561,
+  "firstName": "Alex",
+  "lastName": "Sample",
+  "dateOfBirth": "1949-11-18T00:00:00",
+  "isCommercial": false,
+  "primaryAddress": {
+    "address1": "100 EXAMPLE RD", "unit": "", "address2": "",
+    "city": "MOUNDS VIEW", "state": "MN", "county": "Ramsey", "postalCode": "55112"
+  },
+  "phoneNumbers": [ { "type": "Mobile", "number": "6125550100", "extension": "", "id": 0 } ],
+  "emailAddresses": [],
+  "contacts": [
+    {
+      "firstName": "Blake", "lastName": "Sample", "isCoApplicant": true,
+      "relationship": { "value": 8, "name": "Spouse", "description": "Spouse" }
+    }
+  ],
+  "assignedTo": { "id": 208937, "userName": "nia_nbetters", "name": "Nathan Betters", "organizationId": 62859 },
+  "ratingState": "MN"
+}

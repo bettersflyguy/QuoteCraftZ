@@ -1,0 +1,12 @@
+[
+  {
+    "applicantId": 219851561, "created": "2026-08-03T16:07:54.13", "applicationId": 199071915,
+    "autoApplicantQuoteId": 513228997, "homeApplicantQuoteId": 513228998, "applicantQuoteId": 513228998,
+    "lobs": "Auto, Home", "isManualQuote": false, "description": ""
+  },
+  {
+    "applicantId": 219851561, "created": "2025-12-28T09:09:00.37", "applicationId": 85576023,
+    "autoApplicantQuoteId": 488436332, "homeApplicantQuoteId": 0, "applicantQuoteId": 488436332,
+    "lobs": "Auto", "isManualQuote": false, "description": ""
+  }
+]

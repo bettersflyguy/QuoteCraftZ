@@ -1,0 +1,146 @@
+[
+  {
+    "lob": "Auto",
+    "allAreComplete": true,
+    "scriptStartTime": "2026-08-03T16:07:54.393",
+    "scriptResults": [
+      {
+        "scriptName": "Travelers Auto",
+        "carrier": { "id": 13, "name": "Travelers", "siteUrl": "https://signin.travelers.com/", "smallImageUrl": "", "crossRefId": 13 },
+        "execId": 1892138218,
+        "hasError": false,
+        "errorMessage": "Premium : $2273.00Quote Number : 0007684600833",
+        "requestedQuotes": [
+          {
+            "quoteNumber": "0007684600833",
+            "quoteIdentifier": "CCF#",
+            "coverages": [
+              { "name": "BI", "value": "500 CSL" },
+              { "name": "PD", "value": "No Coverage" },
+              { "name": "UM", "value": "500 CSL" },
+              { "name": "MP", "value": "2000" },
+              { "name": "PIPOptions", "value": "BASIC+10K MED EXP" }
+            ],
+            "premiumDetails": { "premiums": [ { "lob": "Auto", "term": "12", "amount": "2273.00", "amountText": "Total Premium", "totalPremium": "2273.00" } ], "payments": [] },
+            "discountsApplied": ["Multi-Policy Discount"],
+            "underwritingMessages": [],
+            "marketingMessages": [],
+            "quickAccessUrl": "https://example.invalid/jump",
+            "vehicleCoverageBreakdown": { "vehicleNames": ["Coverage_0", "2008 GMC YUKON DENALI_1"], "coverageBreakdown": [] },
+            "homeCoveragePremiums": [],
+            "endorsementPremiums": []
+          }
+        ],
+        "alternateQuotes": [
+          {
+            "quoteNumber": "0007684600833",
+            "coverages": [ { "name": "BI", "value": "500 CSL" }, { "name": "PD", "value": "No Coverage" } ],
+            "premiumDetails": { "premiums": [ { "lob": "Auto", "term": "12", "amount": "1798.00", "amountText": "Total Premium", "totalPremium": "1798.00" } ], "payments": [] },
+            "discountsApplied": [],
+            "underwritingMessages": [],
+            "homeCoveragePremiums": [],
+            "endorsementPremiums": []
+          }
+        ]
+      },
+      {
+        "scriptName": "Liberty Mutual (Formerly Safeco) Auto",
+        "carrier": { "id": 35, "name": "Liberty Mutual (Formerly Safeco)", "siteUrl": "", "smallImageUrl": "", "crossRefId": 35 },
+        "execId": 1892138211,
+        "hasError": false,
+        "requestedQuotes": [
+          {
+            "quoteNumber": null,
+            "coverages": [ { "name": "BI", "value": "500 CSL" }, { "name": "UM", "value": "500 CSL" } ],
+            "premiumDetails": { "premiums": [ { "lob": "Auto", "term": "12", "amount": "2052.00", "amountText": "Total Premium", "totalPremium": "2052.00" } ], "payments": [] },
+            "homeCoveragePremiums": [],
+            "endorsementPremiums": []
+          }
+        ],
+        "alternateQuotes": []
+      },
+      {
+        "scriptName": "Hartford Auto XML",
+        "carrier": { "id": 692, "name": "The Hartford", "siteUrl": "", "smallImageUrl": "", "crossRefId": 692 },
+        "execId": 1892138216,
+        "hasError": false,
+        "requestedQuotes": [
+          {
+            "quoteNumber": "PA1013948721Q2026",
+            "coverages": [ { "name": "BI", "value": "500/1000" }, { "name": "PD", "value": "10000" } ],
+            "premiumDetails": { "premiums": [ { "lob": "Auto", "term": "6", "amount": "1425.50", "amountText": "Total Premium", "totalPremium": "1425.50" } ], "payments": [] },
+            "homeCoveragePremiums": [],
+            "endorsementPremiums": []
+          }
+        ],
+        "alternateQuotes": []
+      },
+      {
+        "scriptName": "Stillwater Property & Casualty Auto XML",
+        "carrier": { "id": 404, "name": "Stillwater Property & Casualty", "siteUrl": "", "smallImageUrl": "", "crossRefId": 404 },
+        "execId": 1892138215,
+        "hasError": true,
+        "errorMessage": "Notice From Carrier::FNI0233 : User ID is not currently eligible to quote this product.",
+        "requestedQuotes": [],
+        "alternateQuotes": []
+      }
+    ]
+  },
+  {
+    "lob": "Home",
+    "allAreComplete": true,
+    "scriptStartTime": "2026-08-03T16:08:43.393",
+    "scriptResults": [
+      {
+        "scriptName": "Liberty Mutual (Formerly Safeco) Home",
+        "carrier": { "id": 35, "name": "Liberty Mutual (Formerly Safeco)", "siteUrl": "", "smallImageUrl": "", "crossRefId": 35 },
+        "execId": 1892138212,
+        "hasError": false,
+        "requestedQuotes": [
+          {
+            "quoteNumber": null,
+            "coverages": [ { "name": "Dwelling", "value": "$606,900" }, { "name": "Deductible", "value": "2500" } ],
+            "premiumDetails": { "premiums": [ { "lob": "Home", "term": "12", "amount": "4744.64", "amountText": "Total Premium", "totalPremium": "4744.64" } ], "payments": [] },
+            "homeCoveragePremiums": [
+              { "code": "A", "name": "Dwelling", "limits": "$606,900", "amountText": "$4,751.00" },
+              { "code": "B", "name": "OtherStructures", "limits": "$60,690", "amountText": "INCLUDED" },
+              { "code": "C", "name": "PersonalProperty", "limits": "$364,140", "amountText": "INCLUDED" }
+            ],
+            "endorsementPremiums": [
+              { "name": "IdentityTheft", "limits": "INCLUDED", "amountText": "$45" },
+              { "name": "WaterBackup", "limits": "INCLUDED", "amountText": "$52.09" }
+            ]
+          }
+        ],
+        "alternateQuotes": []
+      },
+      {
+        "scriptName": "Travelers Home",
+        "carrier": { "id": 13, "name": "Travelers", "siteUrl": "", "smallImageUrl": "", "crossRefId": 13 },
+        "execId": 1892138220,
+        "hasError": false,
+        "requestedQuotes": [
+          {
+            "quoteNumber": "0007684600833",
+            "coverages": [ { "name": "Dwelling", "value": "606900" }, { "name": "PersonalLiability", "value": "500000" } ],
+            "premiumDetails": { "premiums": [ { "lob": "Home", "term": "12", "amount": "5316.33", "amountText": "Paid-In-Full", "totalPremium": "5316.33" } ], "payments": [] },
+            "homeCoveragePremiums": [
+              { "code": "A", "name": "Dwelling", "limits": "606900", "amountText": "INCLUDED" }
+            ],
+            "endorsementPremiums": []
+          }
+        ],
+        "alternateQuotes": []
+      },
+      {
+        "scriptName": "Nationwide Insurance Home XML",
+        "carrier": { "id": 348, "name": "Nationwide Insurance", "siteUrl": "", "smallImageUrl": "", "crossRefId": 348 },
+        "execId": 1892138214,
+        "hasError": true,
+        "errorMessage": "Nationwide will not return a quote without additional underwriting information. Msg No. UP320.08",
+        "requestedQuotes": [],
+        "alternateQuotes": []
+      }
+    ]
+  }
+]
