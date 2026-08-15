@@ -90,7 +90,9 @@ export async function getCarriers(env: CrmEnvironment): Promise<CarrierRow[]> {
 
 export async function getQuotingMethodId(env: CrmEnvironment, nameContains: string): Promise<string | null> {
   const { value } = await dvJson<{ value: Record<string, string>[] }>(
-    env, `iacrm_quotingmethods?$select=iacrm_quotingmethodid&$filter=contains(iacrm_name,'${esc(nameContains)}')&$top=1`
+    // primary name is iacrm_quotingmethod_name, NOT iacrm_name (lesson S2-81; verified live against DEV 2026-08-15).
+    // iacrm_carrier above genuinely uses iacrm_name - it predates the convention.
+    env, `iacrm_quotingmethods?$select=iacrm_quotingmethodid&$filter=contains(iacrm_quotingmethod_name,'${esc(nameContains)}')&$top=1`
   );
   return value[0]?.["iacrm_quotingmethodid"] ?? null;
 }
