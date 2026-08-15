@@ -7,6 +7,7 @@ import {
   getOpenOpportunities,
   getCarriers,
   getExistingQuoteStatuses,
+  getQuotingMethodId,
   executeBatch
 } from "@/crm/dataverse";
 import { buildQuoteOps } from "@/crm/mapping";
@@ -20,6 +21,7 @@ export interface Deps {
   getOpenOpportunities: typeof getOpenOpportunities;
   getCarriers: typeof getCarriers;
   getExistingQuoteStatuses: typeof getExistingQuoteStatuses;
+  getQuotingMethodId: typeof getQuotingMethodId;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -50,7 +52,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           type: "ezlynx/captureRun", applicantId: msg.applicantId, run: msg.run
         });
         if (!res.ok) return res;
-        const aliases = await deps.getCarrierAliases();
+        const env = await deps.getActiveEnvironment();
+        const aliases = await deps.getCarrierAliases(env.orgUrl);
         return { ok: true, data: { run: res.data, aliases } };
       }
 
@@ -69,14 +72,21 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: await deps.getCarriers(env) };
       }
 
-      case "panel/saveCarrierAlias":
-        await deps.saveCarrierAlias(msg.ezlynxId, msg.carrierId);
+      case "panel/saveCarrierAlias": {
+        const env = await deps.getActiveEnvironment();
+        await deps.saveCarrierAlias(env.orgUrl, msg.ezlynxId, msg.carrierId);
         return { ok: true, data: null };
+      }
 
       case "panel/commit": {
         const env = await deps.getActiveEnvironment();
-        const existing = await deps.getExistingQuoteStatuses(env, msg.payload.selectedKeys);
-        const ops = deps.buildQuoteOps(msg.payload, existing);
+        // panel sends quotingMethodId null; the worker owns resolving the EZLynx
+        // quoting-method row (spec field-mapping table) - one lookup per commit
+        const payload = msg.payload.quotingMethodId == null
+          ? { ...msg.payload, quotingMethodId: await deps.getQuotingMethodId(env, "EZLynx") }
+          : msg.payload;
+        const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
+        const ops = deps.buildQuoteOps(payload, existing);
         const results = await deps.executeBatch(env, ops);
         return { ok: true, data: results };
       }
@@ -118,6 +128,7 @@ export const realDeps: Deps = {
   getOpenOpportunities,
   getCarriers,
   getExistingQuoteStatuses,
+  getQuotingMethodId,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,
