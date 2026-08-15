@@ -69,10 +69,20 @@ describe("normalizeApplicant", () => {
       firstName: "Alex", lastName: "Sample",
       dateOfBirth: "1949-11-18",
       address: { street: "100 EXAMPLE RD", city: "MOUNDS VIEW", state: "MN", postalCode: "55112" },
-      phones: ["6125550100"], emails: [],
+      phones: ["6125550100"], emails: ["alex.sample@example.com"],
       coApplicants: [{ firstName: "Blake", lastName: "Sample", relationship: "Spouse" }],
       isCommercial: false
     });
+  });
+
+  it("accepts the live {type,email} shape, the recon {emailAddress} guess, and bare strings", () => {
+    const base = JSON.parse(JSON.stringify(applicant));
+    base.emailAddresses = [
+      { type: "Primary", email: "a@x.com" },
+      { emailAddress: "b@x.com" },
+      "c@x.com"
+    ];
+    expect(normalizeApplicant(base).emails).toEqual(["a@x.com", "b@x.com", "c@x.com"]);
   });
 });
 

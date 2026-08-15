@@ -18,7 +18,7 @@ chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse:
         return sendResponse({ ok: false, error: "EZLynx session expired — sign in on the EZLynx tab and retry.", kind: "session" });
       }
       if (e instanceof NormalizeError) {
-        return sendResponse({ ok: false, error: "Couldn't read EZLynx results — the extension needs an update.", kind: "normalize", detail: e.payloadSnippet });
+        return sendResponse({ ok: false, error: "Couldn't read EZLynx results — the extension needs an update.", kind: "normalize", detail: `${e.message}\n---payload---\n${e.payloadSnippet}` });
       }
       return sendResponse({ ok: false, error: String(e), kind: "unknown" });
     }

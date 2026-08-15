@@ -96,7 +96,12 @@ const RawApplicant = z.object({
     address1: z.string(), city: z.string(), state: z.string(), postalCode: z.string()
   }).passthrough().nullish(),
   phoneNumbers: z.array(z.object({ number: z.string() }).passthrough()).nullish(),
-  emailAddresses: z.array(z.object({ emailAddress: z.string() }).passthrough().or(z.string())).nullish(),
+  // live shape is {type,email}; recon guessed {emailAddress}; accept both + bare strings
+  emailAddresses: z.array(z.union([
+    z.string(),
+    z.object({ email: z.string() }).passthrough(),
+    z.object({ emailAddress: z.string() }).passthrough()
+  ])).nullish(),
   contacts: z.array(z.object({
     firstName: z.string(), lastName: z.string(),
     relationship: z.object({ name: z.string() }).passthrough().nullish()
@@ -116,7 +121,13 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
       ? { street: a.primaryAddress.address1, city: a.primaryAddress.city, state: a.primaryAddress.state, postalCode: a.primaryAddress.postalCode }
       : null,
     phones: (a.phoneNumbers ?? []).map(pn => pn.number),
-    emails: (a.emailAddresses ?? []).map(e => (typeof e === "string" ? e : e.emailAddress)),
+    emails: (a.emailAddresses ?? [])
+      .map(e => {
+        if (typeof e === "string") return e;
+        const rec = e as { email?: string; emailAddress?: string };
+        return rec.email ?? rec.emailAddress ?? "";
+      })
+      .filter(Boolean),
     coApplicants: (a.contacts ?? []).map(c => ({
       firstName: c.firstName, lastName: c.lastName, relationship: c.relationship?.name ?? ""
     })),
