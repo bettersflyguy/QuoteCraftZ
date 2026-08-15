@@ -7,7 +7,7 @@ Throwaway extension proving the auth + CORS path before anything is built on it.
 | Constant | Value |
 |---|---|
 | Entra app (client) ID | `84e47c8b-6499-40e9-b014-3e24c9ecd303` |
-| Platform | Mobile & desktop (public client), multi-tenant |
+| Platform | **SPA** (spike-verified: AADSTS9002326 rejects public-client redemption from a chrome-extension origin), multi-tenant |
 | Authority | `https://login.microsoftonline.com/organizations` |
 | Pinned extension ID (Chrome + Edge, via manifest `key`) | `nppecoclmgfkccogikgalbgpkimljhch` |
 | Redirect URI | `https://nppecoclmgfkccogikgalbgpkimljhch.chromiumapp.org/` |
