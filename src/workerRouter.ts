@@ -114,8 +114,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
   } catch (e) {
     const err = e as Error & { orgUrl?: string };
     if (err.name === "CrmAccessError") {
-      const env = await deps.getActiveEnvironment();
-      return { ok: false, error: `Your account has no access to ${env.name} (${err.orgUrl}). Check the active environment.`, kind: "auth" };
+      let envName = "the active environment";
+      try { envName = (await deps.getActiveEnvironment()).name; } catch { /* keep fallback */ }
+      return { ok: false, error: `Your account has no access to ${envName} (${err.orgUrl}). Check the active environment.`, kind: "auth" };
     }
     if (err.name === "AuthRequiredError") return { ok: false, error: "Sign-in required", kind: "auth" };
     return { ok: false, error: String(err.message ?? err), kind: "unknown" };
@@ -128,7 +129,23 @@ async function sendToEzlynxTab<T>(req: BridgeRequest): Promise<Res<T>> {
   if (!tab?.id) {
     return { ok: false, error: "Open an EZLynx applicant page in another tab, then retry.", kind: "session" };
   }
-  return (await chrome.tabs.sendMessage(tab.id, req)) as Res<T>;
+  // An orphaned content script (tab loaded before the extension was updated) can
+  // accept the message and never respond - race a timeout so the panel gets an
+  // actionable error instead of an infinite spinner.
+  try {
+    const reply = await Promise.race([
+      chrome.tabs.sendMessage(tab.id, req) as Promise<Res<T>>,
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 15_000))
+    ]);
+    if (!reply) throw new Error("empty reply");
+    return reply;
+  } catch {
+    return {
+      ok: false,
+      error: "Couldn't reach the EZLynx tab — reload that tab (the extension was updated since it loaded), then retry.",
+      kind: "session"
+    };
+  }
 }
 
 export const realDeps: Deps = {

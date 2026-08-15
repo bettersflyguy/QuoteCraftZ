@@ -7,7 +7,7 @@ export class EzlynxSessionError extends Error {
 }
 
 type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
-const defaultFetcher: Fetcher = (url, init) => fetch(url, { credentials: "include", ...init });
+const defaultFetcher: Fetcher = (url, init) => fetch(url, { credentials: "include", signal: AbortSignal.timeout(20_000), ...init });
 
 async function getJson(url: string, fetcher: Fetcher): Promise<unknown> {
   const res = await fetcher(url);

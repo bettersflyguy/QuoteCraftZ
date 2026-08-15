@@ -13,9 +13,36 @@ export class PanelError extends Error {
   }
 }
 
-/** Wraps chrome.runtime.sendMessage with the PanelRequest/Res<T> contract. */
+/** Longer than any legitimate round-trip (interactive sign-in excepted - see below). */
+const TIMEOUT_MS = 25_000;
+/** Interactive sign-in legitimately waits on a human at the account picker. */
+const AUTH_TIMEOUT_MS = 180_000;
+
+/** Wraps chrome.runtime.sendMessage with the PanelRequest/Res<T> contract.
+ * A message that never gets a response (dead worker, orphaned content script
+ * holding the port open) surfaces as a diagnosable error instead of an
+ * infinite spinner. */
 export async function send<T>(msg: PanelRequest): Promise<T> {
-  const res = (await chrome.runtime.sendMessage(msg)) as Res<T>;
-  if (!res.ok) throw new PanelError(res.kind, res.error, res.detail);
-  return res.data;
+  const timeoutMs = msg.type === "auth/signIn" ? AUTH_TIMEOUT_MS : TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new PanelError(
+            "unknown",
+            `No response to ${msg.type} after ${timeoutMs / 1000}s. If the extension was just updated, reload the EZLynx tab and reopen this panel.`
+          )
+        ),
+      timeoutMs
+    );
+  });
+  try {
+    const res = (await Promise.race([chrome.runtime.sendMessage(msg), timeout])) as Res<T> | undefined;
+    if (!res) throw new PanelError("unknown", `Empty response to ${msg.type} — reload the EZLynx tab and retry.`);
+    if (!res.ok) throw new PanelError(res.kind, res.error, res.detail);
+    return res.data;
+  } finally {
+    clearTimeout(timer);
+  }
 }

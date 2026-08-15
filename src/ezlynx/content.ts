@@ -12,6 +12,8 @@ chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse:
           return sendResponse({ ok: true, data: await fetchRunList(msg.applicantId) });
         case "ezlynx/captureRun":
           return sendResponse({ ok: true, data: await fetchCapturedRun(msg.applicantId, msg.run) });
+        default:
+          return sendResponse({ ok: false, error: `unknown bridge message: ${(msg as { type: string }).type}`, kind: "unknown" });
       }
     } catch (e) {
       if (e instanceof EzlynxSessionError) {
