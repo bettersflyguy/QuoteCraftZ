@@ -66,11 +66,11 @@ describe("buildQuoteOps", () => {
       iacrm_term: 738590205,
       iacrm_effectivedate: "2026-09-01",
       iacrm_expirationdate: "2027-09-01",
-      "iacrm_accountid@odata.bind": "/accounts(AAA-1)",
-      "iacrm_opportunityid@odata.bind": "/opportunities(OPP-AUTO)",
-      "iacrm_lineofbusinessid@odata.bind": "/iacrm_lineofbusinesses(LOB-AUTO)",
-      "iacrm_carrierid@odata.bind": "/iacrm_carriers(CAR-TRAV)",
-      "iacrm_quotingmethodid@odata.bind": "/iacrm_quotingmethods(QM-1)",
+      "iacrm_AccountId@odata.bind": "/accounts(AAA-1)",
+      "iacrm_OpportunityId@odata.bind": "/opportunities(OPP-AUTO)",
+      "iacrm_LineOfBusinessId@odata.bind": "/iacrm_lineofbusinesses(LOB-AUTO)",
+      "iacrm_CarrierId@odata.bind": "/iacrm_carriers(CAR-TRAV)",
+      "iacrm_QuotingMethodId@odata.bind": "/iacrm_quotingmethods(QM-1)",
       "ownerid@odata.bind": "/systemusers(USR-1)"
     });
     expect(op.body["iacrm_quotelink"]).toBe(
@@ -86,7 +86,7 @@ describe("buildQuoteOps", () => {
   it("6-month term maps to 738590203; unmatched carrier omits the bind", () => {
     const op = ops.find(o => o.key === "ezlynx:2:req")!;
     expect(op.body["iacrm_term"]).toBe(738590203);
-    expect(op.body["iacrm_carrierid@odata.bind"]).toBeUndefined();
+    expect(op.body["iacrm_CarrierId@odata.bind"]).toBeUndefined();
     expect(op.body["iacrm_expirationdate"]).toBe("2027-03-01");
   });
 

@@ -20,13 +20,6 @@ import type { CommitPayload, BlockSelection } from "@/crm/mapping";
 import type { BatchItemResult } from "@/crm/dataverse";
 import { getActiveEnvironment, type CrmEnvironment } from "@/crm/environments";
 
-const COLOR_TOKEN: Record<CrmEnvironment["color"], string> = {
-  green: tokens.colorPaletteGreenForeground2,
-  red: tokens.colorPaletteRedForeground2,
-  blue: tokens.colorPaletteBlueForeground2,
-  orange: tokens.colorPaletteDarkOrangeForeground2
-};
-
 interface ReviewRow {
   key: string;
   carrier: string;
@@ -290,10 +283,11 @@ export function ReviewCommit({
             <Spinner size="tiny" />
           ) : (
             <>
-              Write {selectedCount} quotes to{" "}
-              <span style={{ fontWeight: 700, color: env ? COLOR_TOKEN[env.color] : undefined }}>
-                {env?.name}
-              </span>
+              {/* Destination named in the button text (spec). Colour-coding stays on
+                  the header badge - palette colours on the brand-blue button fail
+                  WCAG contrast and are invisible to colourblind users anyway. */}
+              Write {selectedCount} {selectedCount === 1 ? "quote" : "quotes"} to{" "}
+              <span style={{ fontWeight: 700 }}>&nbsp;{env?.name}</span>
             </>
           )}
         </Button>

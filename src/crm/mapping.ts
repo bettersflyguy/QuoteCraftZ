@@ -54,6 +54,9 @@ export function buildQuoteOps(
         `${q.carrierName} – ${block.lob}${effective ? ` – ${effective}` : ""}` +
         (q.kind === "alternate" ? " – Alt" : "");
 
+      // @odata.bind uses SCHEMA-cased nav properties (iacrm_AccountId, not
+      // iacrm_accountid) - logical case fails with "undeclared property".
+      // Verified against DEV metadata 2026-08-15. ownerid is OOB and stays lower.
       const body: Record<string, unknown> = {
         iacrm_quote_name: name,
         iacrm_provider: "EZLynx",
@@ -63,8 +66,8 @@ export function buildQuoteOps(
         iacrm_coveragelimitsummary: q.coverageSummary,
         iacrm_quotelink: `https://app.ezlynx.com/web/account/${run.applicant.ezlynxApplicantId}/rating/quote-results/${run.openApplicationId}/${block.applicantQuoteId}`,
         iacrm_rawpayload: JSON.stringify(q.raw).slice(0, RAW_CAP),
-        "iacrm_accountid@odata.bind": `/accounts(${accountId})`,
-        "iacrm_opportunityid@odata.bind": `/opportunities(${sel.opportunityId})`
+        "iacrm_AccountId@odata.bind": `/accounts(${accountId})`,
+        "iacrm_OpportunityId@odata.bind": `/opportunities(${sel.opportunityId})`
       };
 
       // Estimated always; NEVER downgrade an agent's Firm (spec invariant)
@@ -79,10 +82,10 @@ export function buildQuoteOps(
         body["iacrm_effectivedate"] = effective;
         if (q.termMonths != null) body["iacrm_expirationdate"] = addMonths(effective, q.termMonths);
       }
-      if (sel.lineOfBusinessId) body["iacrm_lineofbusinessid@odata.bind"] = `/iacrm_lineofbusinesses(${sel.lineOfBusinessId})`;
+      if (sel.lineOfBusinessId) body["iacrm_LineOfBusinessId@odata.bind"] = `/iacrm_lineofbusinesses(${sel.lineOfBusinessId})`;
       const carrierId = carrierMap[q.carrierEzlynxId];
-      if (carrierId) body["iacrm_carrierid@odata.bind"] = `/iacrm_carriers(${carrierId})`;
-      if (quotingMethodId) body["iacrm_quotingmethodid@odata.bind"] = `/iacrm_quotingmethods(${quotingMethodId})`;
+      if (carrierId) body["iacrm_CarrierId@odata.bind"] = `/iacrm_carriers(${carrierId})`;
+      if (quotingMethodId) body["iacrm_QuotingMethodId@odata.bind"] = `/iacrm_quotingmethods(${quotingMethodId})`;
       if (ownerId) body["ownerid@odata.bind"] = `/systemusers(${ownerId})`;
 
       ops.push({ key: q.key, method: "PATCH", url: altKeyUrl(q.key), body });
