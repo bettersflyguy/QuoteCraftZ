@@ -3,6 +3,9 @@ import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
 import { RunPicker } from "./steps/RunPicker";
 import { AccountMatch } from "./steps/AccountMatch";
+import { OpportunityPin } from "./steps/OpportunityPin";
+import { CarrierMap } from "./steps/CarrierMap";
+import { ReviewCommit } from "./steps/ReviewCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -39,7 +42,11 @@ export function App() {
       <div className={styles.body}>
         {state.step === "run" && <RunPicker state={state} dispatch={dispatch} />}
         {state.step === "account" && <AccountMatch state={state} dispatch={dispatch} />}
-        {state.step !== "run" && state.step !== "account" && <div>TODO {state.step}</div>}
+        {state.step === "opportunities" && <OpportunityPin state={state} dispatch={dispatch} />}
+        {state.step === "carriers" && <CarrierMap state={state} dispatch={dispatch} />}
+        {(state.step === "review" || state.step === "done") && (
+          <ReviewCommit state={state} dispatch={dispatch} />
+        )}
       </div>
     </div>
   );
