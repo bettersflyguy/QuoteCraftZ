@@ -24,7 +24,8 @@ const useStyles = makeStyles({
   },
   body: {
     flex: 1,
-    overflow: "auto",
+    overflowY: "auto",
+    overflowX: "hidden",
     padding: "12px"
   }
 });

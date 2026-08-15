@@ -2,12 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Checkbox,
-  Table,
-  TableHeader,
-  TableRow,
-  TableHeaderCell,
-  TableBody,
-  TableCell,
   Text,
   Accordion,
   AccordionItem,
@@ -149,38 +143,31 @@ export function ReviewCommit({
     const failedKeys = results.filter(r => r.status >= 400).map(r => r.key);
     return (
       <div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHeaderCell>Status</TableHeaderCell>
-              <TableHeaderCell>Quote</TableHeaderCell>
-              <TableHeaderCell>HTTP</TableHeaderCell>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {results.map(r => {
-              const row = rows.find(x => x.key === r.key);
-              const ok = r.status < 400;
-              return (
-                <TableRow key={r.key}>
-                  <TableCell>
-                    {ok ? (
-                      <>
-                        <CheckmarkCircleRegular /> Created/updated
-                      </>
-                    ) : (
-                      <>
-                        <ErrorCircleRegular /> {r.error ?? `HTTP ${r.status}`}
-                      </>
-                    )}
-                  </TableCell>
-                  <TableCell>{row ? `${row.carrier} — ${row.lob} (${row.kind})` : r.key}</TableCell>
-                  <TableCell>{r.status}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {results.map(r => {
+            const row = rows.find(x => x.key === r.key);
+            const ok = r.status < 400;
+            return (
+              <div
+                key={r.key}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                  padding: 8,
+                  borderRadius: 4,
+                  border: `1px solid ${ok ? tokens.colorNeutralStroke2 : tokens.colorPaletteRedBorder1}`
+                }}
+              >
+                <Text weight="semibold" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  {ok ? <CheckmarkCircleRegular /> : <ErrorCircleRegular />}
+                  {row ? `${row.carrier} — ${row.lob} (${row.kind})` : r.key}
+                </Text>
+                <Text size={200}>{ok ? "Created/updated" : r.error ?? `HTTP ${r.status}`}</Text>
+              </div>
+            );
+          })}
+        </div>
 
         {err && (
           <div style={{ marginTop: 8 }}>
@@ -222,37 +209,48 @@ export function ReviewCommit({
           </Accordion>
         ))}
 
-      <Table style={{ marginTop: 12 }}>
-        <TableHeader>
-          <TableRow>
-            <TableHeaderCell />
-            <TableHeaderCell>Carrier</TableHeaderCell>
-            <TableHeaderCell>LOB</TableHeaderCell>
-            <TableHeaderCell>Kind</TableHeaderCell>
-            <TableHeaderCell>Premium</TableHeaderCell>
-            <TableHeaderCell>Term</TableHeaderCell>
-            <TableHeaderCell>Coverage</TableHeaderCell>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map(r => (
-            <TableRow key={r.key}>
-              <TableCell>
-                <Checkbox
-                  checked={state.selectedKeys.includes(r.key)}
-                  onChange={() => dispatch({ t: "toggleKey", key: r.key })}
-                />
-              </TableCell>
-              <TableCell>{r.carrier}</TableCell>
-              <TableCell>{r.lob}</TableCell>
-              <TableCell>{r.kind}</TableCell>
-              <TableCell>{r.premium != null ? `$${r.premium.toFixed(2)}` : "—"}</TableCell>
-              <TableCell>{r.term ?? "—"}</TableCell>
-              <TableCell>{r.coverage}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        {rows.map(r => {
+          const checked = state.selectedKeys.includes(r.key);
+          return (
+            <div
+              key={r.key}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 4,
+                padding: 8,
+                borderRadius: 4,
+                border: `1px solid ${tokens.colorNeutralStroke2}`,
+                opacity: checked ? 1 : 0.55,
+                minWidth: 0
+              }}
+            >
+              <Checkbox checked={checked} onChange={() => dispatch({ t: "toggleKey", key: r.key })} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <Text weight="semibold" truncate wrap={false} style={{ minWidth: 0 }}>
+                    {r.carrier}
+                    {r.kind === "Alt" ? " (Alt)" : ""}
+                  </Text>
+                  <Text weight="semibold" wrap={false}>
+                    {r.premium != null ? `$${r.premium.toFixed(2)}` : "—"}
+                  </Text>
+                </div>
+                <Text size={200}>
+                  {r.lob}
+                  {r.term != null ? ` · ${r.term} mo` : ""}
+                </Text>
+                {r.coverage && (
+                  <Text size={200} truncate wrap={false} style={{ minWidth: 0, color: tokens.colorNeutralForeground3 }}>
+                    {r.coverage}
+                  </Text>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {err && (
         <div style={{ marginTop: 8 }}>

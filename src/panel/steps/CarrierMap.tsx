@@ -55,17 +55,20 @@ export function CarrierMap({
       {distinctCarriers.map(c => {
         const mapped = state.carrierMap[c.id] ?? null;
         return (
-          <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {!mapped && <WarningRegular />}
-            <Text style={{ minWidth: 220 }}>
-              {c.name} (EZLynx #{c.id})
+          <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+            <Text weight="semibold" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {!mapped && <WarningRegular />}
+              {c.name}{" "}
+              <Text size={200} style={{ fontWeight: 400 }}>
+                · EZLynx #{c.id}
+              </Text>
             </Text>
             <Dropdown
               placeholder="Map to CRM carrier"
               value={carriers.find(cr => cr.carrierId === mapped)?.name ?? ""}
               selectedOptions={mapped ? [mapped] : []}
               onOptionSelect={(_, d) => choose(c.id, d.optionValue as string)}
-              style={{ flex: 1 }}
+              style={{ width: "100%", minWidth: 0 }}
             >
               {carriers.map(cr => (
                 <Option key={cr.carrierId} value={cr.carrierId}>
@@ -73,7 +76,11 @@ export function CarrierMap({
                 </Option>
               ))}
             </Dropdown>
-            {!mapped && <Text size={200}>will import without carrier link</Text>}
+            {!mapped && (
+              <Text size={200} style={{ fontStyle: "italic" }}>
+                Unmapped — will import without a carrier link
+              </Text>
+            )}
           </div>
         );
       })}
