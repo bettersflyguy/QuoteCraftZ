@@ -1,6 +1,9 @@
 import { createRoot } from "react-dom/client";
+import { FluentProvider, webLightTheme } from "@fluentui/react-components";
+import { App } from "./App";
 
-const root = document.getElementById("root");
-if (root) {
-  createRoot(root).render(<div>EZLynx Quote Bridge</div>);
-}
+createRoot(document.getElementById("root")!).render(
+  <FluentProvider theme={webLightTheme}>
+    <App />
+  </FluentProvider>
+);
