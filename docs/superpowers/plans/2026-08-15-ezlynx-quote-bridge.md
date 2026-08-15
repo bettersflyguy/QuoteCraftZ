@@ -1367,7 +1367,8 @@ function scopeFor(orgUrl: string): string {
 export function buildAuthorizeUrl(orgUrl: string, redirectUri: string, challenge: string): string {
   return `${APP_CONFIG.authority}/oauth2/v2.0/authorize?` + new URLSearchParams({
     client_id: APP_CONFIG.clientId, response_type: "code", redirect_uri: redirectUri,
-    scope: scopeFor(orgUrl), code_challenge: challenge, code_challenge_method: "S256"
+    scope: scopeFor(orgUrl), code_challenge: challenge, code_challenge_method: "S256",
+    prompt: "select_account"   // Windows SSO otherwise silently picks the wrong profile (Nathan, 2026-08-15); refresh tokens keep later calls non-interactive
   });
 }
 
