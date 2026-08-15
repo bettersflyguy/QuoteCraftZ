@@ -78,6 +78,9 @@ export function EnvBadge({ dispatch }: { dispatch: (a: Action) => void }) {
               {e.id === active.id ? " (active)" : ""}
             </MenuItem>
           ))}
+          <MenuItem onClick={() => chrome.runtime.openOptionsPage()}>
+            Manage environments…
+          </MenuItem>
         </MenuList>
       </MenuPopover>
     </Menu>

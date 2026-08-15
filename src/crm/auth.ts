@@ -78,6 +78,13 @@ async function interactiveSignIn(orgUrl: string): Promise<TokenSet> {
   }));
 }
 
+/** Drops the cached token for an org so the next acquisition is fully interactive.
+ * Used by the panel's Sign in button - a cached token from the WRONG account
+ * would otherwise be returned forever, since it is valid, just unauthorized. */
+export async function clearToken(orgUrl: string): Promise<void> {
+  await chrome.storage.session.remove(`token:${orgUrl}`);
+}
+
 export async function getAccessToken(orgUrl: string, opts: { interactive?: boolean } = {}): Promise<string> {
   const interactive = opts.interactive ?? true;
   const cached = await __store.get(orgUrl);

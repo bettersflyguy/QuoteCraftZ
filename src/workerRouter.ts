@@ -1,7 +1,7 @@
 import type { BridgeRequest, PanelRequest, Res } from "@/messages";
 import type { CrmEnvironment } from "@/crm/environments";
 import { getEnvironments, getActiveEnvironment, setActiveEnvironment } from "@/crm/environments";
-import { getAccessToken } from "@/crm/auth";
+import { getAccessToken, clearToken } from "@/crm/auth";
 import {
   searchAccounts,
   getOpenOpportunities,
@@ -29,6 +29,7 @@ export interface Deps {
   getCarrierAliases: typeof getCarrierAliases;
   saveCarrierAlias: typeof saveCarrierAlias;
   getAccessToken: typeof getAccessToken;
+  clearToken: typeof clearToken;
   /** Finds the EZLynx tab, relays a BridgeRequest to its content script, returns its Res. */
   sendToEzlynxTab: <T>(req: BridgeRequest) => Promise<Res<T>>;
 }
@@ -100,6 +101,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "auth/signIn": {
         const env = await deps.getActiveEnvironment();
+        // force a fresh interactive sign-in: the cached token may be VALID but
+        // for an account with no role in this org (the exact failure this button fixes)
+        await deps.clearToken(env.orgUrl);
         await deps.getAccessToken(env.orgUrl, { interactive: true });
         return { ok: true, data: null };
       }
@@ -142,5 +146,6 @@ export const realDeps: Deps = {
   getCarrierAliases,
   saveCarrierAlias,
   getAccessToken,
+  clearToken,
   sendToEzlynxTab
 };
