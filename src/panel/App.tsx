@@ -1,6 +1,8 @@
 import { makeStyles, tokens, Title3 } from "@fluentui/react-components";
 import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
+import { RunPicker } from "./steps/RunPicker";
+import { AccountMatch } from "./steps/AccountMatch";
 
 const useStyles = makeStyles({
   root: {
@@ -27,7 +29,6 @@ const useStyles = makeStyles({
 export function App() {
   const styles = useStyles();
   const [state, dispatch] = useImportState();
-  void dispatch; // wired by the step components mounted in Tasks 13-14
 
   return (
     <div className={styles.root}>
@@ -36,7 +37,9 @@ export function App() {
         <EnvBadge dispatch={dispatch} />
       </div>
       <div className={styles.body}>
-        <div>TODO {state.step}</div>
+        {state.step === "run" && <RunPicker state={state} dispatch={dispatch} />}
+        {state.step === "account" && <AccountMatch state={state} dispatch={dispatch} />}
+        {state.step !== "run" && state.step !== "account" && <div>TODO {state.step}</div>}
       </div>
     </div>
   );
