@@ -14,6 +14,12 @@ export interface AccountMatch { accountId: string; name: string; city: string | 
 export interface OppSummary { opportunityId: string; name: string; lobId: string | null; lobName: string | null; desiredEffectiveDate: string | null }
 export interface CarrierRow { carrierId: string; name: string }
 export interface UserRow { userId: string; fullName: string }
+export interface LobRow { lobId: string; name: string }
+export interface NewAccountFields {
+  name: string;
+  street: string | null; city: string | null; state: string | null; postalCode: string | null;
+  phone: string | null; email: string | null;
+}
 export interface BatchItemResult { key: string; status: number; error: string | null }
 
 const API = "/api/data/v9.2/";
@@ -47,6 +53,19 @@ async function dvJson<T>(env: CrmEnvironment, path: string): Promise<T> {
 }
 
 function esc(v: string): string { return v.replace(/'/g, "''"); }
+
+async function dvPost<T>(env: CrmEnvironment, path: string, body: unknown): Promise<T> {
+  const res = await dv(env, path, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Dataverse ${res.status} creating ${path}: ${detail.slice(0, 300)}`);
+  }
+  return res.json() as Promise<T>;
+}
 
 export function altKeyUrl(key: string): string {
   return `iacrm_quotes(iacrm_provider='EZLynx',iacrm_amsexternalid='${esc(key)}')`;
@@ -87,6 +106,47 @@ export async function getCarriers(env: CrmEnvironment): Promise<CarrierRow[]> {
     env, `iacrm_carriers?$select=iacrm_name,iacrm_carrierid&$filter=statecode eq 0&$orderby=iacrm_name`
   );
   return value.map(c => ({ carrierId: c["iacrm_carrierid"]!, name: c["iacrm_name"] ?? "" }));
+}
+
+export async function createAccount(env: CrmEnvironment, f: NewAccountFields): Promise<{ accountId: string; name: string }> {
+  const body: Record<string, unknown> = { name: f.name };
+  if (f.street) body["address1_line1"] = f.street;
+  if (f.city) body["address1_city"] = f.city;
+  if (f.state) body["address1_stateorprovince"] = f.state;
+  if (f.postalCode) body["address1_postalcode"] = f.postalCode;
+  if (f.phone) body["telephone1"] = f.phone;
+  if (f.email) body["emailaddress1"] = f.email;
+  const r = await dvPost<Record<string, string>>(env, "accounts?$select=accountid,name", body);
+  return { accountId: r["accountid"]!, name: r["name"] ?? f.name };
+}
+
+export async function getLinesOfBusiness(env: CrmEnvironment): Promise<LobRow[]> {
+  const { value } = await dvJson<{ value: Record<string, string>[] }>(
+    env, `iacrm_lineofbusinesses?$select=iacrm_lineofbusinessid,iacrm_lineofbusiness_name&$filter=statecode eq 0&$orderby=iacrm_lineofbusiness_name`
+  );
+  return value.map(l => ({ lobId: l["iacrm_lineofbusinessid"]!, name: l["iacrm_lineofbusiness_name"] ?? "" }));
+}
+
+export async function createOpportunity(
+  env: CrmEnvironment, accountId: string, lobId: string, name: string
+): Promise<OppSummary> {
+  const body = {
+    name,
+    "customerid_account@odata.bind": `/accounts(${accountId})`,
+    // nav property is SCHEMA-cased - iacrm_lineofbusinessid (logical case) is
+    // rejected with "undeclared property". Verified live against DEV 2026-08-15.
+    "iacrm_LineOfBusinessId@odata.bind": `/iacrm_lineofbusinesses(${lobId})`
+  };
+  const r = await dvPost<Record<string, string | null>>(
+    env, "opportunities?$select=opportunityid,name,_iacrm_lineofbusinessid_value,iacrm_desiredeffectivedate", body
+  );
+  return {
+    opportunityId: r["opportunityid"]!,
+    name: r["name"] ?? name,
+    lobId: r["_iacrm_lineofbusinessid_value"] ?? lobId,
+    lobName: null,
+    desiredEffectiveDate: r["iacrm_desiredeffectivedate"] ?? null
+  };
 }
 
 export async function searchUsers(env: CrmEnvironment, query: string): Promise<UserRow[]> {

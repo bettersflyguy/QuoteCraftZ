@@ -1,5 +1,6 @@
 import type { CapturedRun, RunListItem } from "@/types";
 import type { CommitPayload } from "@/crm/mapping";
+import type { NewAccountFields } from "@/crm/dataverse";
 
 export type { CommitPayload };
 
@@ -16,6 +17,9 @@ export type PanelRequest =
   | { type: "panel/getOpportunities"; accountId: string }
   | { type: "panel/getCarriers" }
   | { type: "panel/searchUsers"; query: string }
+  | { type: "panel/createAccount"; fields: NewAccountFields }
+  | { type: "panel/getLobs" }
+  | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }
   | { type: "env/list" }

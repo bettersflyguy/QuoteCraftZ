@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Button, Input, Spinner, Card, CardHeader, Text } from "@fluentui/react-components";
+import { Button, Input, Spinner, Card, CardHeader, Text, Field } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import type { Action, ImportState } from "../state";
-import { getActiveEnvironment } from "@/crm/environments";
-import type { AccountMatch as AccountMatchRow } from "@/crm/dataverse";
+import type { AccountMatch as AccountMatchRow, NewAccountFields } from "@/crm/dataverse";
 
 export function AccountMatch({
   state,
@@ -18,11 +17,38 @@ export function AccountMatch({
   const [results, setResults] = useState<AccountMatchRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<PanelError | null>(null);
-  const [orgHost, setOrgHost] = useState<string | null>(null);
+  // inline create-new-insured form, prefilled from the captured applicant.
+  // Still an explicit act (spec: never automatic) - just without leaving the panel.
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const co = applicant?.coApplicants[0] ?? null;
+  const [form, setForm] = useState<NewAccountFields>({
+    name: applicant
+      ? `${applicant.firstName} ${applicant.lastName}${co ? ` & ${co.firstName} ${co.lastName}` : ""}`
+      : "",
+    street: applicant?.address?.street ?? null,
+    city: applicant?.address?.city ?? null,
+    state: applicant?.address?.state ?? null,
+    postalCode: applicant?.address?.postalCode ?? null,
+    phone: applicant?.phones[0] ?? null,
+    email: applicant?.emails[0] ?? null
+  });
 
-  useEffect(() => {
-    getActiveEnvironment().then(env => setOrgHost(new URL(env.orgUrl).host));
-  }, []);
+  async function createInsured() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const created = await send<{ accountId: string; name: string }>({
+        type: "panel/createAccount",
+        fields: form
+      });
+      dispatch({ t: "account", id: created.accountId, name: created.name });
+    } catch (e) {
+      setErr(e as PanelError);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function search() {
     setLoading(true);
@@ -46,10 +72,6 @@ export function AccountMatch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function createNew() {
-    if (!orgHost) return;
-    window.open(`https://${orgHost}/main.aspx?pagetype=entityrecord&etn=account`, "_blank");
-  }
 
   return (
     <div>
@@ -113,9 +135,44 @@ export function AccountMatch({
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <Button onClick={createNew} disabled={!orgHost}>
-          Create new account…
-        </Button>
+        {!creating ? (
+          <Button onClick={() => setCreating(true)}>Create new insured…</Button>
+        ) : (
+          <Card>
+            <CardHeader header={<Text weight="semibold">New insured (from EZLynx applicant)</Text>} />
+            <Field label="Account name" required>
+              <Input value={form.name} onChange={(_, d) => setForm(f => ({ ...f, name: d.value }))} />
+            </Field>
+            <Field label="Street">
+              <Input value={form.street ?? ""} onChange={(_, d) => setForm(f => ({ ...f, street: d.value || null }))} />
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Field label="City" style={{ flex: 2 }}>
+                <Input value={form.city ?? ""} onChange={(_, d) => setForm(f => ({ ...f, city: d.value || null }))} />
+              </Field>
+              <Field label="State" style={{ flex: 1 }}>
+                <Input value={form.state ?? ""} onChange={(_, d) => setForm(f => ({ ...f, state: d.value || null }))} />
+              </Field>
+              <Field label="ZIP" style={{ flex: 1 }}>
+                <Input value={form.postalCode ?? ""} onChange={(_, d) => setForm(f => ({ ...f, postalCode: d.value || null }))} />
+              </Field>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Field label="Phone" style={{ flex: 1 }}>
+                <Input value={form.phone ?? ""} onChange={(_, d) => setForm(f => ({ ...f, phone: d.value || null }))} />
+              </Field>
+              <Field label="Email" style={{ flex: 1 }}>
+                <Input value={form.email ?? ""} onChange={(_, d) => setForm(f => ({ ...f, email: d.value || null }))} />
+              </Field>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <Button appearance="primary" disabled={saving || !form.name.trim()} onClick={createInsured}>
+                {saving ? <Spinner size="tiny" /> : "Create insured"}
+              </Button>
+              <Button disabled={saving} onClick={() => setCreating(false)}>Cancel</Button>
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );

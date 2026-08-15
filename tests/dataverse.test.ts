@@ -65,6 +65,23 @@ describe("CrmAccessError", () => {
   });
 });
 
+describe("createOpportunity", () => {
+  it("binds LOB via the SCHEMA-cased nav property", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      expect(body["iacrm_LineOfBusinessId@odata.bind"]).toBe("/iacrm_lineofbusinesses(LOB-1)");
+      expect(body["iacrm_lineofbusinessid@odata.bind"]).toBeUndefined();
+      return {
+        ok: true, status: 201, headers: new Headers(),
+        json: async () => ({ opportunityid: "OPP-1", name: "n", _iacrm_lineofbusinessid_value: "LOB-1" })
+      } as unknown as Response;
+    }));
+    const { createOpportunity } = await import("@/crm/dataverse");
+    const opp = await createOpportunity(ENV, "ACC-1", "LOB-1", "n");
+    expect(opp.opportunityId).toBe("OPP-1");
+  });
+});
+
 describe("getExistingQuoteStatuses", () => {
   it("or-chains keys and maps status by amsexternalid", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {

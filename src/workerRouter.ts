@@ -9,6 +9,9 @@ import {
   getExistingQuoteStatuses,
   getQuotingMethodId,
   searchUsers,
+  createAccount,
+  getLinesOfBusiness,
+  createOpportunity,
   executeBatch
 } from "@/crm/dataverse";
 import { buildQuoteOps } from "@/crm/mapping";
@@ -24,6 +27,9 @@ export interface Deps {
   getExistingQuoteStatuses: typeof getExistingQuoteStatuses;
   getQuotingMethodId: typeof getQuotingMethodId;
   searchUsers: typeof searchUsers;
+  createAccount: typeof createAccount;
+  getLinesOfBusiness: typeof getLinesOfBusiness;
+  createOpportunity: typeof createOpportunity;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -78,6 +84,21 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/searchUsers": {
         const env = await deps.getActiveEnvironment();
         return { ok: true, data: await deps.searchUsers(env, msg.query) };
+      }
+
+      case "panel/createAccount": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.createAccount(env, msg.fields) };
+      }
+
+      case "panel/getLobs": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.getLinesOfBusiness(env) };
+      }
+
+      case "panel/createOpportunity": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name) };
       }
 
       case "panel/saveCarrierAlias": {
@@ -158,6 +179,9 @@ export const realDeps: Deps = {
   getExistingQuoteStatuses,
   getQuotingMethodId,
   searchUsers,
+  createAccount,
+  getLinesOfBusiness,
+  createOpportunity,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,
