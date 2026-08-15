@@ -8,6 +8,7 @@ import {
   getCarriers,
   getExistingQuoteStatuses,
   getQuotingMethodId,
+  searchUsers,
   executeBatch
 } from "@/crm/dataverse";
 import { buildQuoteOps } from "@/crm/mapping";
@@ -22,6 +23,7 @@ export interface Deps {
   getCarriers: typeof getCarriers;
   getExistingQuoteStatuses: typeof getExistingQuoteStatuses;
   getQuotingMethodId: typeof getQuotingMethodId;
+  searchUsers: typeof searchUsers;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -70,6 +72,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/getCarriers": {
         const env = await deps.getActiveEnvironment();
         return { ok: true, data: await deps.getCarriers(env) };
+      }
+
+      case "panel/searchUsers": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.searchUsers(env, msg.query) };
       }
 
       case "panel/saveCarrierAlias": {
@@ -129,6 +136,7 @@ export const realDeps: Deps = {
   getCarriers,
   getExistingQuoteStatuses,
   getQuotingMethodId,
+  searchUsers,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,

@@ -42,7 +42,8 @@ const payload: CommitPayload = {
     // Home intentionally unpinned → skipped
   },
   carrierMap: { 13: "CAR-TRAV", 999: null },
-  selectedKeys: ["ezlynx:1:req", "ezlynx:1:alt0", "ezlynx:2:req", "ezlynx:3:req"]
+  selectedKeys: ["ezlynx:1:req", "ezlynx:1:alt0", "ezlynx:2:req", "ezlynx:3:req"],
+  ownerId: "USR-1"
 };
 
 describe("buildQuoteOps", () => {
@@ -69,7 +70,8 @@ describe("buildQuoteOps", () => {
       "iacrm_opportunityid@odata.bind": "/opportunities(OPP-AUTO)",
       "iacrm_lineofbusinessid@odata.bind": "/iacrm_lineofbusinesses(LOB-AUTO)",
       "iacrm_carrierid@odata.bind": "/iacrm_carriers(CAR-TRAV)",
-      "iacrm_quotingmethodid@odata.bind": "/iacrm_quotingmethods(QM-1)"
+      "iacrm_quotingmethodid@odata.bind": "/iacrm_quotingmethods(QM-1)",
+      "ownerid@odata.bind": "/systemusers(USR-1)"
     });
     expect(op.body["iacrm_quotelink"]).toBe(
       "https://app.ezlynx.com/web/account/219851561/rating/quote-results/199071915/513228997"
@@ -100,6 +102,11 @@ describe("buildQuoteOps", () => {
     expect("iacrm_premium_status" in firm.body).toBe(false);
     const notFirm = opsWithFirm.find(o => o.key === "ezlynx:1:alt0")!;
     expect(notFirm.body["iacrm_premium_status"]).toBe(738590000);
+  });
+
+  it("omits the owner bind when ownerId is null", () => {
+    const noOwner = buildQuoteOps({ ...payload, ownerId: null }, new Map());
+    expect(noOwner[0]!.body["ownerid@odata.bind"]).toBeUndefined();
   });
 
   it("serializes rawpayload as JSON and honors deselection", () => {

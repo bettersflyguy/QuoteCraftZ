@@ -15,6 +15,7 @@ export type PanelRequest =
   | { type: "panel/searchAccounts"; name: string; postalCode: string | null }
   | { type: "panel/getOpportunities"; accountId: string }
   | { type: "panel/getCarriers" }
+  | { type: "panel/searchUsers"; query: string }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }
   | { type: "env/list" }

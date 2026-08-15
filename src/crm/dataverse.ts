@@ -13,6 +13,7 @@ export class CrmAccessError extends Error {
 export interface AccountMatch { accountId: string; name: string; city: string | null; postalCode: string | null; openOppCount: number }
 export interface OppSummary { opportunityId: string; name: string; lobId: string | null; lobName: string | null; desiredEffectiveDate: string | null }
 export interface CarrierRow { carrierId: string; name: string }
+export interface UserRow { userId: string; fullName: string }
 export interface BatchItemResult { key: string; status: number; error: string | null }
 
 const API = "/api/data/v9.2/";
@@ -86,6 +87,12 @@ export async function getCarriers(env: CrmEnvironment): Promise<CarrierRow[]> {
     env, `iacrm_carriers?$select=iacrm_name,iacrm_carrierid&$filter=statecode eq 0&$orderby=iacrm_name`
   );
   return value.map(c => ({ carrierId: c["iacrm_carrierid"]!, name: c["iacrm_name"] ?? "" }));
+}
+
+export async function searchUsers(env: CrmEnvironment, query: string): Promise<UserRow[]> {
+  const q = `systemusers?$select=systemuserid,fullname&$filter=isdisabled eq false and contains(fullname,'${esc(query)}')&$orderby=fullname&$top=10`;
+  const { value } = await dvJson<{ value: Record<string, string>[] }>(env, q);
+  return value.map(u => ({ userId: u["systemuserid"]!, fullName: u["fullname"] ?? "" }));
 }
 
 export async function getQuotingMethodId(env: CrmEnvironment, nameContains: string): Promise<string | null> {

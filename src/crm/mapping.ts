@@ -14,6 +14,8 @@ export interface CommitPayload {
   blockSelections: Record<string, BlockSelection>;
   carrierMap: Record<number, string | null>;
   selectedKeys: string[];
+  /** systemuser GUID the written quotes are owned by (servicing agent). */
+  ownerId: string | null;
 }
 
 const TERM_CHOICE: Record<number, number> = { 6: 738590203, 12: 738590205 };
@@ -36,7 +38,7 @@ export function buildQuoteOps(
   payload: CommitPayload,
   existingStatuses: Map<string, number>
 ): { key: string; method: "PATCH"; url: string; body: Record<string, unknown> }[] {
-  const { run, accountId, quotingMethodId, blockSelections, carrierMap, selectedKeys } = payload;
+  const { run, accountId, quotingMethodId, blockSelections, carrierMap, selectedKeys, ownerId } = payload;
   const selected = new Set(selectedKeys);
   const ops: { key: string; method: "PATCH"; url: string; body: Record<string, unknown> }[] = [];
 
@@ -81,6 +83,7 @@ export function buildQuoteOps(
       const carrierId = carrierMap[q.carrierEzlynxId];
       if (carrierId) body["iacrm_carrierid@odata.bind"] = `/iacrm_carriers(${carrierId})`;
       if (quotingMethodId) body["iacrm_quotingmethodid@odata.bind"] = `/iacrm_quotingmethods(${quotingMethodId})`;
+      if (ownerId) body["ownerid@odata.bind"] = `/systemusers(${ownerId})`;
 
       ops.push({ key: q.key, method: "PATCH", url: altKeyUrl(q.key), body });
     }

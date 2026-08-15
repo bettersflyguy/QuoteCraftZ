@@ -17,7 +17,9 @@ import {
   tokens
 } from "@fluentui/react-components";
 import { CheckmarkCircleRegular, ErrorCircleRegular } from "@fluentui/react-icons";
+import { Combobox, Option, Field } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
+import type { UserRow } from "@/crm/dataverse";
 import { ErrorBar } from "../ErrorBar";
 import type { Action, ImportState } from "../state";
 import type { CommitPayload, BlockSelection } from "@/crm/mapping";
@@ -52,10 +54,41 @@ export function ReviewCommit({
   const [committing, setCommitting] = useState(false);
   const [err, setErr] = useState<PanelError | null>(null);
   const [lastAttemptKeys, setLastAttemptKeys] = useState<string[] | undefined>(undefined);
+  // Servicing agent (record owner). Required - shared rating logins mean the
+  // signed-in identity is NOT a safe default for who services the account.
+  const [owner, setOwner] = useState<UserRow | null>(null);
+  const [ownerQuery, setOwnerQuery] = useState("");
+  const [ownerOptions, setOwnerOptions] = useState<UserRow[]>([]);
 
   useEffect(() => {
-    getActiveEnvironment().then(setEnv);
+    getActiveEnvironment().then(async e => {
+      setEnv(e);
+      // sticky default, per environment
+      const key = `owner/default:${e.orgUrl}`;
+      const stored = await chrome.storage.local.get(key);
+      const d = stored[key] as UserRow | undefined;
+      if (d) { setOwner(d); setOwnerQuery(d.fullName); }
+    });
   }, []);
+
+  async function searchOwners(q: string) {
+    setOwnerQuery(q);
+    setOwner(null); // typing invalidates the previous pick until a new one is chosen
+    if (q.trim().length < 2) return setOwnerOptions([]);
+    try {
+      setOwnerOptions(await send<UserRow[]>({ type: "panel/searchUsers", query: q.trim() }));
+    } catch (e) {
+      setErr(e as PanelError);
+    }
+  }
+
+  async function pickOwner(userId: string) {
+    const u = ownerOptions.find(o => o.userId === userId);
+    if (!u || !env) return;
+    setOwner(u);
+    setOwnerQuery(u.fullName);
+    await chrome.storage.local.set({ [`owner/default:${env.orgUrl}`]: u });
+  }
 
   const rows = useMemo<ReviewRow[]>(() => {
     const out: ReviewRow[] = [];
@@ -88,7 +121,8 @@ export function ReviewCommit({
       quotingMethodId: null,
       blockSelections,
       carrierMap: state.carrierMap,
-      selectedKeys: keysOverride ?? state.selectedKeys
+      selectedKeys: keysOverride ?? state.selectedKeys,
+      ownerId: owner?.userId ?? null
     };
   }
 
@@ -226,10 +260,32 @@ export function ReviewCommit({
         </div>
       )}
 
+      <Field
+        label="Servicing agent (record owner)"
+        required
+        validationState={owner ? "none" : "warning"}
+        validationMessage={owner ? undefined : "Pick who these quotes belong to — required."}
+        style={{ marginTop: 12 }}
+      >
+        <Combobox
+          placeholder="Type a name…"
+          value={ownerQuery}
+          selectedOptions={owner ? [owner.userId] : []}
+          onInput={e => searchOwners((e.target as HTMLInputElement).value)}
+          onOptionSelect={(_, d) => { if (d.optionValue) void pickOwner(d.optionValue); }}
+        >
+          {ownerOptions.map(u => (
+            <Option key={u.userId} value={u.userId} text={u.fullName}>
+              {u.fullName}
+            </Option>
+          ))}
+        </Combobox>
+      </Field>
+
       <div style={{ marginTop: 12 }}>
         <Button
           appearance="primary"
-          disabled={committing || !env || selectedCount === 0}
+          disabled={committing || !env || selectedCount === 0 || !owner}
           onClick={() => commit()}
         >
           {committing ? (
