@@ -33,8 +33,12 @@ in this design port to a server-side sync with the panel and Dataverse client un
 
 ## Non-goals
 
-- No `iacrm_quotecoverage` child rows. Coverage detail lands as a flattened summary
-  string plus the full capture in `iacrm_rawpayload`.
+- No per-vehicle coverage rows. EZLynx's `vehicleCoverageBreakdown` is preserved in
+  `iacrm_rawpayload` but not broken out — it is absent for Travelers and for every
+  alternate quote, so rows built from it would be patchy.
+- No home endorsement rows. `endorsementPremiums[]` stays in `iacrm_rawpayload`.
+- No per-coverage premium allocation. `homeCoveragePremiums[].amountText` is not
+  written; premium lives on the quote record only.
 - No Contact creation or update. Applicant contact data informs Account matching only.
 - No writes back to EZLynx. Read-only against EZLynx, always.
 - No AMS (Momentum/NowCerts) involvement. This is a quote-results path, not an AMS sync.
@@ -87,6 +91,22 @@ Verified against a real Auto/Home rate run (applicant 219851561, quote 513228997
 7. **Alternates are frequent and are what the UI headlines.** 6 of 11 results carried an
    alternate. EZLynx's own screen shows Travelers as $1,798 (the alternate), not the
    $2,273 as-requested premium.
+8. **Coverage detail arrives in three distinct structures**, only the first of which is
+   in scope:
+   - `coverages[]` — flat name/value limits and deductibles, present on **every**
+     successful quote in both LOBs. Auto keys: `BI`, `PD`, `UM`, `UIM`, `MP`, `PIP`,
+     `PIPDeductible`, `WorkLoss`, `PIPOptions`, `PIPStacking`. Home keys:
+     `Dwelling`, `OtherStructures`, `PersonalProperty`, `LossOfUse`,
+     `PersonalLiability`, `MedicalPayments`, `Deductible`, `WindDeductible`,
+     `TheftDeductible`, `ReplacementCost`, `NumberOfFamilies`.
+   - `homeCoveragePremiums[]` — Home only, ACORD codes A–F with per-coverage premium.
+     Out of scope; its limits duplicate `coverages[]`.
+   - `endorsementPremiums[]` / `vehicleCoverageBreakdown` — out of scope.
+9. **Carrier value formatting is inconsistent for identical values.** The same dwelling
+   limit came back as `$606,900` (Liberty Mutual), `$606900` (Hartford), and `606900`
+   (Travelers). Non-numeric values are meaningful too: `No Coverage`, `Excluded`,
+   `INCLUDED`, `One Family`, `1%`, `BASIC+10K MED EXP`. Coverage lines must therefore
+   store the raw string **and** a parsed decimal where one is extractable.
 
 ## Architecture
 
@@ -214,7 +234,7 @@ alternate quotes share one `execId`.
 | `iacrm_term` | `premiums[].term` → 6 Months (738590203) / 12 Months (738590205) |
 | `iacrm_effectivedate` | EZLynx effective date, else Opportunity `iacrm_desiredeffectivedate` |
 | `iacrm_expirationdate` | effective date + term |
-| `iacrm_coveragelimitsummary` | `coverages[]` flattened `name: value`, 5000 char cap |
+| `iacrm_coveragelimitsummary` | `coverages[]` flattened `name: value`, 5000 char cap (child rows carry the same data structured — see Coverage lines) |
 | `iacrm_quotelink` | `/web/account/{applicantId}/rating/quote-results/{openApplicationId}/{applicantQuoteId}` |
 | `iacrm_rawpayload` | normalized capture JSON (1 MB cap) |
 | `iacrm_opportunityid` | pinned Opportunity for that LOB block **(required)** |
@@ -240,6 +260,61 @@ Consequence for re-import: the upsert payload omits `iacrm_premium_status` when 
 target row already exists and its value is `Firm`, so a re-rate never downgrades a
 premium an agent has already confirmed.
 
+### Coverage lines
+
+One `iacrm_quotecoverage` row per entry in `coverages[]`, for every successfully written
+quote (requested and alternate alike). Limits and deductibles only — no premium
+allocation, no per-vehicle rows, no endorsements.
+
+| `iacrm_quotecoverage` field | Source |
+|---|---|
+| `iacrm_quoteid` | parent quote **(new column — see below)** |
+| `iacrm_quotecoverage_name` | display label resolved from the EZLynx key (`BI` → `Bodily Injury`) |
+| `iacrm_coveragecode` | raw EZLynx key, unmapped (`BI`, `Dwelling`, `WindDeductible`) |
+| `iacrm_limittext` | raw value exactly as returned (`$606,900`, `500 CSL`, `No Coverage`) |
+| `iacrm_limitvalue` | parsed decimal, **null** when the value is non-numeric |
+| `iacrm_displayorder` | index within `coverages[]`, preserving carrier ordering |
+| `iacrm_lineofbusinessid` | inherited from the parent quote |
+| `iacrm_amsexternalid` | `{parent quote key}:cov:{coverageCode}` |
+
+Both `iacrm_limittext` and `iacrm_limitvalue` are required by finding #9: raw text alone
+cannot sort or compare across carriers, and a parsed number alone silently discards
+`No Coverage`, `Excluded`, and `INCLUDED` — which are the difference between a quote
+that covers something and one that does not.
+
+**Key derivation** makes coverage rows idempotent alongside their parent: a re-import
+updates the same coverage rows rather than accumulating duplicates. Coverage rows whose
+key is absent from a re-import are **deleted**, so a carrier dropping a coverage on
+re-rate is reflected rather than leaving a stale row behind.
+
+`iacrm_coveragelimitsummary` on the quote is still written — it remains the fast
+at-a-glance string for grid and comparison views, and is now a rendering of the same
+`coverages[]` data the child rows carry.
+
+Volume: roughly 10 coverage rows per quote, so the sample Hinrichs run produces ~110
+coverage rows across 11 quotes. Well within a single `$batch`.
+
+### Required CRM schema change (cross-repo)
+
+`iacrm_quotecoverage` is presently a four-column stub — `iacrm_quotecoverage_name`,
+`iacrm_amsexternalid`, `iacrm_lastsyncon`, `iacrm_lineofbusinessid`. **It has no lookup
+to `iacrm_quote`.** Coverage capture cannot ship until these columns exist:
+
+| Column | Type | Notes |
+|---|---|---|
+| `iacrm_quoteid` | Lookup → `iacrm_quote` | Required. Cascade **Parental** so deleting a quote removes its coverage lines. |
+| `iacrm_coveragecode` | Text (50) | |
+| `iacrm_limittext` | Text (100) | |
+| `iacrm_limitvalue` | Decimal | Nullable |
+| `iacrm_displayorder` | Whole number | |
+| alternate key | (`iacrm_amsexternalid`) | Enables upsert without a pre-read |
+
+This work lives in **`C:\Projects\D365-CRM-V3`**, not this repo, and is bound by that
+repo's ALM contract: source-freshness preflight, senior review, and DEV→TEST promotion.
+It is a hard dependency of Phase 4b and must land first. `iacrm_policycoverage` already
+carries `iacrm_sourcequotecoverageid`, so quote→policy coverage lineage works once these
+columns exist — no extra relationship needed.
+
 ## Error handling
 
 | Failure | Behavior |
@@ -260,7 +335,13 @@ premium an agent has already confirmed.
   responses scrubbed of PII in `tests/fixtures/`. This is the layer that will break, so
   this is the suite that matters. The Hinrichs Auto/Home run is fixture #1: it covers
   multi-LOB, alternates, mixed terms, null `quoteNumber`, duplicate `quoteNumber` across
-  LOBs, and 5 distinct carrier error modes.
+  LOBs, and 5 distinct carrier error modes. It also covers every coverage-value
+  formatting variant found in finding #9 — `$606,900` / `$606900` / `606900` for one
+  identical limit, plus `No Coverage`, `Excluded`, `INCLUDED`, `1%`, and
+  `BASIC+10K MED EXP`.
+- **Limit-parsing tests** assert that each formatting variant yields the same
+  `iacrm_limitvalue`, and that every non-numeric value yields `null` with
+  `iacrm_limittext` preserved verbatim.
 - **Mapping tests** assert the field table above, including both key-suffix forms.
 - **One Playwright end-to-end** against a DEV Opportunity, run manually before each
   release. Not in CI.
@@ -275,6 +356,8 @@ premium an agent has already confirmed.
 | **2** | EZLynx client + normalizers + fixtures + unit tests | Verifiable with zero CRM writes |
 | **3** | Entra app registration, token handling, Dataverse client, `$batch` upsert, carrier alias map | |
 | **4** | Side panel UI (Fluent v9, five-step flow) | |
+| **4a** | **CRM schema change in `D365-CRM-V3`** — add `iacrm_quoteid` and the coverage columns to `iacrm_quotecoverage`, promote DEV→TEST | Cross-repo; bound by that repo's ALM contract. Blocks 4b |
+| **4b** | Coverage line writing: normalizer, limit parsing, child upsert + orphan delete | Depends on 4a |
 | **5** | Internal rollout: unpacked/private install, real quotes into DEV, then live | |
 | **6** | Store readiness — privacy policy, listing assets, multi-tenant admin consent, Chrome Web Store + Edge Add-ons review | Deferred until internal use has settled |
 
@@ -304,3 +387,5 @@ premium an agent has already confirmed.
 | 2026-08-15 | Errored carriers skipped, surfaced as a count with messages *(assumption — confirm)* |
 | 2026-08-15 | Premium status is always `Estimated`, never derived, never downgrades an agent's `Firm` on re-import |
 | 2026-08-15 | Environment is a switchable first-class setting — named list, per-org token cache, always-visible colour-coded indicator, destination named on the commit button |
+| 2026-08-15 | **Reversed:** coverage detail lines ARE captured, as `iacrm_quotecoverage` rows from `coverages[]` — limits and deductibles only. No per-vehicle rows, no home endorsements, no per-coverage premium. Requires new columns on `iacrm_quotecoverage` in `D365-CRM-V3` (Phase 4a) |
+| 2026-08-15 | Coverage lines store raw text **and** parsed decimal, because carrier formatting of identical values is inconsistent and non-numeric values are meaningful |
