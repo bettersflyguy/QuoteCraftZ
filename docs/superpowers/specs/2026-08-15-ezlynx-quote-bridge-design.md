@@ -106,7 +106,8 @@ and Edge artifacts; only store listings differ.
 | `worker.ts` | Service worker | Entra token acquisition and refresh, all Dataverse HTTP, session state. Assumes it is killed every 30s idle — nothing survives in memory; state lives in `chrome.storage.session`. |
 | `crm/dataverse.ts` | Service worker | Typed Dataverse Web API client: search, `$batch` upsert, retry/backoff. |
 | `panel/` | Side panel | React UI: pick run, match Account, pin Opportunity per LOB, map carriers, review, commit. |
-| `config/` | — | `endpoints.json` (EZLynx URL patterns), tenant ID, client ID, CRM org URL. Shipped as data with defaults, overridable in options. |
+| `config/` | — | `endpoints.json` (EZLynx URL patterns), tenant ID, client ID, and the **environment list** (see below). Shipped as data with defaults, overridable in options. |
+| `crm/environments.ts` | Shared | Named environment registry, active-environment state, per-org token cache keying. |
 
 Keeping EZLynx knowledge confined to `client.ts` + `normalize.ts` + `endpoints.json` is
 what makes a EZLynx-side change a small, well-bounded edit. The panel and the Dataverse
@@ -117,9 +118,39 @@ client never see a raw EZLynx object.
 Multi-tenant Entra app registration, SPA platform, redirect URI
 `https://<extension-id>.chromiumapp.org/`. Delegated scope
 `https://<org>.crm.dynamics.com/user_impersonation`, acquired via
-`chrome.identity.launchWebAuthFlow`, cached in `chrome.storage.session`, refreshed
-silently. Writes are attributed to the signed-in agent and their security roles apply.
-No service principal, no stored secret.
+`chrome.identity.launchWebAuthFlow`, refreshed silently. Writes are attributed to the
+signed-in agent and their security roles apply. No service principal, no stored secret.
+
+**The Dataverse scope names the environment.** A token issued for
+`agentcrmdev.crm.dynamics.com` is not valid against any other org, so the extension must
+resolve its active environment before it can request a token at all. Tokens are cached
+**per org** in `chrome.storage.session`, keyed by org URL — switching environments never
+reuses a stale token, and switching back does not force a fresh interactive sign-in
+inside the same session.
+
+**Access gate:** the signed-in agent needs a Dataverse security role *in the targeted
+environment*. This is a rollout consideration in Phase 5 — an agent added to the tool
+must exist in whichever org it is aimed at.
+
+### Environments
+
+Environment is a first-class switchable setting, not a build-time constant.
+
+- **Named environment list** in options: display name, org URL, and a colour token.
+  Ships with `Dev — agentcrmdev.crm.dynamics.com` and an empty Production slot.
+- **Active environment persists** across sessions in `chrome.storage.local`.
+- **Always visible.** The panel header shows the active environment name, colour-coded,
+  at all times — not only while the picker is open.
+- **The commit button names the target**: "Write 6 quotes to **DEV**". The agent cannot
+  reach a write without the destination being on the button they press.
+- **Switching environments clears the pinned CRM target** (Account, Opportunities,
+  carrier map results), because those record IDs are meaningless in another org. The
+  captured EZLynx run survives — only the CRM-side selections reset.
+
+Rationale: DEV is the target through Phase 5 and prod thereafter, with DEV still wanted
+for testing afterward. A baked constant would need a rebuild to switch, and the real
+failure it invites is silent — a real client's quotes written to DEV, or test quotes
+written to prod, with nothing on screen naming the destination.
 
 ### Known risk — resolve first
 
@@ -151,7 +182,9 @@ quote-result/{id} ───────┘                (session storage)     
    Auto today and Home tomorrow.
 4. **Map carriers.** Match on `carrier.id` against a local alias map; unmatched carriers
    get a picker, and the choice persists so each carrier is mapped once, ever.
-5. **Review and commit.** Editable grid, per-row deselect, then write.
+5. **Review and commit.** Editable grid, per-row deselect, then write. The active
+   environment is shown in the header throughout, and the commit button names the
+   destination ("Write 6 quotes to **DEV**").
 
 ### Write
 
@@ -217,6 +250,7 @@ premium an agent has already confirmed.
 | Entra token expired / consent revoked | Silent refresh; on failure, panel drops to a sign-in button. Captured run survives in session storage. |
 | Dataverse write rejected (validation, privilege) | Per-row status in the panel; failed rows stay selected for retry. |
 | Dataverse 429 | Honor `Retry-After` with exponential backoff. |
+| Agent has no security role in the active environment | Message names the environment explicitly — "your account has no access to **DEV**" — rather than a bare 401/403. The most likely cause is a wrong active environment, so the message offers the environment switcher directly. |
 | Carrier unmatched | Row writes with `iacrm_carrierid` null and a visible warning. A quote with a premium and no carrier link beats no quote. |
 | No Opportunity pinned for a LOB block | That block is skipped; others still import. |
 
@@ -236,7 +270,7 @@ premium an agent has already confirmed.
 
 | Phase | Work | Gate |
 |---|---|---|
-| **0** | CORS spike: PKCE sign-in + one authenticated `GET /api/data/v9.2/accounts?$top=1` from a `chrome-extension://` origin | **Blocks everything.** ~1 hr |
+| **0** | CORS spike: PKCE sign-in + one authenticated `GET /api/data/v9.2/accounts?$top=1` from a `chrome-extension://` origin. Also asserts (a) SSO pass-through — whether an existing Entra session in the profile satisfies `launchWebAuthFlow` without re-entering credentials, in **both** Chrome and Edge, and (b) that a second token for a different org URL can be acquired in the same session | **Blocks everything.** ~1 hr |
 | **1** | Recon | ✅ Complete 2026-08-15 |
 | **2** | EZLynx client + normalizers + fixtures + unit tests | Verifiable with zero CRM writes |
 | **3** | Entra app registration, token handling, Dataverse client, `$batch` upsert, carrier alias map | |
@@ -246,10 +280,15 @@ premium an agent has already confirmed.
 
 ## Open items
 
-- **Target org for the build.** Assumed `agentcrmdev.crm.dynamics.com` (DEV) for
-  Phases 0–5. Needs confirmation before Phase 3.
+- **Production org URL.** The environment list ships with DEV
+  (`agentcrmdev.crm.dynamics.com`) as the default active environment and an empty
+  Production slot. The prod URL is needed before Phase 5 cutover, not before Phase 3 —
+  the switchable-environment design removed this as a build-time blocker.
 - **Carrier alias map seeding.** The six carrier IDs observed are a starting set; the
   full map builds up as agents encounter carriers. No pre-seeding planned.
+- **SSO pass-through behavior.** Assumed to work from an existing profile session;
+  Phase 0 verifies in Chrome and Edge. If it does not, the agent faces an interactive
+  sign-in per session — annoying but not blocking, and worth knowing before Phase 4.
 
 ## Decisions log
 
@@ -264,3 +303,4 @@ premium an agent has already confirmed.
 | 2026-08-15 | Requested and alternate quotes both written, as separate records |
 | 2026-08-15 | Errored carriers skipped, surfaced as a count with messages *(assumption — confirm)* |
 | 2026-08-15 | Premium status is always `Estimated`, never derived, never downgrades an agent's `Firm` on re-import |
+| 2026-08-15 | Environment is a switchable first-class setting — named list, per-org token cache, always-visible colour-coded indicator, destination named on the commit button |
