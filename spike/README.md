@@ -29,6 +29,6 @@ uploads generate their own.
 
 | Q | Question | Chrome | Edge |
 |---|---|---|---|
-| Q1 (gate) | Dataverse GET 200 from extension origin | _pending_ | _pending_ |
-| Q2 | SSO pass-through (no credential typing; authorize < ~3s) | _pending_ | _pending_ |
-| Q3 | Second-org token in same session | _pending_ | _pending_ |
+| Q1 (gate) | Dataverse GET 200 from extension origin | **PASS** (2026-08-15, SPA platform) | deferred to e2e checklist |
+| Q2 | SSO pass-through (no credential typing; authorize < ~3s) | PASS — account picker shown (prompt=select_account, by design), no password typing | deferred to e2e checklist |
+| Q3 | Second-org token in same session | authorize flow proven; per-org redemption exercised when a second real env is added | n/a |
