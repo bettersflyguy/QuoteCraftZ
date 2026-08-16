@@ -83,6 +83,22 @@ describe("createOpportunity", () => {
   });
 });
 
+describe("createOpportunity pipeline binds", () => {
+  it("binds pipeline and stage via SCHEMA-cased nav properties when provided", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      expect(body["iacrm_PipelineId@odata.bind"]).toBe("/iacrm_pipelines(PIPE-1)");
+      expect(body["iacrm_PipelineStageId@odata.bind"]).toBe("/iacrm_pipelinestages(STAGE-1)");
+      return {
+        ok: true, status: 201, headers: new Headers(),
+        json: async () => ({ opportunityid: "OPP-1", name: "n", _iacrm_lineofbusinessid_value: "LOB-1" })
+      } as unknown as Response;
+    }));
+    const { createOpportunity } = await import("@/crm/dataverse");
+    await createOpportunity(ENV, "ACC-1", "LOB-1", "n", "PIPE-1", "STAGE-1");
+  });
+});
+
 describe("getExistingQuoteStatuses", () => {
   it("or-chains keys and maps status by amsexternalid", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {

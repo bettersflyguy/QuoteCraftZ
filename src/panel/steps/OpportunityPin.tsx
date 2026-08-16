@@ -3,7 +3,7 @@ import { Button, Dropdown, Option, Card, CardHeader, Text, Spinner, Field, Link 
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import type { Action, ImportState } from "../state";
-import type { OppSummary, LobRow } from "@/crm/dataverse";
+import type { OppSummary, LobRow, PipelineStages } from "@/crm/dataverse";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 
 const SKIP = "__skip__";
@@ -24,6 +24,8 @@ export function OpportunityPin({
   const [creatingLob, setCreatingLob] = useState<string | null>(null); // which block's card shows the form
   const [chosenLobId, setChosenLobId] = useState<string | null>(null);
   const [savingLob, setSavingLob] = useState(false);
+  const [pipeline, setPipeline] = useState<PipelineStages | null>(null);
+  const [chosenStageId, setChosenStageId] = useState<string | null>(null);
   const [env, setEnv] = useState<CrmEnvironment | null>(null);
   useEffect(() => { getActiveEnvironment().then(setEnv); }, []);
 
@@ -90,9 +92,22 @@ export function OpportunityPin({
       // preselect the best LOB-name match for this block ("Auto" -> "Personal Auto")
       const match = list.find(l => l.name.toLowerCase().includes(lob.toLowerCase()));
       setChosenLobId(match?.lobId ?? null);
+      await loadStages(match?.lobId ?? null);
     } catch (e) {
       setErr(e as PanelError);
       setCreatingLob(null);
+    }
+  }
+
+  async function loadStages(lobId: string | null) {
+    try {
+      const p = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId });
+      setPipeline(p);
+      // default: first stage of the LOB's default pipeline
+      setChosenStageId(p?.stages[0]?.stageId ?? null);
+    } catch {
+      setPipeline(null);
+      setChosenStageId(null);
     }
   }
 
@@ -105,7 +120,9 @@ export function OpportunityPin({
         type: "panel/createOpportunity",
         accountId: state.accountId,
         lobId: chosenLobId,
-        name: `${state.accountName ?? "New insured"} — ${lobName}`
+        name: `${state.accountName ?? "New insured"} — ${lobName}`,
+        pipelineId: pipeline?.pipelineId ?? null,
+        stageId: chosenStageId
       });
       setOpps(prev => [...(prev ?? []), created]);
       dispatch({ t: "oppCreated", opportunityId: created.opportunityId });
@@ -176,7 +193,7 @@ export function OpportunityPin({
                       <Dropdown
                         value={lobs.find(l => l.lobId === chosenLobId)?.name ?? ""}
                         selectedOptions={chosenLobId ? [chosenLobId] : []}
-                        onOptionSelect={(_, d) => setChosenLobId(d.optionValue as string)}
+                        onOptionSelect={(_, d) => { setChosenLobId(d.optionValue as string); void loadStages(d.optionValue as string); }}
                       >
                         {[...lobs]
                           .sort((a, z) => {
@@ -191,6 +208,21 @@ export function OpportunityPin({
                           ))}
                       </Dropdown>
                     </Field>
+                    {pipeline && pipeline.stages.length > 0 && (
+                      <Field label={`Stage (${pipeline.pipelineName})`} style={{ marginTop: 8 }}>
+                        <Dropdown
+                          value={pipeline.stages.find(s => s.stageId === chosenStageId)?.name ?? ""}
+                          selectedOptions={chosenStageId ? [chosenStageId] : []}
+                          onOptionSelect={(_, d) => setChosenStageId(d.optionValue as string)}
+                        >
+                          {pipeline.stages.map(s => (
+                            <Option key={s.stageId} value={s.stageId}>
+                              {s.name}
+                            </Option>
+                          ))}
+                        </Dropdown>
+                      </Field>
+                    )}
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                       <Button
                         appearance="primary"

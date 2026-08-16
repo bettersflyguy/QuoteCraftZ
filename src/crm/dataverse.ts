@@ -16,6 +16,8 @@ export interface OppSummary { opportunityId: string; name: string; lobId: string
 export interface CarrierRow { carrierId: string; name: string }
 export interface UserRow { userId: string; fullName: string }
 export interface LobRow { lobId: string; name: string }
+export interface StageRow { stageId: string; name: string; order: number }
+export interface PipelineStages { pipelineId: string; pipelineName: string; stages: StageRow[] }
 export interface NewAccountFields {
   name: string;
   street: string | null; city: string | null; state: string | null; postalCode: string | null;
@@ -128,16 +130,52 @@ export async function getLinesOfBusiness(env: CrmEnvironment): Promise<LobRow[]>
   return value.map(l => ({ lobId: l["iacrm_lineofbusinessid"]!, name: l["iacrm_lineofbusiness_name"] ?? "" }));
 }
 
+/** Resolves the pipeline for a LOB (iacrm_DefaultForLob match, else first
+ * active) and its ordered stages. Null when the org has no active pipelines. */
+export async function getStagesForLob(env: CrmEnvironment, lobId: string | null): Promise<PipelineStages | null> {
+  let pipeline: Record<string, string> | undefined;
+  if (lobId) {
+    const { value } = await dvJson<{ value: Record<string, string>[] }>(
+      env, `iacrm_pipelines?$select=iacrm_pipelineid,iacrm_pipeline_name&$filter=statecode eq 0 and _iacrm_defaultforlob_value eq ${lobId}&$top=1`
+    );
+    pipeline = value[0];
+  }
+  if (!pipeline) {
+    const { value } = await dvJson<{ value: Record<string, string>[] }>(
+      env, `iacrm_pipelines?$select=iacrm_pipelineid,iacrm_pipeline_name&$filter=statecode eq 0&$top=1`
+    );
+    pipeline = value[0];
+  }
+  if (!pipeline) return null;
+  const pipelineId = pipeline["iacrm_pipelineid"]!;
+  const { value: stages } = await dvJson<{ value: Record<string, string | number | null>[] }>(
+    env, `iacrm_pipelinestages?$select=iacrm_pipelinestageid,iacrm_pipelinestage_name,iacrm_displayorder&$filter=statecode eq 0 and _iacrm_pipelineid_value eq ${pipelineId}&$orderby=iacrm_displayorder asc`
+  );
+  return {
+    pipelineId,
+    pipelineName: (pipeline["iacrm_pipeline_name"] as string) ?? "",
+    stages: stages.map(s => ({
+      stageId: s["iacrm_pipelinestageid"] as string,
+      name: (s["iacrm_pipelinestage_name"] as string) ?? "",
+      order: (s["iacrm_displayorder"] as number) ?? 0
+    }))
+  };
+}
+
 export async function createOpportunity(
-  env: CrmEnvironment, accountId: string, lobId: string, name: string
+  env: CrmEnvironment, accountId: string, lobId: string, name: string,
+  pipelineId?: string | null, stageId?: string | null
 ): Promise<OppSummary> {
-  const body = {
+  const body: Record<string, unknown> = {
     name,
     "customerid_account@odata.bind": `/accounts(${accountId})`,
     // nav property is SCHEMA-cased - iacrm_lineofbusinessid (logical case) is
     // rejected with "undeclared property". Verified live against DEV 2026-08-15.
     "iacrm_LineOfBusinessId@odata.bind": `/iacrm_lineofbusinesses(${lobId})`
   };
+  // default pipeline + chosen stage so panel-created opps land on the Kanban
+  if (pipelineId) body["iacrm_PipelineId@odata.bind"] = `/iacrm_pipelines(${pipelineId})`;
+  if (stageId) body["iacrm_PipelineStageId@odata.bind"] = `/iacrm_pipelinestages(${stageId})`;
   const r = await dvPost<Record<string, string | null>>(
     env, "opportunities?$select=opportunityid,name,_iacrm_lineofbusinessid_value,iacrm_desiredeffectivedate", body
   );

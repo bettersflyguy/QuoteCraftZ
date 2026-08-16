@@ -13,6 +13,7 @@ import {
   createAccount,
   getLinesOfBusiness,
   createOpportunity,
+  getStagesForLob,
   executeBatch
 } from "@/crm/dataverse";
 import { buildQuoteOps } from "@/crm/mapping";
@@ -46,6 +47,7 @@ export interface Deps {
   createAccount: typeof createAccount;
   getLinesOfBusiness: typeof getLinesOfBusiness;
   createOpportunity: typeof createOpportunity;
+  getStagesForLob: typeof getStagesForLob;
   getAccountEnrichmentState: typeof getAccountEnrichmentState;
   updateAccount: typeof updateAccount;
   getAccountContacts: typeof getAccountContacts;
@@ -124,7 +126,12 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/createOpportunity": {
         const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name) };
+        return { ok: true, data: await deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name, msg.pipelineId, msg.stageId) };
+      }
+
+      case "panel/getStagesForLob": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.getStagesForLob(env, msg.lobId) };
       }
 
       case "panel/saveCarrierAlias": {
@@ -287,6 +294,7 @@ export const realDeps: Deps = {
   createAccount,
   getLinesOfBusiness,
   createOpportunity,
+  getStagesForLob,
   getAccountEnrichmentState,
   updateAccount,
   getAccountContacts,

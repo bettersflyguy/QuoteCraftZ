@@ -19,7 +19,8 @@ export type PanelRequest =
   | { type: "panel/searchUsers"; query: string }
   | { type: "panel/createAccount"; fields: NewAccountFields }
   | { type: "panel/getLobs" }
-  | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string }
+  | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string; pipelineId: string | null; stageId: string | null }
+  | { type: "panel/getStagesForLob"; lobId: string | null }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }
   | { type: "env/list" }
