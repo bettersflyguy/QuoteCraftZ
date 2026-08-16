@@ -8,6 +8,7 @@ import {
   getCarriers,
   getExistingQuoteStatuses,
   getQuotingMethodId,
+  createQuotingMethod,
   searchUsers,
   createAccount,
   getLinesOfBusiness,
@@ -26,6 +27,7 @@ export interface Deps {
   getCarriers: typeof getCarriers;
   getExistingQuoteStatuses: typeof getExistingQuoteStatuses;
   getQuotingMethodId: typeof getQuotingMethodId;
+  createQuotingMethod: typeof createQuotingMethod;
   searchUsers: typeof searchUsers;
   createAccount: typeof createAccount;
   getLinesOfBusiness: typeof getLinesOfBusiness;
@@ -110,10 +112,14 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/commit": {
         const env = await deps.getActiveEnvironment();
         // panel sends quotingMethodId null; the worker owns resolving the EZLynx
-        // quoting-method row (spec field-mapping table) - one lookup per commit
-        const payload = msg.payload.quotingMethodId == null
-          ? { ...msg.payload, quotingMethodId: await deps.getQuotingMethodId(env, "EZLynx") }
-          : msg.payload;
+        // quoting-method row (spec field-mapping table). Resolve-or-CREATE: prod
+        // shipped without an EZLynx row, which silently left the lookup blank.
+        let quotingMethodId = msg.payload.quotingMethodId;
+        if (quotingMethodId == null) {
+          quotingMethodId = await deps.getQuotingMethodId(env, "EZLynx");
+          if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "EZLynx");
+        }
+        const payload = { ...msg.payload, quotingMethodId };
         const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
         const ops = deps.buildQuoteOps(payload, existing);
         const results = await deps.executeBatch(env, ops);
@@ -178,6 +184,7 @@ export const realDeps: Deps = {
   getCarriers,
   getExistingQuoteStatuses,
   getQuotingMethodId,
+  createQuotingMethod,
   searchUsers,
   createAccount,
   getLinesOfBusiness,

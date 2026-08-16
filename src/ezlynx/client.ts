@@ -50,6 +50,7 @@ export async function fetchCapturedRun(
     applicant,
     openApplicationId: run.applicationId,
     capturedAt: new Date().toISOString(),
+    ratedAt: run.created ?? null,
     blocks
   };
 }

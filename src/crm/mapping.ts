@@ -49,7 +49,11 @@ export function buildQuoteOps(
     for (const q of block.quotes) {
       if (!selected.has(q.key)) continue;
 
-      const effective = sel.desiredEffectiveDate; // EZLynx results carry no effective date (recon); opportunity's is the fallback and primary
+      // Chain: opportunity's desired effective date -> the rate run's own date.
+      // EZLynx results carry no explicit effective date (recon); the true
+      // application effective date lives on the unreliable risk-application
+      // endpoint - deferred. Run date beats an empty field.
+      const effective = sel.desiredEffectiveDate ?? run.ratedAt?.slice(0, 10) ?? null;
       const name =
         `${q.carrierName} – ${block.lob}${effective ? ` – ${effective}` : ""}` +
         (q.kind === "alternate" ? " – Alt" : "");

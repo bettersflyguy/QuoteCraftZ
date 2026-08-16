@@ -33,6 +33,7 @@ export interface CapturedRun {
   applicant: CapturedApplicant;
   openApplicationId: number;
   capturedAt: string;                   // ISO, stamped at capture
+  ratedAt: string | null;               // the rate run's created timestamp (RunListItem.created)
   blocks: CapturedLobBlock[];
 }
 

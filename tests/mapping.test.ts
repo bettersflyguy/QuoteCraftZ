@@ -9,6 +9,7 @@ const run: CapturedRun = {
   },
   openApplicationId: 199071915,
   capturedAt: "2026-08-15T12:00:00Z",
+  ratedAt: "2026-08-10T09:30:00.5",
   blocks: [
     {
       lob: "Auto", applicantQuoteId: 513228997,
@@ -102,6 +103,16 @@ describe("buildQuoteOps", () => {
     expect("iacrm_premium_status" in firm.body).toBe(false);
     const notFirm = opsWithFirm.find(o => o.key === "ezlynx:1:alt0")!;
     expect(notFirm.body["iacrm_premium_status"]).toBe(738590000);
+  });
+
+  it("falls back to the rate-run date when the opportunity has no desired effective date", () => {
+    const noDate = buildQuoteOps({
+      ...payload,
+      blockSelections: { Auto: { opportunityId: "OPP-AUTO", lineOfBusinessId: null, desiredEffectiveDate: null } }
+    }, new Map());
+    const op = noDate.find(o => o.key === "ezlynx:1:req")!;
+    expect(op.body["iacrm_effectivedate"]).toBe("2026-08-10");
+    expect(op.body["iacrm_expirationdate"]).toBe("2027-08-10");
   });
 
   it("omits the owner bind when ownerId is null", () => {

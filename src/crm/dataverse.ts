@@ -164,6 +164,13 @@ export async function getQuotingMethodId(env: CrmEnvironment, nameContains: stri
   return value[0]?.["iacrm_quotingmethodid"] ?? null;
 }
 
+export async function createQuotingMethod(env: CrmEnvironment, name: string): Promise<string> {
+  const r = await dvPost<Record<string, string>>(env, "iacrm_quotingmethods?$select=iacrm_quotingmethodid", {
+    iacrm_quotingmethod_name: name
+  });
+  return r["iacrm_quotingmethodid"]!;
+}
+
 export async function getExistingQuoteStatuses(env: CrmEnvironment, keys: string[]): Promise<Map<string, number>> {
   if (!keys.length) return new Map();
   const ors = keys.map(k => `iacrm_amsexternalid eq '${esc(k)}'`).join(" or ");
