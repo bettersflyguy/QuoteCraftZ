@@ -23,9 +23,13 @@ export interface CapturedQuote {
   raw: unknown;                         // this quote's scriptResult context, for iacrm_rawpayload
 }
 
+export interface IcqPair { questionId: string; carrier: string | null; label: string; answer: string | null }
+
 export interface CapturedLobBlock {
   lob: string;                          // "Auto" | "Home" as EZLynx returns it
   applicantQuoteId: number;
+  /** carrier underwriting Q&A for this LOB's application; null when unavailable */
+  icq: { pairs: IcqPair[]; answeredCount: number; totalQuestions: number } | null;
   quotes: CapturedQuote[];
   errors: { carrierName: string; message: string }[];
 }

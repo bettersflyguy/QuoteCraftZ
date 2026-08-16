@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeQuoteResult, normalizeApplicant, normalizeRunList, NormalizeError } from "@/ezlynx/normalize";
+import { normalizeQuoteResult, normalizeApplicant, normalizeRunList, buildIcqPairs, NormalizeError } from "@/ezlynx/normalize";
 import quoteResult from "./fixtures/quote-result.sample.json";
 import applicant from "./fixtures/applicant.sample.json";
 import recentQuotes from "./fixtures/recent-quotes.sample.json";
@@ -94,5 +94,34 @@ describe("normalizeRunList", () => {
       { lob: "Home", applicantQuoteId: 513228998 }
     ]);
     expect(items[1]!.quoteIdsByLob).toEqual([{ lob: "Auto", applicantQuoteId: 488436332 }]);
+  });
+});
+
+describe("buildIcqPairs", () => {
+  const catalog = {
+    stateCode: "MN",
+    locations: [
+      { locationId: "AUTO_POLICYINFO_ADDITIONAL", questions: [
+        { questionId: "coverage_paperlessauto_common", questionShortName: "MULTI", label: "Paperless" },
+        { questionId: "still_multipxml", questionShortName: "Stillwater", label: "Multi-Policy Discount?" }
+      ]}
+    ]
+  };
+
+  it("joins catalog questions with answers by key, verbatim", () => {
+    const r = buildIcqPairs(catalog, [
+      { key: "coverage_paperlessauto_common", value: "Yes" },
+      { key: "dropdownPolicyType", value: "Standard" } // app-internal, no catalog match: ignored
+    ])!;
+    expect(r.pairs).toEqual([
+      { questionId: "coverage_paperlessauto_common", carrier: "MULTI", label: "Paperless", answer: "Yes" },
+      { questionId: "still_multipxml", carrier: "Stillwater", label: "Multi-Policy Discount?", answer: null }
+    ]);
+    expect(r.answeredCount).toBe(1);
+    expect(r.totalQuestions).toBe(2);
+  });
+
+  it("returns null on unrecognized catalog shape instead of throwing", () => {
+    expect(buildIcqPairs({ nope: true }, [])).toBeNull();
   });
 });

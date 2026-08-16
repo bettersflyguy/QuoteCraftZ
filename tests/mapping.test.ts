@@ -13,6 +13,7 @@ const run: CapturedRun = {
   blocks: [
     {
       lob: "Auto", applicantQuoteId: 513228997,
+      icq: { pairs: [{ questionId: "coverage_paperlessauto_common", carrier: "MULTI", label: "Paperless", answer: "Yes" }], answeredCount: 1, totalQuestions: 1 },
       quotes: [
         { key: "ezlynx:1:req", kind: "requested", carrierEzlynxId: 13, carrierName: "Travelers",
           quoteNumber: "Q1", premium: 2273, termMonths: 12, coverageSummary: "BI: 500 CSL", coverageLines: [{ code: "BI", label: "BI", limitText: "500 CSL" }], raw: { x: 1 } },
@@ -25,6 +26,7 @@ const run: CapturedRun = {
     },
     {
       lob: "Home", applicantQuoteId: 513228998,
+      icq: null,
       quotes: [
         { key: "ezlynx:3:req", kind: "requested", carrierEzlynxId: 35, carrierName: "Liberty",
           quoteNumber: null, premium: 4744.64, termMonths: 12, coverageSummary: "Cov A: $606,900: $4,751.00", coverageLines: [{ code: "A", label: "Cov A", limitText: "$606,900" }], raw: {} }
@@ -121,6 +123,12 @@ describe("buildQuoteOps", () => {
   it("omits the owner bind when ownerId is null", () => {
     const noOwner = buildQuoteOps({ ...payload, ownerId: null }, new Map());
     expect(noOwner[0]!.body["ownerid@odata.bind"]).toBeUndefined();
+  });
+
+  it("embeds the block's carrier Q&A into rawpayload", () => {
+    const op = buildQuoteOps(payload, new Map()).find(o => o.key === "ezlynx:1:req")!;
+    const raw = JSON.parse(op.body["iacrm_rawpayload"] as string);
+    expect(raw.icq.pairs[0]).toMatchObject({ questionId: "coverage_paperlessauto_common", answer: "Yes" });
   });
 
   it("serializes rawpayload as JSON and honors deselection", () => {

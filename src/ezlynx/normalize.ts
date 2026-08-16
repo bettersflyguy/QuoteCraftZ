@@ -81,7 +81,7 @@ export function normalizeQuoteResult(
       (s.requestedQuotes ?? []).forEach(q => quotes.push(mk(q, "requested", 0)));
       (s.alternateQuotes ?? []).forEach((q, i) => quotes.push(mk(q, "alternate", i)));
     }
-    return { lob: block.lob, applicantQuoteId: applicantQuoteIdByLob[block.lob] ?? 0, quotes, errors };
+    return { lob: block.lob, applicantQuoteId: applicantQuoteIdByLob[block.lob] ?? 0, icq: null, quotes, errors };
   });
 
   return { blocks };
@@ -176,4 +176,37 @@ export function normalizeRunList(raw: unknown): RunListItem[] {
       description: r.description ?? ""
     };
   });
+}
+
+/** Joins the ICQ question catalog with the application's answers. Question ids
+ * and answer keys share a namespace for carrier questions; answers whose key
+ * matches no catalog question are app-internal fields and are ignored (they can
+ * carry PII). Values verbatim. */
+export function buildIcqPairs(
+  catalogRaw: unknown,
+  answersRaw: unknown
+): { pairs: import("@/types").IcqPair[]; answeredCount: number; totalQuestions: number } | null {
+  const catalog = z.object({
+    locations: z.array(z.object({
+      questions: z.array(z.object({
+        questionId: z.string(),
+        questionShortName: z.string().nullish(),
+        label: z.string().nullish()
+      }).passthrough()).nullish()
+    }).passthrough())
+  }).passthrough().safeParse(catalogRaw);
+  if (!catalog.success) return null;
+  const answers = z.array(z.object({ key: z.string(), value: z.string().nullish() }).passthrough()).safeParse(answersRaw ?? []);
+  const byKey = new Map((answers.success ? answers.data : []).map(a => [a.key, a.value ?? null]));
+  const pairs = catalog.data.locations.flatMap(l => l.questions ?? []).map(q => ({
+    questionId: q.questionId,
+    carrier: q.questionShortName ?? null,
+    label: q.label ?? q.questionId,
+    answer: byKey.get(q.questionId) ?? null
+  }));
+  return {
+    pairs,
+    answeredCount: pairs.filter(p => p.answer != null).length,
+    totalQuestions: pairs.length
+  };
 }

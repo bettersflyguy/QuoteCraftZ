@@ -1,5 +1,5 @@
 import endpoints from "@/config/endpoints.json";
-import { normalizeApplicant, normalizeQuoteResult, normalizeRunList } from "./normalize";
+import { normalizeApplicant, normalizeQuoteResult, normalizeRunList, buildIcqPairs } from "./normalize";
 import type { CapturedRun, RunListItem } from "@/types";
 
 export class EzlynxSessionError extends Error {
@@ -45,6 +45,22 @@ export async function fetchCapturedRun(
       if (!seen.has(b.lob)) { seen.add(b.lob); blocks.push(b); }
     }
   }
+
+  // carrier underwriting Q&A - best-effort per LOB; the risk-application
+  // endpoints are flaky (500s observed) and Q&A is enrichment, not the import
+  try {
+    const icqRaw = await getJson(endpoints.icq.replace("{applicationId}", String(run.applicationId)), fetcher);
+    for (const b of blocks) {
+      try {
+        const slug = b.lob.toLowerCase() === "home" ? "home" : "auto";
+        const appRaw = await getJson(
+          endpoints.riskApplication.replace("{lobSlug}", slug).replace("{applicationId}", String(run.applicationId)),
+          fetcher
+        ) as { icqAnswers?: unknown };
+        b.icq = buildIcqPairs(icqRaw, appRaw.icqAnswers);
+      } catch { /* leave b.icq null */ }
+    }
+  } catch { /* no catalog - leave all null */ }
 
   return {
     applicant,

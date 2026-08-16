@@ -74,7 +74,8 @@ export function buildQuoteOps(
         iacrm_status: STATUS_QUOTE_RECEIVED,
         iacrm_coveragelimitsummary: q.coverageSummary,
         iacrm_quotelink: `https://app.ezlynx.com/web/account/${run.applicant.ezlynxApplicantId}/rating/quote-results/${run.openApplicationId}/${block.applicantQuoteId}`,
-        iacrm_rawpayload: JSON.stringify(q.raw).slice(0, RAW_CAP),
+        // block-level carrier Q&A rides along for later data analysis
+        iacrm_rawpayload: JSON.stringify({ ...(q.raw as Record<string, unknown>), icq: block.icq }).slice(0, RAW_CAP),
         "iacrm_AccountId@odata.bind": `/accounts(${accountId})`,
         "iacrm_OpportunityId@odata.bind": `/opportunities(${sel.opportunityId})`
       };

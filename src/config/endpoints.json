@@ -3,5 +3,7 @@
   "agencyQuotes": "/RatingApi/v1/completed-quotes/agency",
   "applicant": "/RatingApi/v1/applicant/{applicantId}",
   "quoteResult": "/RatingApi/api/quote-result/{applicantQuoteId}",
-  "applicantUrlPattern": "/web/account/(\\d+)/"
+  "applicantUrlPattern": "/web/account/(\\d+)/",
+  "icq": "/RatingApi/api/icq/{applicationId}?enableCarrierPrefill=false",
+  "riskApplication": "/RatingApi/v1/{lobSlug}-risk-application/{applicationId}"
 }
