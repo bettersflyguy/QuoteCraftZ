@@ -216,6 +216,40 @@ export async function createContact(env: CrmEnvironment, c: NewContact): Promise
   return r["contactid"]!;
 }
 
+export async function assignOwner(env: CrmEnvironment, entitySet: string, id: string, ownerId: string): Promise<void> {
+  const res = await dv(env, `${entitySet}(${id})`, {
+    method: "PATCH",
+    body: JSON.stringify({ "ownerid@odata.bind": `/systemusers(${ownerId})` })
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Dataverse ${res.status} assigning owner on ${entitySet}: ${detail.slice(0, 300)}`);
+  }
+}
+
+export async function hasServicingTeamMember(env: CrmEnvironment, accountId: string, userId: string): Promise<boolean> {
+  const q = `iacrm_servicingteammembers?$select=iacrm_servicingteammemberid&$filter=_iacrm_regardingid_value eq ${accountId} and _iacrm_partyid_value eq ${userId}&$top=1`;
+  const { value } = await dvJson<{ value: unknown[] }>(env, q);
+  return value.length > 0;
+}
+
+const SERVICING_ROLE_PRODUCER = 738590002;
+const SERVICING_SCOPE_ACCOUNT = 738590001;
+
+export async function createServicingTeamMember(
+  env: CrmEnvironment, m: { accountId: string; userId: string; name: string }
+): Promise<void> {
+  // polymorphic lookups need their per-target nav property (from DEV metadata):
+  // party -> iacrm_partyid_systemuser, regarding -> iacrm_regardingid_Account_account
+  await dvPost<Record<string, string>>(env, "iacrm_servicingteammembers?$select=iacrm_servicingteammemberid", {
+    iacrm_name: m.name,
+    iacrm_role: SERVICING_ROLE_PRODUCER,
+    iacrm_scope: SERVICING_SCOPE_ACCOUNT,
+    "iacrm_partyid_systemuser@odata.bind": `/systemusers(${m.userId})`,
+    "iacrm_regardingid_Account_account@odata.bind": `/accounts(${m.accountId})`
+  });
+}
+
 export async function createQuotingMethod(env: CrmEnvironment, name: string): Promise<string> {
   const r = await dvPost<Record<string, string>>(env, "iacrm_quotingmethods?$select=iacrm_quotingmethodid", {
     iacrm_quotingmethod_name: name

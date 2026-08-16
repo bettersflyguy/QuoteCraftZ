@@ -16,6 +16,11 @@ export interface CommitPayload {
   selectedKeys: string[];
   /** systemuser GUID the written quotes are owned by (servicing agent). */
   ownerId: string | null;
+  ownerName: string | null;
+  /** true when THIS import created the account - owner assignment follows */
+  accountCreatedByPanel: boolean;
+  /** opportunity ids THIS import created (owner assignment follows) */
+  createdOpportunityIds: string[];
 }
 
 const TERM_CHOICE: Record<number, number> = { 6: 738590203, 12: 738590205 };

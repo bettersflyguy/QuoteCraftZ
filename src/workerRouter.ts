@@ -16,12 +16,15 @@ import {
   executeBatch
 } from "@/crm/dataverse";
 import { buildQuoteOps } from "@/crm/mapping";
-import { ensureInsuredData } from "@/crm/enrich";
+import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import {
   getAccountEnrichmentState,
   updateAccount,
   getAccountContacts,
-  createContact
+  createContact,
+  assignOwner,
+  hasServicingTeamMember,
+  createServicingTeamMember
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 
@@ -43,6 +46,9 @@ export interface Deps {
   updateAccount: typeof updateAccount;
   getAccountContacts: typeof getAccountContacts;
   createContact: typeof createContact;
+  assignOwner: typeof assignOwner;
+  hasServicingTeamMember: typeof hasServicingTeamMember;
+  createServicingTeamMember: typeof createServicingTeamMember;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -152,6 +158,29 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         } catch (e) {
           results.push({ key: "Insured profile", status: 0, error: `Enrichment failed (quotes still imported): ${String((e as Error).message ?? e)}` });
         }
+        if (payload.ownerId && payload.ownerName) {
+          try {
+            const sv = await ensureServicingAssignment(env, {
+              accountId: payload.accountId,
+              ownerId: payload.ownerId,
+              ownerName: payload.ownerName,
+              accountCreatedByPanel: payload.accountCreatedByPanel,
+              createdOpportunityIds: payload.createdOpportunityIds
+            }, {
+              assignOwner: deps.assignOwner,
+              hasServicingTeamMember: deps.hasServicingTeamMember,
+              createServicingTeamMember: deps.createServicingTeamMember
+            });
+            if (sv.ownersAssigned || sv.teamMemberCreated) {
+              const bits = [];
+              if (sv.ownersAssigned) bits.push(`assigned ${payload.ownerName} as owner of ${sv.ownersAssigned} record${sv.ownersAssigned === 1 ? "" : "s"}`);
+              if (sv.teamMemberCreated) bits.push(`added ${payload.ownerName} to the servicing team`);
+              results.push({ key: `Servicing — ${bits.join("; ")}`, status: 204, error: null });
+            }
+          } catch (e) {
+            results.push({ key: "Servicing assignment", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}` });
+          }
+        }
         const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
         const ops = deps.buildQuoteOps(payload, existing);
         results.push(...await deps.executeBatch(env, ops));
@@ -225,6 +254,9 @@ export const realDeps: Deps = {
   updateAccount,
   getAccountContacts,
   createContact,
+  assignOwner,
+  hasServicingTeamMember,
+  createServicingTeamMember,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,

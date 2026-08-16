@@ -44,7 +44,10 @@ const payload: CommitPayload = {
   },
   carrierMap: { 13: "CAR-TRAV", 999: null },
   selectedKeys: ["ezlynx:1:req", "ezlynx:1:alt0", "ezlynx:2:req", "ezlynx:3:req"],
-  ownerId: "USR-1"
+  ownerId: "USR-1",
+  ownerName: "Test User",
+  accountCreatedByPanel: false,
+  createdOpportunityIds: []
 };
 
 describe("buildQuoteOps", () => {

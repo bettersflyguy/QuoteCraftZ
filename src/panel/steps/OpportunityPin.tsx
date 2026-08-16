@@ -105,6 +105,7 @@ export function OpportunityPin({
         name: `${state.accountName ?? "New insured"} — ${lobName}`
       });
       setOpps(prev => [...(prev ?? []), created]);
+      dispatch({ t: "oppCreated", opportunityId: created.opportunityId });
       setCreatingLob(null);
       dispatch({
         t: "pinBlock",

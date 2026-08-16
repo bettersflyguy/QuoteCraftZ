@@ -10,6 +10,8 @@ export interface ImportState {
   captured: CapturedRun | null;
   accountId: string | null;
   accountName: string | null;
+  accountCreatedByPanel: boolean;
+  createdOpportunityIds: string[];
   /** BlockSelection = pinned; null = explicitly skipped; absent key = not yet decided. */
   blockSelections: Record<string, BlockSelection | null>;
   carrierMap: Record<number, string | null>;
@@ -21,7 +23,8 @@ export type Action =
   | { t: "context"; applicantId: number | null }
   | { t: "runs"; runs: RunListItem[] }
   | { t: "captured"; run: CapturedRun; aliases: Record<number, string> }
-  | { t: "account"; id: string; name: string }
+  | { t: "account"; id: string; name: string; created?: boolean }
+  | { t: "oppCreated"; opportunityId: string }
   | { t: "pinBlock"; lob: string; sel: BlockSelection | null }
   | { t: "mapCarrier"; ezlynxId: number; carrierId: string | null }
   | { t: "toggleKey"; key: string }
@@ -43,6 +46,8 @@ const initialState: ImportState = {
   captured: null,
   accountId: null,
   accountName: null,
+  accountCreatedByPanel: false,
+  createdOpportunityIds: [],
   blockSelections: {},
   carrierMap: {},
   selectedKeys: [],
@@ -72,12 +77,24 @@ function reducer(state: ImportState, action: Action): ImportState {
         blockSelections: {},
         accountId: null,
         accountName: null,
+        accountCreatedByPanel: false,
+        createdOpportunityIds: [],
         results: null,
         step: "account"
       };
 
     case "account":
-      return { ...state, accountId: action.id, accountName: action.name, step: "opportunities" };
+      return {
+        ...state,
+        accountId: action.id,
+        accountName: action.name,
+        accountCreatedByPanel: action.created ?? false,
+        createdOpportunityIds: [],
+        step: "opportunities"
+      };
+
+    case "oppCreated":
+      return { ...state, createdOpportunityIds: [...state.createdOpportunityIds, action.opportunityId] };
 
     case "pinBlock":
       return { ...state, blockSelections: { ...state.blockSelections, [action.lob]: action.sel } };
@@ -103,6 +120,8 @@ function reducer(state: ImportState, action: Action): ImportState {
         ...state,
         accountId: null,
         accountName: null,
+        accountCreatedByPanel: false,
+        createdOpportunityIds: [],
         blockSelections: {},
         // carrier aliases (Dataverse GUIDs) are environment-specific; a stale carrierMap
         // from the previous org would silently mismap in the new one.

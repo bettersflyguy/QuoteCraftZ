@@ -109,7 +109,10 @@ export function ReviewCommit({
       blockSelections,
       carrierMap: state.carrierMap,
       selectedKeys: keysOverride ?? state.selectedKeys,
-      ownerId: owner?.userId ?? null
+      ownerId: owner?.userId ?? null,
+      ownerName: owner?.fullName ?? null,
+      accountCreatedByPanel: state.accountCreatedByPanel,
+      createdOpportunityIds: state.createdOpportunityIds
     };
   }
 

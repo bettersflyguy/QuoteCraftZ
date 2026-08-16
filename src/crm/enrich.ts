@@ -149,3 +149,48 @@ export async function ensureInsuredData(
     primaryContactSet
   };
 }
+
+export interface ServicingApi {
+  assignOwner(env: CrmEnvironment, entitySet: string, id: string, ownerId: string): Promise<void>;
+  hasServicingTeamMember(env: CrmEnvironment, accountId: string, userId: string): Promise<boolean>;
+  createServicingTeamMember(env: CrmEnvironment, m: { accountId: string; userId: string; name: string }): Promise<void>;
+}
+
+export interface ServicingInput {
+  accountId: string;
+  ownerId: string;
+  ownerName: string;
+  accountCreatedByPanel: boolean;
+  createdOpportunityIds: string[];
+}
+
+export interface ServicingResult { ownersAssigned: number; teamMemberCreated: boolean }
+
+/** Ownership follows the chosen servicing agent - but only onto records THIS
+ * import created. Matched/pre-existing records keep their owner (agent data
+ * wins). The servicing-team row is ensured on the account either way. */
+export async function ensureServicingAssignment(
+  env: CrmEnvironment,
+  input: ServicingInput,
+  api: ServicingApi
+): Promise<ServicingResult> {
+  let ownersAssigned = 0;
+  if (input.accountCreatedByPanel) {
+    await api.assignOwner(env, "accounts", input.accountId, input.ownerId);
+    ownersAssigned++;
+  }
+  for (const oppId of input.createdOpportunityIds) {
+    await api.assignOwner(env, "opportunities", oppId, input.ownerId);
+    ownersAssigned++;
+  }
+  let teamMemberCreated = false;
+  if (!(await api.hasServicingTeamMember(env, input.accountId, input.ownerId))) {
+    await api.createServicingTeamMember(env, {
+      accountId: input.accountId,
+      userId: input.ownerId,
+      name: input.ownerName
+    });
+    teamMemberCreated = true;
+  }
+  return { ownersAssigned, teamMemberCreated };
+}

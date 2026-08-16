@@ -42,7 +42,7 @@ export function AccountMatch({
         type: "panel/createAccount",
         fields: form
       });
-      dispatch({ t: "account", id: created.accountId, name: created.name });
+      dispatch({ t: "account", id: created.accountId, name: created.name, created: true });
     } catch (e) {
       setErr(e as PanelError);
     } finally {
