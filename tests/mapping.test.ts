@@ -15,11 +15,11 @@ const run: CapturedRun = {
       lob: "Auto", applicantQuoteId: 513228997,
       quotes: [
         { key: "ezlynx:1:req", kind: "requested", carrierEzlynxId: 13, carrierName: "Travelers",
-          quoteNumber: "Q1", premium: 2273, termMonths: 12, coverageSummary: "BI: 500 CSL", raw: { x: 1 } },
+          quoteNumber: "Q1", premium: 2273, termMonths: 12, coverageSummary: "BI: 500 CSL", coverageLines: [{ code: "BI", label: "BI", limitText: "500 CSL" }], raw: { x: 1 } },
         { key: "ezlynx:1:alt0", kind: "alternate", carrierEzlynxId: 13, carrierName: "Travelers",
-          quoteNumber: "Q1", premium: 1798, termMonths: 12, coverageSummary: "BI: 500 CSL", raw: { x: 2 } },
+          quoteNumber: "Q1", premium: 1798, termMonths: 12, coverageSummary: "BI: 500 CSL", coverageLines: [{ code: "BI", label: "BI", limitText: "500 CSL" }], raw: { x: 2 } },
         { key: "ezlynx:2:req", kind: "requested", carrierEzlynxId: 999, carrierName: "Unknown Mutual",
-          quoteNumber: null, premium: 1500, termMonths: 6, coverageSummary: "", raw: {} }
+          quoteNumber: null, premium: 1500, termMonths: 6, coverageSummary: "", coverageLines: [], raw: {} }
       ],
       errors: []
     },
@@ -27,7 +27,7 @@ const run: CapturedRun = {
       lob: "Home", applicantQuoteId: 513228998,
       quotes: [
         { key: "ezlynx:3:req", kind: "requested", carrierEzlynxId: 35, carrierName: "Liberty",
-          quoteNumber: null, premium: 4744.64, termMonths: 12, coverageSummary: "Cov A: $606,900: $4,751.00", raw: {} }
+          quoteNumber: null, premium: 4744.64, termMonths: 12, coverageSummary: "Cov A: $606,900: $4,751.00", coverageLines: [{ code: "A", label: "Cov A", limitText: "$606,900" }], raw: {} }
       ],
       errors: []
     }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CapturedApplicant, CapturedLobBlock, CapturedQuote, RunListItem } from "@/types";
-import { renderCoverageSummary } from "./renderCoverage";
+import { renderCoverageSummary, buildCoverageLines } from "./renderCoverage";
 
 export class NormalizeError extends Error {
   payloadSnippet: string;
@@ -74,6 +74,7 @@ export function normalizeQuoteResult(
           premium,
           termMonths,
           coverageSummary: renderCoverageSummary(q, block.lob),
+          coverageLines: buildCoverageLines(q, block.lob),
           raw: { lob: block.lob, scriptName: s.scriptName, carrier: s.carrier, execId: s.execId, kind, quote: q }
         };
       };

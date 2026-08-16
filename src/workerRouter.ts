@@ -17,7 +17,10 @@ import {
 } from "@/crm/dataverse";
 import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
+import { writeCoverageLines } from "@/crm/coverage";
 import {
+  getCoverageQuoteNavProp,
+  getCoverageRowIds,
   getAccountEnrichmentState,
   updateAccount,
   getAccountContacts,
@@ -49,6 +52,8 @@ export interface Deps {
   assignOwner: typeof assignOwner;
   hasServicingTeamMember: typeof hasServicingTeamMember;
   createServicingTeamMember: typeof createServicingTeamMember;
+  getCoverageQuoteNavProp: typeof getCoverageQuoteNavProp;
+  getCoverageRowIds: typeof getCoverageRowIds;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -140,7 +145,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         // enrich the insured before the quote batch: fill-if-empty account
         // fields + find-or-create contacts. Best-effort - an enrichment failure
         // must not block the quotes; it surfaces as its own result row.
-        const results = [];
+        const results: import("@/crm/dataverse").BatchItemResult[] = [];
         try {
           const en = await ensureInsuredData(env, payload.accountId, payload.run.applicant, {
             getAccountEnrichmentState: deps.getAccountEnrichmentState,
@@ -153,10 +158,10 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             if (en.filledFields.length) bits.push(`filled ${en.filledFields.length} field${en.filledFields.length === 1 ? "" : "s"}`);
             if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
             if (en.primaryContactSet) bits.push("set primary contact");
-            results.push({ key: `Insured profile — ${bits.join("; ")}`, status: 204, error: null });
+            results.push({ key: `Insured profile — ${bits.join("; ")}`, status: 204, error: null, entityId: null });
           }
         } catch (e) {
-          results.push({ key: "Insured profile", status: 0, error: `Enrichment failed (quotes still imported): ${String((e as Error).message ?? e)}` });
+          results.push({ key: "Insured profile", status: 0, error: `Enrichment failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
         }
         if (payload.ownerId && payload.ownerName) {
           try {
@@ -175,15 +180,44 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
               const bits = [];
               if (sv.ownersAssigned) bits.push(`assigned ${payload.ownerName} as owner of ${sv.ownersAssigned} record${sv.ownersAssigned === 1 ? "" : "s"}`);
               if (sv.teamMemberCreated) bits.push(`added ${payload.ownerName} to the servicing team`);
-              results.push({ key: `Servicing — ${bits.join("; ")}`, status: 204, error: null });
+              results.push({ key: `Servicing — ${bits.join("; ")}`, status: 204, error: null, entityId: null });
             }
           } catch (e) {
-            results.push({ key: "Servicing assignment", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}` });
+            results.push({ key: "Servicing assignment", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
           }
         }
         const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
         const ops = deps.buildQuoteOps(payload, existing);
-        results.push(...await deps.executeBatch(env, ops));
+        const quoteResults = await deps.executeBatch(env, ops);
+        results.push(...quoteResults);
+
+        // structured coverage lines for data analysis - schema-aware: no-ops
+        // with a note until the CRM-side iacrm_quotecoverage columns deploy
+        try {
+          const idByKey = new Map(quoteResults.filter(r => r.entityId).map(r => [r.key, r.entityId!]));
+          const covTargets = [];
+          for (const block of payload.run.blocks) {
+            if (!payload.blockSelections[block.lob]) continue;
+            for (const q of block.quotes) {
+              const quoteId = idByKey.get(q.key);
+              if (quoteId) covTargets.push({ quote: q, quoteId });
+            }
+          }
+          if (covTargets.length) {
+            const cov = await writeCoverageLines(env, covTargets, {
+              getCoverageQuoteNavProp: deps.getCoverageQuoteNavProp,
+              getCoverageRowIds: deps.getCoverageRowIds,
+              executeBatch: deps.executeBatch
+            });
+            if (cov.skipped === "no-columns") {
+              results.push({ key: "Coverage detail — waiting on CRM columns (iacrm_quotecoverage); summaries written, structured rows skipped", status: 204, error: null, entityId: null });
+            } else if (cov.linesWritten) {
+              results.push({ key: `Coverage detail — logged ${cov.linesWritten} lines across ${cov.quotesCovered} quotes`, status: 204, error: null, entityId: null });
+            }
+          }
+        } catch (e) {
+          results.push({ key: "Coverage detail", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
+        }
         return { ok: true, data: results };
       }
 
@@ -257,6 +291,8 @@ export const realDeps: Deps = {
   assignOwner,
   hasServicingTeamMember,
   createServicingTeamMember,
+  getCoverageQuoteNavProp,
+  getCoverageRowIds,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,

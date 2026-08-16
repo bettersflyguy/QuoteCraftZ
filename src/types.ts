@@ -19,6 +19,7 @@ export interface CapturedQuote {
   premium: number | null;               // totalPremium as number
   termMonths: number | null;            // 6 | 12 | null
   coverageSummary: string;              // rendered, verbatim values
+  coverageLines: { code: string; label: string; limitText: string }[]; // structured, verbatim
   raw: unknown;                         // this quote's scriptResult context, for iacrm_rawpayload
 }
 

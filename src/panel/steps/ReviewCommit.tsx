@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Checkbox,
+  Link,
   Text,
   Accordion,
   AccordionItem,
@@ -18,7 +19,7 @@ import { ErrorBar } from "../ErrorBar";
 import type { Action, ImportState } from "../state";
 import type { CommitPayload, BlockSelection } from "@/crm/mapping";
 import type { BatchItemResult } from "@/crm/dataverse";
-import { getActiveEnvironment, type CrmEnvironment } from "@/crm/environments";
+import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 
 interface ReviewRow {
   key: string;
@@ -134,11 +135,20 @@ export function ReviewCommit({
 
   const selectedCount = state.selectedKeys.filter(k => rows.some(r => r.key === k)).length;
 
+  const accountLink = env && state.accountId ? (
+    <div style={{ marginBottom: 8 }}>
+      <Link href={crmRecordUrl(env, "account", state.accountId)} target="_blank">
+        Open {state.accountName ?? "insured"} in CRM ↗
+      </Link>
+    </div>
+  ) : null;
+
   if (state.step === "done") {
     const results = state.results ?? [];
     const failedKeys = results.filter(r => r.status >= 400).map(r => r.key);
     return (
       <div>
+        {accountLink}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {results.map(r => {
             const row = rows.find(x => x.key === r.key);
@@ -160,6 +170,11 @@ export function ReviewCommit({
                   {row ? `${row.carrier} — ${row.lob} (${row.kind})` : r.key}
                 </Text>
                 <Text size={200}>{ok ? "Created/updated" : r.error ?? `HTTP ${r.status}`}</Text>
+                {ok && r.entityId && env && (
+                  <Link href={crmRecordUrl(env, "iacrm_quote", r.entityId)} target="_blank">
+                    Open quote in CRM ↗
+                  </Link>
+                )}
               </div>
             );
           })}
@@ -185,6 +200,7 @@ export function ReviewCommit({
 
   return (
     <div>
+      {accountLink}
       {(state.captured?.blocks ?? [])
         .filter(b => b.errors.length > 0)
         .map(b => (

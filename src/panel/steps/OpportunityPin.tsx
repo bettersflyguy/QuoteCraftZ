@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Button, Dropdown, Option, Card, CardHeader, Text, Spinner, Field } from "@fluentui/react-components";
+import { Button, Dropdown, Option, Card, CardHeader, Text, Spinner, Field, Link } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import type { Action, ImportState } from "../state";
 import type { OppSummary, LobRow } from "@/crm/dataverse";
+import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 
 const SKIP = "__skip__";
 const CREATE = "__create__";
@@ -23,6 +24,8 @@ export function OpportunityPin({
   const [creatingLob, setCreatingLob] = useState<string | null>(null); // which block's card shows the form
   const [chosenLobId, setChosenLobId] = useState<string | null>(null);
   const [savingLob, setSavingLob] = useState(false);
+  const [env, setEnv] = useState<CrmEnvironment | null>(null);
+  useEffect(() => { getActiveEnvironment().then(setEnv); }, []);
 
   useEffect(() => {
     if (!state.accountId) return;
@@ -154,6 +157,15 @@ export function OpportunityPin({
               <Option value={SKIP}>Skip this LOB</Option>
             </Dropdown>
 
+            {sel && env && (
+              <Link
+                href={crmRecordUrl(env, "opportunity", sel.opportunityId)}
+                target="_blank"
+                style={{ marginTop: 4, display: "inline-block" }}
+              >
+                Open opportunity in CRM ↗
+              </Link>
+            )}
             {creatingLob === b.lob && (
               <div style={{ marginTop: 8 }}>
                 {!lobs ? (

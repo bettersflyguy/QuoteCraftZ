@@ -3,6 +3,14 @@ export interface CrmEnvironment {
   name: string;
   orgUrl: string;
   color: "green" | "red" | "blue" | "orange";
+  /** Model-driven app id - deep links open inside the right app when set. */
+  appId?: string;
+}
+
+/** Deep link to a record in the model-driven app. */
+export function crmRecordUrl(env: CrmEnvironment, etn: string, id: string): string {
+  const app = env.appId ? `appid=${env.appId}&` : "";
+  return `${env.orgUrl}/main.aspx?${app}pagetype=entityrecord&etn=${etn}&id=${id}`;
 }
 
 export const DEFAULT_ENVIRONMENTS: CrmEnvironment[] = [

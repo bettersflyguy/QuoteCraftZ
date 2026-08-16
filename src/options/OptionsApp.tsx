@@ -74,7 +74,7 @@ export function OptionsApp() {
   }
 
   function addRow() {
-    setEnvs(prev => [...prev, { id: makeId(), name: "", orgUrl: "", color: "blue" }]);
+    setEnvs(prev => [...prev, { id: makeId(), name: "", orgUrl: "", color: "blue", appId: "" }]);
     setSaved(false);
   }
 
@@ -112,6 +112,7 @@ export function OptionsApp() {
               <TableHeaderCell>Active</TableHeaderCell>
               <TableHeaderCell>Name</TableHeaderCell>
               <TableHeaderCell>Org URL</TableHeaderCell>
+              <TableHeaderCell>App ID (optional, for deep links)</TableHeaderCell>
               <TableHeaderCell>Color</TableHeaderCell>
               <TableHeaderCell />
             </TableRow>
@@ -136,6 +137,13 @@ export function OptionsApp() {
                       Must match https://org.crm[N].dynamics.com
                     </Text>
                   )}
+                </TableCell>
+                <TableCell>
+                  <Input
+                    value={e.appId ?? ""}
+                    placeholder="model-driven app id (guid)"
+                    onChange={(_, d) => update(e.id, { appId: d.value.trim() || undefined })}
+                  />
                 </TableCell>
                 <TableCell>
                   <Dropdown

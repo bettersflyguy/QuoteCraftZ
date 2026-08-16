@@ -21,7 +21,7 @@ export interface NewAccountFields {
   street: string | null; city: string | null; state: string | null; postalCode: string | null;
   phone: string | null; email: string | null;
 }
-export interface BatchItemResult { key: string; status: number; error: string | null }
+export interface BatchItemResult { key: string; status: number; error: string | null; entityId: string | null }
 
 const API = "/api/data/v9.2/";
 
@@ -267,19 +267,25 @@ export async function getExistingQuoteStatuses(env: CrmEnvironment, keys: string
 
 export async function executeBatch(
   env: CrmEnvironment,
-  ops: { key: string; method: "PATCH"; url: string; body: unknown }[]
+  ops: { key: string; method: "PATCH" | "POST" | "DELETE"; url: string; body?: unknown }[]
 ): Promise<BatchItemResult[]> {
+  if (!ops.length) return [];
   const boundary = `batch_${crypto.randomUUID()}`;
-  const parts = ops.map(op => [
-    `--${boundary}`,
-    "Content-Type: application/http",
-    "Content-Transfer-Encoding: binary",
-    "",
-    `${op.method} ${env.orgUrl}${API}${op.url} HTTP/1.1`,
-    "Content-Type: application/json",
-    "",
-    JSON.stringify(op.body)
-  ].join("\r\n"));
+  const parts = ops.map(op => {
+    const lines = [
+      `--${boundary}`,
+      "Content-Type: application/http",
+      "Content-Transfer-Encoding: binary",
+      "",
+      `${op.method} ${env.orgUrl}${API}${op.url} HTTP/1.1`
+    ];
+    if (op.body !== undefined) {
+      lines.push("Content-Type: application/json", "", JSON.stringify(op.body));
+    } else {
+      lines.push("");
+    }
+    return lines.join("\r\n");
+  });
   const body = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
 
   const res = await dv(env, "$batch", {
@@ -290,13 +296,40 @@ export async function executeBatch(
   if (!res.ok) throw new Error(`$batch failed: ${res.status}`);
   const text = await res.text();
 
-  // parse per-part HTTP statuses in order
-  const statuses = [...text.matchAll(/HTTP\/1\.1 (\d{3})[^\r\n]*/g)].map(m => Number(m[1]));
-  const errors = [...text.matchAll(/\{"error":\{[^\n]*/g)].map(m => m[0]);
-  let errIdx = 0;
+  // chunk per response part so status, error, and OData-EntityId stay aligned
+  const chunks = text.split(/--batchresponse[^\r\n-]*/).filter(c => /HTTP\/1\.1 \d{3}/.test(c));
   return ops.map((op, i) => {
-    const status = statuses[i] ?? 0;
-    const failed = status >= 400;
-    return { key: op.key, status, error: failed ? (errors[errIdx++] ?? `HTTP ${status}`) : null };
+    const chunk = chunks[i] ?? "";
+    const status = Number(/HTTP\/1\.1 (\d{3})/.exec(chunk)?.[1] ?? 0);
+    const entityId = /OData-EntityId:[^(\r\n]*\(([0-9a-fA-F-]{36})\)/.exec(chunk)?.[1] ?? null;
+    const failed = status >= 400 || status === 0;
+    const error = failed ? (/\{"error":\{[^\n]*/.exec(chunk)?.[0] ?? `HTTP ${status}`) : null;
+    return { key: op.key, status, error, entityId };
   });
+}
+
+/** Runtime probe: does this org's iacrm_quotecoverage carry the quote lookup
+ * yet? Returns the SCHEMA-cased nav property for @odata.bind, or null while the
+ * CRM-side columns are undeployed. Cached per org. */
+export async function getCoverageQuoteNavProp(env: CrmEnvironment): Promise<string | null> {
+  const cacheKey = `covNav:${env.orgUrl}`;
+  const cached = await chrome.storage.local.get(cacheKey);
+  if (typeof cached[cacheKey] === "string") return cached[cacheKey] as string;
+  try {
+    const { value } = await dvJson<{ value: { ReferencedEntity: string; ReferencingEntityNavigationPropertyName: string }[] }>(
+      env,
+      `EntityDefinitions(LogicalName='iacrm_quotecoverage')/ManyToOneRelationships?$select=ReferencingEntityNavigationPropertyName,ReferencedEntity`
+    );
+    const nav = value.find(r => r.ReferencedEntity === "iacrm_quote")?.ReferencingEntityNavigationPropertyName ?? null;
+    if (nav) await chrome.storage.local.set({ [cacheKey]: nav }); // only cache positive - columns may deploy later
+    return nav;
+  } catch {
+    return null;
+  }
+}
+
+export async function getCoverageRowIds(env: CrmEnvironment, quoteId: string): Promise<string[]> {
+  const q = `iacrm_quotecoverages?$select=iacrm_quotecoverageid&$filter=_iacrm_quoteid_value eq ${quoteId}`;
+  const { value } = await dvJson<{ value: { iacrm_quotecoverageid: string }[] }>(env, q);
+  return value.map(v => v.iacrm_quotecoverageid);
 }
