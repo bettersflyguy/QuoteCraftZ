@@ -130,7 +130,7 @@ export async function ensureInsuredData(
       lastName: co.lastName,
       mobilePhone: co.phone,
       email: co.email,
-      birthdate: null
+      birthdate: co.dateOfBirth
     });
     contactsCreated.push(`${co.firstName} ${co.lastName}`);
   }

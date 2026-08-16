@@ -104,6 +104,7 @@ const RawApplicant = z.object({
   ])).nullish(),
   contacts: z.array(z.object({
     firstName: z.string(), lastName: z.string(),
+    dateOfBirth: z.string().nullish(),
     relationship: z.object({ name: z.string() }).passthrough().nullish(),
     phoneNumbers: z.array(z.object({ number: z.string(), type: z.string().nullish() }).passthrough()).nullish(),
     emailAddresses: z.array(z.union([
@@ -139,6 +140,7 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
       lastName: c.lastName,
       relationship: c.relationship?.name ?? "",
       phone: c.phoneNumbers?.[0]?.number ?? null,
+      dateOfBirth: c.dateOfBirth ? c.dateOfBirth.slice(0, 10) : null,
       email: (c.emailAddresses ?? [])
         .map(e => (typeof e === "string" ? e : ("email" in e ? (e as { email: string }).email : (e as { emailAddress: string }).emailAddress)))
         .filter(Boolean)[0] ?? null

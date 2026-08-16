@@ -36,7 +36,8 @@
         "value": 8,
         "name": "Spouse",
         "description": "Spouse"
-      }
+      },
+      "dateOfBirth": "1952-10-11T00:00:00"
     }
   ],
   "assignedTo": {

@@ -12,7 +12,7 @@ const applicant: CapturedApplicant = {
   address: { street: "2866 ASPEN LAKE DR NE", city: "BLAINE", state: "MN", postalCode: "55449" },
   phones: [{ type: "Mobile", number: "7632211445" }],
   emails: ["steven.kerns@gmail.com"],
-  coApplicants: [{ firstName: "STEVEN", lastName: "KERNS", relationship: "Spouse", phone: null, email: null }],
+  coApplicants: [{ firstName: "STEVEN", lastName: "KERNS", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1971-06-20" }],
   isCommercial: false
 };
 
@@ -34,7 +34,9 @@ function makeApi(state: AccountEnrichmentState, contacts: TestContact[]) {
     getAccountEnrichmentState: vi.fn(async () => state),
     updateAccount: vi.fn(async (_e: unknown, _id: string, _patch: Record<string, unknown>) => undefined),
     getAccountContacts: vi.fn(async () => contacts),
-    createContact: vi.fn(async (_e: unknown, c: { firstName: string }) => `NEW-${c.firstName}`)
+    createContact: vi.fn(
+      async (_e: unknown, c: { firstName: string; lastName: string; birthdate: string | null }) => `NEW-${c.firstName}`
+    )
   };
   return api as unknown as EnrichApi & typeof api;
 }
@@ -87,6 +89,15 @@ describe("ensureInsuredData", () => {
     ]);
     const r = await ensureInsuredData(ENV, "ACC", applicant, api);
     expect(r.contactsCreated).toContain("Jill Kerns"); // same name, different person by data
+  });
+
+  it("carries co-applicant DOB onto the created spouse contact", async () => {
+    const api = makeApi(emptyState(), []);
+    await ensureInsuredData(ENV, "ACC", applicant, api);
+    const spouse = api.createContact.mock.calls
+      .map(c => c[1])
+      .find(c => c.firstName === "STEVEN");
+    expect(spouse?.birthdate).toBe("1971-06-20");
   });
 
   it("falls back to name-only when neither side has email or phone (re-import safety)", async () => {

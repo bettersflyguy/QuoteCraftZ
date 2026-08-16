@@ -6,7 +6,7 @@ export interface CapturedApplicant {
   address: { street: string; city: string; state: string; postalCode: string } | null;
   phones: { type: string | null; number: string }[];
   emails: string[];
-  coApplicants: { firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null }[];
+  coApplicants: { firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null; dateOfBirth: string | null }[];
   isCommercial: boolean;
 }
 
