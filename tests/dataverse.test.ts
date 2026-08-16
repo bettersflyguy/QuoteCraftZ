@@ -41,8 +41,8 @@ describe("executeBatch", () => {
       { key: "k2", method: "PATCH", url: altKeyUrl("k2"), body: { a: 2 } }
     ]);
     expect(results).toEqual([
-      { key: "k1", status: 204, error: null },
-      { key: "k2", status: 400, error: expect.stringContaining("lookup invalid") }
+      { key: "k1", status: 204, error: null, entityId: null },
+      { key: "k2", status: 400, error: expect.stringContaining("lookup invalid"), entityId: null }
     ]);
   });
 
@@ -53,7 +53,8 @@ describe("executeBatch", () => {
       if (calls === 1) return { ok: false, status: 429, headers: new Headers({ "Retry-After": "0" }), text: async () => "" } as unknown as Response;
       return { ok: true, status: 200, text: async () => "--b--\r\n", headers: new Headers() } as unknown as Response;
     }));
-    await executeBatch(ENV, []);
+    // empty op lists short-circuit without a request; use one op to exercise retry
+    await executeBatch(ENV, [{ key: "k", method: "PATCH", url: "iacrm_quotes(x)", body: {} }]);
     expect(calls).toBe(2);
   });
 });
