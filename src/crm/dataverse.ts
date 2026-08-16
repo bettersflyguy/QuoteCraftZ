@@ -1,5 +1,6 @@
 import { getAccessToken } from "./auth";
 import type { CrmEnvironment } from "./environments";
+import type { AccountEnrichmentState, ContactRow, NewContact } from "./enrich";
 
 export class CrmAccessError extends Error {
   orgUrl: string;
@@ -162,6 +163,50 @@ export async function getQuotingMethodId(env: CrmEnvironment, nameContains: stri
     env, `iacrm_quotingmethods?$select=iacrm_quotingmethodid&$filter=contains(iacrm_quotingmethod_name,'${esc(nameContains)}')&$top=1`
   );
   return value[0]?.["iacrm_quotingmethodid"] ?? null;
+}
+
+export async function getAccountEnrichmentState(env: CrmEnvironment, accountId: string): Promise<AccountEnrichmentState> {
+  const q = `accounts(${accountId})?$select=telephone1,emailaddress1,address1_line1,address1_city,address1_stateorprovince,address1_postalcode,iacrm_mobilephone,iacrm_insuredfirstname,iacrm_insuredlastname,_primarycontactid_value`;
+  const r = await dvJson<Record<string, string | null>>(env, q);
+  return {
+    telephone1: r["telephone1"] ?? null,
+    emailaddress1: r["emailaddress1"] ?? null,
+    address1_line1: r["address1_line1"] ?? null,
+    address1_city: r["address1_city"] ?? null,
+    address1_stateorprovince: r["address1_stateorprovince"] ?? null,
+    address1_postalcode: r["address1_postalcode"] ?? null,
+    iacrm_mobilephone: r["iacrm_mobilephone"] ?? null,
+    iacrm_insuredfirstname: r["iacrm_insuredfirstname"] ?? null,
+    iacrm_insuredlastname: r["iacrm_insuredlastname"] ?? null,
+    primaryContactId: r["_primarycontactid_value"] ?? null
+  };
+}
+
+export async function updateAccount(env: CrmEnvironment, accountId: string, patch: Record<string, unknown>): Promise<void> {
+  const res = await dv(env, `accounts(${accountId})`, { method: "PATCH", body: JSON.stringify(patch) });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Dataverse ${res.status} updating account: ${detail.slice(0, 300)}`);
+  }
+}
+
+export async function getAccountContacts(env: CrmEnvironment, accountId: string): Promise<ContactRow[]> {
+  const q = `contacts?$select=contactid,firstname,lastname&$filter=_parentcustomerid_value eq ${accountId} and statecode eq 0`;
+  const { value } = await dvJson<{ value: Record<string, string | null>[] }>(env, q);
+  return value.map(c => ({ contactId: c["contactid"]!, firstName: c["firstname"] ?? "", lastName: c["lastname"] ?? "" }));
+}
+
+export async function createContact(env: CrmEnvironment, c: NewContact): Promise<string> {
+  const body: Record<string, unknown> = {
+    firstname: c.firstName,
+    lastname: c.lastName,
+    "parentcustomerid_account@odata.bind": `/accounts(${c.accountId})`
+  };
+  if (c.mobilePhone) body["mobilephone"] = c.mobilePhone;
+  if (c.email) body["emailaddress1"] = c.email;
+  if (c.birthdate) body["birthdate"] = c.birthdate;
+  const r = await dvPost<Record<string, string>>(env, "contacts?$select=contactid", body);
+  return r["contactid"]!;
 }
 
 export async function createQuotingMethod(env: CrmEnvironment, name: string): Promise<string> {

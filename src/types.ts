@@ -4,7 +4,7 @@ export interface CapturedApplicant {
   lastName: string;
   dateOfBirth: string | null;          // "1949-11-18"
   address: { street: string; city: string; state: string; postalCode: string } | null;
-  phones: string[];
+  phones: { type: string | null; number: string }[];
   emails: string[];
   coApplicants: { firstName: string; lastName: string; relationship: string }[];
   isCommercial: boolean;

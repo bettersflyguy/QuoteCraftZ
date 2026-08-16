@@ -30,7 +30,7 @@ export function AccountMatch({
     city: applicant?.address?.city ?? null,
     state: applicant?.address?.state ?? null,
     postalCode: applicant?.address?.postalCode ?? null,
-    phone: applicant?.phones[0] ?? null,
+    phone: (applicant?.phones.find(p => /mobile/i.test(p.type ?? ""))?.number ?? applicant?.phones[0]?.number) ?? null,
     email: applicant?.emails[0] ?? null
   });
 

@@ -16,6 +16,13 @@ import {
   executeBatch
 } from "@/crm/dataverse";
 import { buildQuoteOps } from "@/crm/mapping";
+import { ensureInsuredData } from "@/crm/enrich";
+import {
+  getAccountEnrichmentState,
+  updateAccount,
+  getAccountContacts,
+  createContact
+} from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 
 export interface Deps {
@@ -32,6 +39,10 @@ export interface Deps {
   createAccount: typeof createAccount;
   getLinesOfBusiness: typeof getLinesOfBusiness;
   createOpportunity: typeof createOpportunity;
+  getAccountEnrichmentState: typeof getAccountEnrichmentState;
+  updateAccount: typeof updateAccount;
+  getAccountContacts: typeof getAccountContacts;
+  createContact: typeof createContact;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -120,9 +131,30 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "EZLynx");
         }
         const payload = { ...msg.payload, quotingMethodId };
+        // enrich the insured before the quote batch: fill-if-empty account
+        // fields + find-or-create contacts. Best-effort - an enrichment failure
+        // must not block the quotes; it surfaces as its own result row.
+        const results = [];
+        try {
+          const en = await ensureInsuredData(env, payload.accountId, payload.run.applicant, {
+            getAccountEnrichmentState: deps.getAccountEnrichmentState,
+            updateAccount: deps.updateAccount,
+            getAccountContacts: deps.getAccountContacts,
+            createContact: deps.createContact
+          });
+          if (en.filledFields.length || en.contactsCreated.length || en.primaryContactSet) {
+            const bits = [];
+            if (en.filledFields.length) bits.push(`filled ${en.filledFields.length} field${en.filledFields.length === 1 ? "" : "s"}`);
+            if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
+            if (en.primaryContactSet) bits.push("set primary contact");
+            results.push({ key: `Insured profile — ${bits.join("; ")}`, status: 204, error: null });
+          }
+        } catch (e) {
+          results.push({ key: "Insured profile", status: 0, error: `Enrichment failed (quotes still imported): ${String((e as Error).message ?? e)}` });
+        }
         const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
         const ops = deps.buildQuoteOps(payload, existing);
-        const results = await deps.executeBatch(env, ops);
+        results.push(...await deps.executeBatch(env, ops));
         return { ok: true, data: results };
       }
 
@@ -189,6 +221,10 @@ export const realDeps: Deps = {
   createAccount,
   getLinesOfBusiness,
   createOpportunity,
+  getAccountEnrichmentState,
+  updateAccount,
+  getAccountContacts,
+  createContact,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,

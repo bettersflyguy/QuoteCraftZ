@@ -39,7 +39,11 @@ in this design port to a server-side sync with the panel and Dataverse client un
 - No per-vehicle coverage rows. EZLynx's `vehicleCoverageBreakdown` is preserved in
   `iacrm_rawpayload` but not rendered — it is absent for Travelers and for every
   alternate quote.
-- No Contact creation or update. Applicant contact data informs Account matching only.
+- ~~No Contact creation or update.~~ **Reversed 2026-08-15 (Nathan):** commit now
+  enriches the insured — fill-if-empty on account fields (incl. `iacrm_mobilephone`,
+  `iacrm_insuredfirstname/lastname`, the columns the Insured form actually binds) and
+  find-or-create Contacts for applicant + co-applicants, applicant set as primary
+  contact when none exists. Never overwrites non-empty values.
 - No writes back to EZLynx. Read-only against EZLynx, always.
 - No AMS (Momentum/NowCerts) involvement. This is a quote-results path, not an AMS sync.
 - No commercial lines. `isCommercial` is captured but CL is out of scope for v1.
@@ -448,3 +452,7 @@ coverage lineage on bind works the moment these columns exist. No extra relation
 | 2026-08-15 | Structured `iacrm_quotecoverage` rows deferred — `iacrm_rawpayload` makes backfill possible without re-rating |
 | 2026-08-15 | Auto coverage sourced from results `coverages[]` (per carrier), not `auto-risk-application` (requested set) — per-carrier shows deviations, e.g. Nationwide rating PD at 500000 against a request of No Coverage |
 | 2026-08-15 | `recent-quotes-for-applicant` is the preferred run list; `completed-quotes/agency` is the no-applicant-context fallback |
+| 2026-08-15 | Servicing agent: required owner picker, sticky per-env default, always overridable |
+| 2026-08-15 | Panel creates insureds and per-LOB opportunities via API — explicit buttons, never automatic |
+| 2026-08-15 | Quoting method resolve-or-create per org; effective date falls back to rate-run date |
+| 2026-08-15 | **Non-goal reversed:** insured enrichment at commit — fill-if-empty account fields + find-or-create contacts, applicant as primary. Agent-entered data always wins |

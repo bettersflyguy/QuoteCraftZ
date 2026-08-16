@@ -95,7 +95,7 @@ const RawApplicant = z.object({
   primaryAddress: z.object({
     address1: z.string(), city: z.string(), state: z.string(), postalCode: z.string()
   }).passthrough().nullish(),
-  phoneNumbers: z.array(z.object({ number: z.string() }).passthrough()).nullish(),
+  phoneNumbers: z.array(z.object({ number: z.string(), type: z.string().nullish() }).passthrough()).nullish(),
   // live shape is {type,email}; recon guessed {emailAddress}; accept both + bare strings
   emailAddresses: z.array(z.union([
     z.string(),
@@ -120,7 +120,7 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
     address: a.primaryAddress
       ? { street: a.primaryAddress.address1, city: a.primaryAddress.city, state: a.primaryAddress.state, postalCode: a.primaryAddress.postalCode }
       : null,
-    phones: (a.phoneNumbers ?? []).map(pn => pn.number),
+    phones: (a.phoneNumbers ?? []).map(pn => ({ type: pn.type ?? null, number: pn.number })),
     emails: (a.emailAddresses ?? [])
       .map(e => {
         if (typeof e === "string") return e;

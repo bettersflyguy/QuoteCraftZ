@@ -69,7 +69,7 @@ describe("normalizeApplicant", () => {
       firstName: "Alex", lastName: "Sample",
       dateOfBirth: "1949-11-18",
       address: { street: "100 EXAMPLE RD", city: "MOUNDS VIEW", state: "MN", postalCode: "55112" },
-      phones: ["6125550100"], emails: ["alex.sample@example.com"],
+      phones: [{ type: "Mobile", number: "6125550100" }], emails: ["alex.sample@example.com"],
       coApplicants: [{ firstName: "Blake", lastName: "Sample", relationship: "Spouse" }],
       isCommercial: false
     });
