@@ -21,6 +21,7 @@ import { writeCoverageLines } from "@/crm/coverage";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
+  contactHasDlColumns,
   getAccountEnrichmentState,
   updateAccount,
   getAccountContacts,
@@ -54,6 +55,7 @@ export interface Deps {
   createServicingTeamMember: typeof createServicingTeamMember;
   getCoverageQuoteNavProp: typeof getCoverageQuoteNavProp;
   getCoverageRowIds: typeof getCoverageRowIds;
+  contactHasDlColumns: typeof contactHasDlColumns;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -151,7 +153,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             getAccountEnrichmentState: deps.getAccountEnrichmentState,
             updateAccount: deps.updateAccount,
             getAccountContacts: deps.getAccountContacts,
-            createContact: deps.createContact
+            createContact: deps.createContact,
+            contactHasDlColumns: deps.contactHasDlColumns
           });
           if (en.filledFields.length || en.contactsCreated.length || en.primaryContactSet) {
             const bits = [];
@@ -293,6 +296,7 @@ export const realDeps: Deps = {
   createServicingTeamMember,
   getCoverageQuoteNavProp,
   getCoverageRowIds,
+  contactHasDlColumns,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,

@@ -1,5 +1,5 @@
 import endpoints from "@/config/endpoints.json";
-import { normalizeApplicant, normalizeQuoteResult, normalizeRunList, buildIcqPairs } from "./normalize";
+import { normalizeApplicant, normalizeQuoteResult, normalizeRunList, buildIcqPairs, harvestLicenses } from "./normalize";
 import type { CapturedRun, RunListItem } from "@/types";
 
 export class EzlynxSessionError extends Error {
@@ -58,6 +58,20 @@ export async function fetchCapturedRun(
           fetcher
         ) as { icqAnswers?: unknown };
         b.icq = buildIcqPairs(icqRaw, appRaw.icqAnswers);
+        // per-driver licenses ride the same fetch; merge by name (ci)
+        for (const lic of harvestLicenses(appRaw)) {
+          const eq = (x: string, y: string) => x.trim().toLowerCase() === y.trim().toLowerCase();
+          if (eq(lic.firstName, applicant.firstName) && eq(lic.lastName, applicant.lastName)) {
+            applicant.dlNumber = applicant.dlNumber ?? lic.dlNumber;
+            applicant.dlState = applicant.dlState ?? lic.dlState;
+          }
+          for (const co of applicant.coApplicants) {
+            if (eq(lic.firstName, co.firstName) && eq(lic.lastName, co.lastName)) {
+              co.dlNumber = co.dlNumber ?? lic.dlNumber;
+              co.dlState = co.dlState ?? lic.dlState;
+            }
+          }
+        }
       } catch { /* leave b.icq null */ }
     }
   } catch { /* no catalog - leave all null */ }

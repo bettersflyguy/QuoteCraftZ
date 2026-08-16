@@ -3,10 +3,12 @@ export interface CapturedApplicant {
   firstName: string;
   lastName: string;
   dateOfBirth: string | null;          // "1949-11-18"
+  dlNumber: string | null;             // secured PII - written only to field-secured columns
+  dlState: string | null;
   address: { street: string; city: string; state: string; postalCode: string } | null;
   phones: { type: string | null; number: string }[];
   emails: string[];
-  coApplicants: { firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null; dateOfBirth: string | null }[];
+  coApplicants: { firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null; dateOfBirth: string | null; dlNumber: string | null; dlState: string | null }[];
   isCommercial: boolean;
 }
 

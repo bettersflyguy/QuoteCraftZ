@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeQuoteResult, normalizeApplicant, normalizeRunList, buildIcqPairs, NormalizeError } from "@/ezlynx/normalize";
+import { normalizeQuoteResult, normalizeApplicant, normalizeRunList, buildIcqPairs, harvestLicenses, NormalizeError } from "@/ezlynx/normalize";
 import quoteResult from "./fixtures/quote-result.sample.json";
 import applicant from "./fixtures/applicant.sample.json";
 import recentQuotes from "./fixtures/recent-quotes.sample.json";
@@ -68,9 +68,10 @@ describe("normalizeApplicant", () => {
       ezlynxApplicantId: 219851561,
       firstName: "Alex", lastName: "Sample",
       dateOfBirth: "1949-11-18",
+      dlNumber: null, dlState: null,
       address: { street: "100 EXAMPLE RD", city: "MOUNDS VIEW", state: "MN", postalCode: "55112" },
       phones: [{ type: "Mobile", number: "6125550100" }], emails: ["alex.sample@example.com"],
-      coApplicants: [{ firstName: "Blake", lastName: "Sample", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1952-10-11" }],
+      coApplicants: [{ firstName: "Blake", lastName: "Sample", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1952-10-11", dlNumber: null, dlState: null }],
       isCommercial: false
     });
   });
@@ -123,5 +124,18 @@ describe("buildIcqPairs", () => {
 
   it("returns null on unrecognized catalog shape instead of throwing", () => {
     expect(buildIcqPairs({ nope: true }, [])).toBeNull();
+  });
+});
+
+describe("harvestLicenses", () => {
+  it("collects licensed people from auto drivers[] and home applicant", () => {
+    expect(harvestLicenses({
+      drivers: [
+        { firstName: "David", lastName: "Johnson", driversLicenseNumber: "P006", driversLicenseState: "MN" },
+        { firstName: "NoLicense", lastName: "Kid" }
+      ],
+      applicant: { firstName: "David", lastName: "Johnson", driversLicenseNumber: "P006", driversLicenseState: "MN" }
+    })).toHaveLength(2);
+    expect(harvestLicenses({ nope: 1 })).toEqual([]);
   });
 });

@@ -33,6 +33,8 @@ export interface NewContact {
   mobilePhone: string | null;
   email: string | null;
   birthdate: string | null;
+  dlNumber?: string | null;
+  dlState?: string | null;
 }
 
 export interface EnrichApi {
@@ -40,6 +42,20 @@ export interface EnrichApi {
   updateAccount(env: CrmEnvironment, accountId: string, patch: Record<string, unknown>): Promise<void>;
   getAccountContacts(env: CrmEnvironment, accountId: string): Promise<ContactRow[]>;
   createContact(env: CrmEnvironment, c: NewContact): Promise<string>;
+  /** true when the field-secured DL columns are deployed on contact */
+  contactHasDlColumns(env: CrmEnvironment): Promise<boolean>;
+}
+
+/** Create with secured DL fields when possible; if the write is rejected
+ * (typically: agent not in the field security profile), retry without them so
+ * a missing profile membership never blocks contact creation. */
+async function createContactSafe(env: CrmEnvironment, api: EnrichApi, c: NewContact): Promise<string> {
+  if (!c.dlNumber && !c.dlState) return api.createContact(env, c);
+  try {
+    return await api.createContact(env, c);
+  } catch {
+    return api.createContact(env, { ...c, dlNumber: null, dlState: null });
+  }
 }
 
 export interface EnrichResult {
@@ -106,31 +122,36 @@ export async function ensureInsuredData(
   fill("iacrm_insuredlastname", applicant.lastName);
 
   const existing = await api.getAccountContacts(env, accountId);
+  const dlColumns = await api.contactHasDlColumns(env);
 
   const contactsCreated: string[] = [];
   const applicantCand: Candidate = { firstName: applicant.firstName, lastName: applicant.lastName, phone: mobile ?? anyPhone, email };
   let applicantContactId = existing.find(c => contactMatches(c, applicantCand))?.contactId ?? null;
   if (!applicantContactId) {
-    applicantContactId = await api.createContact(env, {
+    applicantContactId = await createContactSafe(env, api, {
       accountId,
       firstName: applicant.firstName,
       lastName: applicant.lastName,
       mobilePhone: mobile,
       email,
-      birthdate: applicant.dateOfBirth
+      birthdate: applicant.dateOfBirth,
+      dlNumber: dlColumns ? applicant.dlNumber : null,
+      dlState: dlColumns ? applicant.dlState : null
     });
     contactsCreated.push(`${applicant.firstName} ${applicant.lastName}`);
   }
   for (const co of applicant.coApplicants) {
     const cand: Candidate = { firstName: co.firstName, lastName: co.lastName, phone: co.phone, email: co.email };
     if (existing.some(c => contactMatches(c, cand))) continue;
-    await api.createContact(env, {
+    await createContactSafe(env, api, {
       accountId,
       firstName: co.firstName,
       lastName: co.lastName,
       mobilePhone: co.phone,
       email: co.email,
-      birthdate: co.dateOfBirth
+      birthdate: co.dateOfBirth,
+      dlNumber: dlColumns ? co.dlNumber : null,
+      dlState: dlColumns ? co.dlState : null
     });
     contactsCreated.push(`${co.firstName} ${co.lastName}`);
   }

@@ -4,7 +4,7 @@ import type { CapturedRun } from "@/types";
 
 const run: CapturedRun = {
   applicant: {
-    ezlynxApplicantId: 219851561, firstName: "Alex", lastName: "Sample", dateOfBirth: "1949-11-18",
+    ezlynxApplicantId: 219851561, firstName: "Alex", lastName: "Sample", dateOfBirth: "1949-11-18", dlNumber: null, dlState: null,
     address: null, phones: [], emails: [], coApplicants: [], isCommercial: false
   },
   openApplicationId: 199071915,

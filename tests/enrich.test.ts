@@ -9,10 +9,11 @@ const applicant: CapturedApplicant = {
   firstName: "Jill",
   lastName: "Kerns",
   dateOfBirth: "1973-04-03",
+  dlNumber: "K123456789", dlState: "MN",
   address: { street: "2866 ASPEN LAKE DR NE", city: "BLAINE", state: "MN", postalCode: "55449" },
   phones: [{ type: "Mobile", number: "7632211445" }],
   emails: ["steven.kerns@gmail.com"],
-  coApplicants: [{ firstName: "STEVEN", lastName: "KERNS", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1971-06-20" }],
+  coApplicants: [{ firstName: "STEVEN", lastName: "KERNS", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1971-06-20", dlNumber: null, dlState: null }],
   isCommercial: false
 };
 
@@ -34,6 +35,7 @@ function makeApi(state: AccountEnrichmentState, contacts: TestContact[]) {
     getAccountEnrichmentState: vi.fn(async () => state),
     updateAccount: vi.fn(async (_e: unknown, _id: string, _patch: Record<string, unknown>) => undefined),
     getAccountContacts: vi.fn(async () => contacts),
+    contactHasDlColumns: vi.fn(async () => false),
     createContact: vi.fn(
       async (_e: unknown, c: { firstName: string; lastName: string; birthdate: string | null }) => `NEW-${c.firstName}`
     )
@@ -89,6 +91,35 @@ describe("ensureInsuredData", () => {
     ]);
     const r = await ensureInsuredData(ENV, "ACC", applicant, api);
     expect(r.contactsCreated).toContain("Jill Kerns"); // same name, different person by data
+  });
+
+  it("writes secured DL fields only when the org has the columns", async () => {
+    const withCols = makeApi(emptyState(), []);
+    (withCols.contactHasDlColumns as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    await ensureInsuredData(ENV, "ACC", applicant, withCols);
+    const jill = withCols.createContact.mock.calls.map(c => c[1] as Record<string, unknown>).find(c => c["firstName"] === "Jill")!;
+    expect(jill["dlNumber"]).toBe("K123456789");
+
+    const withoutCols = makeApi(emptyState(), []);
+    await ensureInsuredData(ENV, "ACC", applicant, withoutCols);
+    const jill2 = withoutCols.createContact.mock.calls.map(c => c[1] as Record<string, unknown>).find(c => c["firstName"] === "Jill")!;
+    expect(jill2["dlNumber"]).toBeNull();
+  });
+
+  it("retries contact creation without DL fields when the secured write is rejected", async () => {
+    const api = makeApi(emptyState(), []);
+    (api.contactHasDlColumns as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    let attempts = 0;
+    (api.createContact as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_e: unknown, c: { firstName: string; dlNumber?: string | null }) => {
+        attempts++;
+        if (c.dlNumber) throw new Error("no field security profile");
+        return "NEW-" + c.firstName;
+      }
+    );
+    const r = await ensureInsuredData(ENV, "ACC", applicant, api);
+    expect(r.contactsCreated).toContain("Jill Kerns");
+    expect(attempts).toBeGreaterThan(2); // rejected secured attempt + stripped retry
   });
 
   it("carries co-applicant DOB onto the created spouse contact", async () => {

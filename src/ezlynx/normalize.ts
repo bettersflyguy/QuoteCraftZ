@@ -125,6 +125,8 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
     firstName: a.firstName,
     lastName: a.lastName,
     dateOfBirth: a.dateOfBirth ? a.dateOfBirth.slice(0, 10) : null,
+    dlNumber: ((a as Record<string, unknown>)["driversLicenseNumber"] as string) || null,
+    dlState: ((a as Record<string, unknown>)["driversLicenseState"] as string) || null,
     address: a.primaryAddress
       ? { street: a.primaryAddress.address1, city: a.primaryAddress.city, state: a.primaryAddress.state, postalCode: a.primaryAddress.postalCode }
       : null,
@@ -142,6 +144,8 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
       relationship: c.relationship?.name ?? "",
       phone: c.phoneNumbers?.[0]?.number ?? null,
       dateOfBirth: c.dateOfBirth ? c.dateOfBirth.slice(0, 10) : null,
+      dlNumber: ((c as Record<string, unknown>)["driversLicenseNumber"] as string) || null,
+      dlState: ((c as Record<string, unknown>)["driversLicenseState"] as string) || null,
       email: (c.emailAddresses ?? [])
         .map(e => (typeof e === "string" ? e : ("email" in e ? (e as { email: string }).email : (e as { emailAddress: string }).emailAddress)))
         .filter(Boolean)[0] ?? null
@@ -209,4 +213,27 @@ export function buildIcqPairs(
     answeredCount: pairs.filter(p => p.answer != null).length,
     totalQuestions: pairs.length
   };
+}
+
+/** Harvests per-person licenses from a risk-application payload. Auto apps
+ * carry drivers[]; Home apps carry a single applicant object. */
+export function harvestLicenses(appRaw: unknown): { firstName: string; lastName: string; dlNumber: string; dlState: string | null }[] {
+  const schema = z.object({
+    drivers: z.array(z.object({
+      firstName: z.string().nullish(), lastName: z.string().nullish(),
+      driversLicenseNumber: z.string().nullish(), driversLicenseState: z.string().nullish()
+    }).passthrough()).nullish(),
+    applicant: z.object({
+      firstName: z.string().nullish(), lastName: z.string().nullish(),
+      driversLicenseNumber: z.string().nullish(), driversLicenseState: z.string().nullish()
+    }).passthrough().nullish()
+  }).passthrough().safeParse(appRaw);
+  if (!schema.success) return [];
+  const people = [...(schema.data.drivers ?? []), ...(schema.data.applicant ? [schema.data.applicant] : [])];
+  return people
+    .filter(p => p.firstName && p.lastName && p.driversLicenseNumber)
+    .map(p => ({
+      firstName: p.firstName!, lastName: p.lastName!,
+      dlNumber: p.driversLicenseNumber!, dlState: p.driversLicenseState ?? null
+    }));
 }
