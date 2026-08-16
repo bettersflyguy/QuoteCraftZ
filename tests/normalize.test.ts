@@ -70,7 +70,7 @@ describe("normalizeApplicant", () => {
       dateOfBirth: "1949-11-18",
       address: { street: "100 EXAMPLE RD", city: "MOUNDS VIEW", state: "MN", postalCode: "55112" },
       phones: [{ type: "Mobile", number: "6125550100" }], emails: ["alex.sample@example.com"],
-      coApplicants: [{ firstName: "Blake", lastName: "Sample", relationship: "Spouse" }],
+      coApplicants: [{ firstName: "Blake", lastName: "Sample", relationship: "Spouse", phone: null, email: null }],
       isCommercial: false
     });
   });

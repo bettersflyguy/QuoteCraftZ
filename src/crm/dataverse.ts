@@ -191,9 +191,16 @@ export async function updateAccount(env: CrmEnvironment, accountId: string, patc
 }
 
 export async function getAccountContacts(env: CrmEnvironment, accountId: string): Promise<ContactRow[]> {
-  const q = `contacts?$select=contactid,firstname,lastname&$filter=_parentcustomerid_value eq ${accountId} and statecode eq 0`;
+  const q = `contacts?$select=contactid,firstname,lastname,emailaddress1,mobilephone,telephone1&$filter=_parentcustomerid_value eq ${accountId} and statecode eq 0`;
   const { value } = await dvJson<{ value: Record<string, string | null>[] }>(env, q);
-  return value.map(c => ({ contactId: c["contactid"]!, firstName: c["firstname"] ?? "", lastName: c["lastname"] ?? "" }));
+  return value.map(c => ({
+    contactId: c["contactid"]!,
+    firstName: c["firstname"] ?? "",
+    lastName: c["lastname"] ?? "",
+    email: c["emailaddress1"] ?? null,
+    mobilePhone: c["mobilephone"] ?? null,
+    telephone1: c["telephone1"] ?? null
+  }));
 }
 
 export async function createContact(env: CrmEnvironment, c: NewContact): Promise<string> {

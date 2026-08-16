@@ -21,6 +21,9 @@ export interface ContactRow {
   contactId: string;
   firstName: string;
   lastName: string;
+  email: string | null;
+  mobilePhone: string | null;
+  telephone1: string | null;
 }
 
 export interface NewContact {
@@ -45,7 +48,32 @@ export interface EnrichResult {
   primaryContactSet: boolean;
 }
 
-const nameKey = (first: string, last: string) => `${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
+const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+const digits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+
+interface Candidate { firstName: string; lastName: string; phone: string | null; email: string | null }
+
+/** Dedup rule (Nathan, 2026-08-15): an existing contact matches ONLY when
+ *  - email matches exactly (case-insensitive), OR
+ *  - first AND last AND phone all match exactly.
+ * Name alone never merges two people (same-name relatives are common in
+ * insurance). Fallback: when NEITHER side carries an email or phone there is
+ * nothing to compare, so name-only decides - otherwise every re-import would
+ * duplicate data-poor contacts. */
+function contactMatches(existing: ContactRow, cand: Candidate): boolean {
+  if (existing.email && cand.email && norm(existing.email) === norm(cand.email)) return true;
+
+  const nameEq = norm(existing.firstName) === norm(cand.firstName) && norm(existing.lastName) === norm(cand.lastName);
+  const candPhone = digits(cand.phone);
+  const existingPhones = [existing.mobilePhone, existing.telephone1].map(digits).filter(Boolean);
+  if (nameEq && candPhone && existingPhones.includes(candPhone)) return true;
+
+  const candHasSignals = Boolean(cand.email || candPhone);
+  const existingHasSignals = Boolean(existing.email || existingPhones.length);
+  if (nameEq && (!candHasSignals || !existingHasSignals)) return true;
+
+  return false;
+}
 
 /** Fill-if-empty enrichment of the matched/created insured from the EZLynx
  * applicant, plus find-or-create Contacts (applicant + co-applicants) with the
@@ -78,10 +106,10 @@ export async function ensureInsuredData(
   fill("iacrm_insuredlastname", applicant.lastName);
 
   const existing = await api.getAccountContacts(env, accountId);
-  const byName = new Map(existing.map(c => [nameKey(c.firstName, c.lastName), c.contactId]));
 
   const contactsCreated: string[] = [];
-  let applicantContactId = byName.get(nameKey(applicant.firstName, applicant.lastName)) ?? null;
+  const applicantCand: Candidate = { firstName: applicant.firstName, lastName: applicant.lastName, phone: mobile ?? anyPhone, email };
+  let applicantContactId = existing.find(c => contactMatches(c, applicantCand))?.contactId ?? null;
   if (!applicantContactId) {
     applicantContactId = await api.createContact(env, {
       accountId,
@@ -94,13 +122,14 @@ export async function ensureInsuredData(
     contactsCreated.push(`${applicant.firstName} ${applicant.lastName}`);
   }
   for (const co of applicant.coApplicants) {
-    if (byName.has(nameKey(co.firstName, co.lastName))) continue;
+    const cand: Candidate = { firstName: co.firstName, lastName: co.lastName, phone: co.phone, email: co.email };
+    if (existing.some(c => contactMatches(c, cand))) continue;
     await api.createContact(env, {
       accountId,
       firstName: co.firstName,
       lastName: co.lastName,
-      mobilePhone: null,
-      email: null,
+      mobilePhone: co.phone,
+      email: co.email,
       birthdate: null
     });
     contactsCreated.push(`${co.firstName} ${co.lastName}`);

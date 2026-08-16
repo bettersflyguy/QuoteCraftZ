@@ -12,7 +12,7 @@ const applicant: CapturedApplicant = {
   address: { street: "2866 ASPEN LAKE DR NE", city: "BLAINE", state: "MN", postalCode: "55449" },
   phones: [{ type: "Mobile", number: "7632211445" }],
   emails: ["steven.kerns@gmail.com"],
-  coApplicants: [{ firstName: "STEVEN", lastName: "KERNS", relationship: "Spouse" }],
+  coApplicants: [{ firstName: "STEVEN", lastName: "KERNS", relationship: "Spouse", phone: null, email: null }],
   isCommercial: false
 };
 
@@ -25,7 +25,11 @@ function emptyState(): AccountEnrichmentState {
   };
 }
 
-function makeApi(state: AccountEnrichmentState, contacts: { contactId: string; firstName: string; lastName: string }[]) {
+type TestContact = { contactId: string; firstName: string; lastName: string; email: string | null; mobilePhone: string | null; telephone1: string | null };
+const bare = (contactId: string, firstName: string, lastName: string): TestContact =>
+  ({ contactId, firstName, lastName, email: null, mobilePhone: null, telephone1: null });
+
+function makeApi(state: AccountEnrichmentState, contacts: TestContact[]) {
   const api = {
     getAccountEnrichmentState: vi.fn(async () => state),
     updateAccount: vi.fn(async (_e: unknown, _id: string, _patch: Record<string, unknown>) => undefined),
@@ -53,7 +57,7 @@ describe("ensureInsuredData", () => {
 
   it("never overwrites non-empty values", async () => {
     const state = { ...emptyState(), telephone1: "9990001111", address1_city: "EDINA" };
-    const api = makeApi(state, [{ contactId: "C1", firstName: "Jill", lastName: "Kerns" }]);
+    const api = makeApi(state, [bare("C1", "Jill", "Kerns")]);
     await ensureInsuredData(ENV, "ACC", applicant, api);
     const patch = (api.updateAccount.mock.calls[0]?.[2] ?? {}) as Record<string, unknown>;
     expect(patch["telephone1"]).toBeUndefined();
@@ -61,10 +65,34 @@ describe("ensureInsuredData", () => {
     expect(patch["address1_line1"]).toBe("2866 ASPEN LAKE DR NE"); // still fills what IS empty
   });
 
-  it("creates applicant + co-applicant contacts, skipping case-insensitive matches", async () => {
-    const api = makeApi(emptyState(), [{ contactId: "C9", firstName: "steven", lastName: "kerns" }]);
+  it("matches on exact email regardless of name", async () => {
+    const api = makeApi(emptyState(), [
+      { ...bare("C1", "Jillian", "Kerns-Smith"), email: "STEVEN.KERNS@GMAIL.COM" }
+    ]);
     const r = await ensureInsuredData(ENV, "ACC", applicant, api);
-    expect(r.contactsCreated).toEqual(["Jill Kerns"]); // STEVEN KERNS matched existing steven kerns
+    expect(r.contactsCreated).not.toContain("Jill Kerns"); // email matched
+  });
+
+  it("matches on first+last+phone all three", async () => {
+    const api = makeApi(emptyState(), [
+      { ...bare("C1", "JILL", "KERNS"), email: "different@x.com", mobilePhone: "(763) 221-1445" }
+    ]);
+    const r = await ensureInsuredData(ENV, "ACC", applicant, api);
+    expect(r.contactsCreated).not.toContain("Jill Kerns"); // name+phone matched (digits-normalized)
+  });
+
+  it("does NOT match on name alone when contact data disagrees", async () => {
+    const api = makeApi(emptyState(), [
+      { ...bare("C1", "Jill", "Kerns"), email: "other.jill@x.com", mobilePhone: "6125550000" }
+    ]);
+    const r = await ensureInsuredData(ENV, "ACC", applicant, api);
+    expect(r.contactsCreated).toContain("Jill Kerns"); // same name, different person by data
+  });
+
+  it("falls back to name-only when neither side has email or phone (re-import safety)", async () => {
+    const api = makeApi(emptyState(), [bare("C9", "steven", "kerns")]);
+    const r = await ensureInsuredData(ENV, "ACC", applicant, api);
+    expect(r.contactsCreated).toEqual(["Jill Kerns"]); // co-applicant STEVEN (no data) matched bare steven
     const created = api.createContact.mock.calls[0]![1];
     expect(created).toMatchObject({ mobilePhone: "7632211445", email: "steven.kerns@gmail.com", birthdate: "1973-04-03" });
   });
@@ -76,7 +104,7 @@ describe("ensureInsuredData", () => {
     const patch = api.updateAccount.mock.calls[0]![2] as Record<string, unknown>;
     expect(patch["primarycontactid@odata.bind"]).toBe("/contacts(NEW-Jill)");
 
-    const api2 = makeApi({ ...emptyState(), primaryContactId: "EXISTING" }, [{ contactId: "C1", firstName: "Jill", lastName: "Kerns" }]);
+    const api2 = makeApi({ ...emptyState(), primaryContactId: "EXISTING" }, [bare("C1", "Jill", "Kerns")]);
     const r2 = await ensureInsuredData(ENV, "ACC", applicant, api2);
     expect(r2.primaryContactSet).toBe(false);
   });
@@ -88,8 +116,8 @@ describe("ensureInsuredData", () => {
       iacrm_insuredfirstname: "x", iacrm_insuredlastname: "x", primaryContactId: "P"
     };
     const api = makeApi(full, [
-      { contactId: "C1", firstName: "Jill", lastName: "Kerns" },
-      { contactId: "C2", firstName: "STEVEN", lastName: "KERNS" }
+      { ...bare("C1", "Jill", "Kerns"), mobilePhone: "7632211445" },
+      bare("C2", "STEVEN", "KERNS")
     ]);
     const r = await ensureInsuredData(ENV, "ACC", applicant, api);
     expect(api.updateAccount).not.toHaveBeenCalled();
