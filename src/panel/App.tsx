@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { makeStyles, tokens, Title3 } from "@fluentui/react-components";
 import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
@@ -34,6 +35,21 @@ export function App() {
   const styles = useStyles();
   const [state, dispatch] = useImportState();
 
+  // The EZLynx content script broadcasts SPA navigations to a different
+  // applicant; restart the wizard against them (stale captures cross-wire
+  // customers). Key on RunPicker below forces a remount + fresh run list.
+  useEffect(() => {
+    const onMessage = (msg: unknown) => {
+      const m = msg as { type?: string; applicantId?: number | null };
+      if (m.type === "ezlynx/applicantChanged") {
+        dispatch({ t: "applicantChanged", applicantId: m.applicantId ?? null });
+      }
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className={styles.root}>
       <div className={styles.header}>
@@ -41,7 +57,9 @@ export function App() {
         <EnvBadge dispatch={dispatch} />
       </div>
       <div className={styles.body}>
-        {state.step === "run" && <RunPicker state={state} dispatch={dispatch} />}
+        {state.step === "run" && (
+          <RunPicker key={state.ezlynxApplicantId ?? "none"} state={state} dispatch={dispatch} />
+        )}
         {state.step === "account" && <AccountMatch state={state} dispatch={dispatch} />}
         {state.step === "opportunities" && <OpportunityPin state={state} dispatch={dispatch} />}
         {state.step === "carriers" && <CarrierMap state={state} dispatch={dispatch} />}

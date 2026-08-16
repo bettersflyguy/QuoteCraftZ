@@ -31,6 +31,9 @@ export type Action =
   | { t: "reset" }
   /** Full "Start over": discards the captured run too, back to the run picker. */
   | { t: "startOver" }
+  /** The EZLynx tab navigated to a different applicant: discard everything and
+   * restart the wizard against them (stale captures cross-wire customers). */
+  | { t: "applicantChanged"; applicantId: number | null }
   | { t: "goto"; step: ImportState["step"] };
 
 const initialState: ImportState = {
@@ -111,6 +114,9 @@ function reducer(state: ImportState, action: Action): ImportState {
 
     case "startOver":
       return { ...initialState, ezlynxApplicantId: state.ezlynxApplicantId, runs: state.runs };
+
+    case "applicantChanged":
+      return { ...initialState, ezlynxApplicantId: action.applicantId };
 
     case "goto":
       return { ...state, step: action.step };

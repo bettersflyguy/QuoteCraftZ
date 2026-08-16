@@ -28,6 +28,10 @@ export type PanelRequest =
 
 export interface CaptureRunResponse { run: CapturedRun; aliases: Record<number, string> }
 
+/** Fire-and-forget broadcast from the EZLynx content script when the SPA
+ * navigates to a different applicant. The panel listens; the worker ignores. */
+export interface ApplicantChangedBroadcast { type: "ezlynx/applicantChanged"; applicantId: number | null }
+
 export interface BridgeResponse<T = unknown> { ok: true; data: T }
 export interface BridgeError {
   ok: false;

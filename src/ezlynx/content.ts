@@ -1,6 +1,6 @@
 import { fetchRunList, fetchCapturedRun, applicantIdFromUrl, EzlynxSessionError } from "./client";
 import { NormalizeError } from "./normalize";
-import type { BridgeRequest, Res } from "@/messages";
+import type { ApplicantChangedBroadcast, BridgeRequest, Res } from "@/messages";
 
 chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse: (r: Res<unknown>) => void) => {
   (async () => {
@@ -27,3 +27,19 @@ chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse:
   })();
   return true; // async response
 });
+
+// EZLynx is an SPA - full navigations are rare, so poll the URL for applicant
+// changes and broadcast them. The panel resets its wizard on a change; a stale
+// capture otherwise lets an agent pin one customer's opportunity against
+// another customer's quotes.
+let lastApplicantId = applicantIdFromUrl(location.href);
+setInterval(() => {
+  const current = applicantIdFromUrl(location.href);
+  if (current !== lastApplicantId) {
+    lastApplicantId = current;
+    const msg: ApplicantChangedBroadcast = { type: "ezlynx/applicantChanged", applicantId: current };
+    chrome.runtime.sendMessage(msg).catch(() => {
+      /* no listener (panel closed) - fine */
+    });
+  }
+}, 1500);
