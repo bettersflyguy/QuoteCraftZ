@@ -114,6 +114,8 @@ describe("buildIcqPairs", () => {
       { key: "coverage_paperlessauto_common", value: "Yes" },
       { key: "dropdownPolicyType", value: "Standard" } // app-internal, no catalog match: ignored
     ])!;
+    expect(r.state).toBe("MN");
+    expect(r.catalog[0]).toMatchObject({ questionId: "coverage_paperlessauto_common", carrier: "MULTI" });
     expect(r.pairs).toEqual([
       { questionId: "coverage_paperlessauto_common", carrier: "MULTI", label: "Paperless", answer: "Yes" },
       { questionId: "still_multipxml", carrier: "Stillwater", label: "Multi-Policy Discount?", answer: null }

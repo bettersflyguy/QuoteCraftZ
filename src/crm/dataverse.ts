@@ -371,6 +371,37 @@ export async function contactHasDlColumns(env: CrmEnvironment): Promise<boolean>
   }
 }
 
+export interface KnowledgeNavProps {
+  /** riskanswer -> account bind nav property (schema-cased) */
+  accountNav: string;
+  /** riskanswer -> carrierquestion bind nav property (schema-cased) */
+  questionNav: string;
+}
+
+/** Probe: are the question-knowledge tables (iacrm_carrierquestion /
+ * iacrm_riskanswer) deployed in this org? Returns the schema-cased nav
+ * properties needed for riskanswer binds, or null while undeployed.
+ * Cached positive-only per org. */
+export async function getKnowledgeNavProps(env: CrmEnvironment): Promise<KnowledgeNavProps | null> {
+  const cacheKey = `knowNav:${env.orgUrl}`;
+  const cached = await chrome.storage.local.get(cacheKey);
+  if (cached[cacheKey] && typeof cached[cacheKey] === "object") return cached[cacheKey] as KnowledgeNavProps;
+  try {
+    const { value } = await dvJson<{ value: { ReferencedEntity: string; ReferencingEntityNavigationPropertyName: string }[] }>(
+      env,
+      `EntityDefinitions(LogicalName='iacrm_riskanswer')/ManyToOneRelationships?$select=ReferencingEntityNavigationPropertyName,ReferencedEntity`
+    );
+    const accountNav = value.find(r => r.ReferencedEntity === "account")?.ReferencingEntityNavigationPropertyName;
+    const questionNav = value.find(r => r.ReferencedEntity === "iacrm_carrierquestion")?.ReferencingEntityNavigationPropertyName;
+    if (!accountNav || !questionNav) return null;
+    const navs = { accountNav, questionNav };
+    await chrome.storage.local.set({ [cacheKey]: navs });
+    return navs;
+  } catch {
+    return null;
+  }
+}
+
 export async function getCoverageQuoteNavProp(env: CrmEnvironment): Promise<string | null> {
   const cacheKey = `covNav:${env.orgUrl}`;
   const cached = await chrome.storage.local.get(cacheKey);

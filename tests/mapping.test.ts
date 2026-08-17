@@ -13,7 +13,13 @@ const run: CapturedRun = {
   blocks: [
     {
       lob: "Auto", applicantQuoteId: 513228997,
-      icq: { pairs: [{ questionId: "coverage_paperlessauto_common", carrier: "MULTI", label: "Paperless", answer: "Yes" }], answeredCount: 1, totalQuestions: 1 },
+      icq: {
+        pairs: [{ questionId: "coverage_paperlessauto_common", carrier: "MULTI", label: "Paperless", answer: "Yes" }],
+        answeredCount: 1,
+        totalQuestions: 1,
+        state: "MN",
+        catalog: [{ questionId: "coverage_paperlessauto_common", carrier: "MULTI", label: "Paperless", helpText: null, answerType: "singleSelect", options: [{ value: "Yes", displayText: "Yes" }] }]
+      },
       quotes: [
         { key: "ezlynx:1:req", kind: "requested", carrierEzlynxId: 13, carrierName: "Travelers",
           quoteNumber: "Q1", premium: 2273, termMonths: 12, coverageSummary: "BI: 500 CSL", coverageLines: [{ code: "BI", label: "BI", limitText: "500 CSL" }], raw: { x: 1 } },

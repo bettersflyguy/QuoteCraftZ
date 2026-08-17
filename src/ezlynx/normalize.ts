@@ -189,20 +189,25 @@ export function normalizeRunList(raw: unknown): RunListItem[] {
 export function buildIcqPairs(
   catalogRaw: unknown,
   answersRaw: unknown
-): { pairs: import("@/types").IcqPair[]; answeredCount: number; totalQuestions: number } | null {
+): NonNullable<import("@/types").CapturedLobBlock["icq"]> | null {
   const catalog = z.object({
+    stateCode: z.string().nullish(),
     locations: z.array(z.object({
       questions: z.array(z.object({
         questionId: z.string(),
         questionShortName: z.string().nullish(),
-        label: z.string().nullish()
+        label: z.string().nullish(),
+        helpText: z.string().nullish(),
+        answerType: z.object({ name: z.string().nullish() }).passthrough().nullish(),
+        options: z.array(z.object({ value: z.string(), displayText: z.string().nullish() }).passthrough()).nullish()
       }).passthrough()).nullish()
     }).passthrough())
   }).passthrough().safeParse(catalogRaw);
   if (!catalog.success) return null;
   const answers = z.array(z.object({ key: z.string(), value: z.string().nullish() }).passthrough()).safeParse(answersRaw ?? []);
   const byKey = new Map((answers.success ? answers.data : []).map(a => [a.key, a.value ?? null]));
-  const pairs = catalog.data.locations.flatMap(l => l.questions ?? []).map(q => ({
+  const questions = catalog.data.locations.flatMap(l => l.questions ?? []);
+  const pairs = questions.map(q => ({
     questionId: q.questionId,
     carrier: q.questionShortName ?? null,
     label: q.label ?? q.questionId,
@@ -211,7 +216,16 @@ export function buildIcqPairs(
   return {
     pairs,
     answeredCount: pairs.filter(p => p.answer != null).length,
-    totalQuestions: pairs.length
+    totalQuestions: pairs.length,
+    state: catalog.data.stateCode ?? null,
+    catalog: questions.map(q => ({
+      questionId: q.questionId,
+      carrier: q.questionShortName ?? null,
+      label: q.label ?? q.questionId,
+      helpText: q.helpText ?? null,
+      answerType: q.answerType?.name ?? null,
+      options: (q.options ?? []).map(o => ({ value: o.value, displayText: o.displayText ?? o.value }))
+    }))
   };
 }
 

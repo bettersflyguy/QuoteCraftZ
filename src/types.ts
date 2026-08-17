@@ -31,7 +31,21 @@ export interface CapturedLobBlock {
   lob: string;                          // "Auto" | "Home" as EZLynx returns it
   applicantQuoteId: number;
   /** carrier underwriting Q&A for this LOB's application; null when unavailable */
-  icq: { pairs: IcqPair[]; answeredCount: number; totalQuestions: number } | null;
+  icq: {
+    pairs: IcqPair[];
+    answeredCount: number;
+    totalQuestions: number;
+    state: string | null;
+    /** full question metadata - feeds the carrier-question dictionary, stripped from rawpayload */
+    catalog: {
+      questionId: string;
+      carrier: string | null;
+      label: string;
+      helpText: string | null;
+      answerType: string | null;
+      options: { value: string; displayText: string }[];
+    }[];
+  } | null;
   quotes: CapturedQuote[];
   errors: { carrierName: string; message: string }[];
 }

@@ -19,9 +19,11 @@ import {
 import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
+import { writeQuestionKnowledge } from "@/crm/knowledge";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
+  getKnowledgeNavProps,
   contactHasDlColumns,
   getAccountEnrichmentState,
   updateAccount,
@@ -58,6 +60,7 @@ export interface Deps {
   getCoverageQuoteNavProp: typeof getCoverageQuoteNavProp;
   getCoverageRowIds: typeof getCoverageRowIds;
   contactHasDlColumns: typeof contactHasDlColumns;
+  getKnowledgeNavProps: typeof getKnowledgeNavProps;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   getCarrierAliases: typeof getCarrierAliases;
@@ -228,6 +231,22 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         } catch (e) {
           results.push({ key: "Coverage detail", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
         }
+
+        // question-knowledge layer: dictionary + answers. Dormant until the
+        // Phase 1 tables deploy; best-effort like the rest.
+        try {
+          const know = await writeQuestionKnowledge(env, payload.run, payload.accountId, {
+            getKnowledgeNavProps: deps.getKnowledgeNavProps,
+            executeBatch: deps.executeBatch
+          });
+          if (know.skipped === "no-tables") {
+            results.push({ key: "Question knowledge — waiting on CRM tables (iacrm_carrierquestion); Q&A kept in rawpayload meanwhile", status: 204, error: null, entityId: null });
+          } else if (know.questionsUpserted || know.answersUpserted) {
+            results.push({ key: `Question knowledge — ${know.questionsUpserted} questions, ${know.answersUpserted} answers upserted`, status: 204, error: null, entityId: null });
+          }
+        } catch (e) {
+          results.push({ key: "Question knowledge", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
+        }
         return { ok: true, data: results };
       }
 
@@ -305,6 +324,7 @@ export const realDeps: Deps = {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
   contactHasDlColumns,
+  getKnowledgeNavProps,
   executeBatch,
   buildQuoteOps,
   getCarrierAliases,
