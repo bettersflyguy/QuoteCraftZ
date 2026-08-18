@@ -250,9 +250,15 @@ export async function createContact(env: CrmEnvironment, c: NewContact): Promise
   if (c.mobilePhone) body["mobilephone"] = c.mobilePhone;
   if (c.email) body["emailaddress1"] = c.email;
   if (c.birthdate) body["birthdate"] = c.birthdate;
-  // field-secured columns - caller includes these only when the org has them
-  if (c.dlNumber) body["iacrm_driverslicensenumber"] = c.dlNumber;
-  if (c.dlState) body["iacrm_driverslicensestate"] = c.dlState;
+  // license columns are org-specific - write to whatever the probe found
+  if (c.dlNumber || c.dlState) {
+    const cols = await getContactDlColumns(env);
+    if (cols) {
+      if (c.dlNumber) body[cols.numberCol] = c.dlNumber;
+      if (c.dlState && cols.stateCol) body[cols.stateCol] = c.dlState;
+      // no state column in this org: state is dropped, number still lands
+    }
+  }
   const r = await dvPost<Record<string, string>>(env, "contacts?$select=contactid", body);
   return r["contactid"]!;
 }
@@ -352,23 +358,34 @@ export async function executeBatch(
 /** Runtime probe: does this org's iacrm_quotecoverage carry the quote lookup
  * yet? Returns the SCHEMA-cased nav property for @odata.bind, or null while the
  * CRM-side columns are undeployed. Cached per org. */
-/** Probe: are the field-secured DL columns deployed on contact yet? Cached
- * positive-only per org (they may deploy later). */
-export async function contactHasDlColumns(env: CrmEnvironment): Promise<boolean> {
-  const cacheKey = `dlCols:${env.orgUrl}`;
+export interface DlColumns { numberCol: string; stateCol: string | null }
+
+/** Probe: which driver's-license columns does this org's contact carry?
+ * Nathan's hand-built schema uses iacrm_driverslicense (no state column);
+ * the originally-specced names are also accepted. Candidates in preference
+ * order; cached positive-only per org (columns may deploy later). */
+export async function getContactDlColumns(env: CrmEnvironment): Promise<DlColumns | null> {
+  const cacheKey = `dlColsMap:${env.orgUrl}`;
   const cached = await chrome.storage.local.get(cacheKey);
-  if (cached[cacheKey] === true) return true;
+  if (cached[cacheKey] && typeof cached[cacheKey] === "object") return cached[cacheKey] as DlColumns;
   try {
-    const { value } = await dvJson<{ value: unknown[] }>(
-      env,
-      `EntityDefinitions(LogicalName='contact')/Attributes?$select=LogicalName&$filter=LogicalName eq 'iacrm_driverslicensenumber'`
+    const { value } = await dvJson<{ value: { LogicalName: string }[] }>(
+      env, `EntityDefinitions(LogicalName='contact')/Attributes?$select=LogicalName`
     );
-    const has = value.length > 0;
-    if (has) await chrome.storage.local.set({ [cacheKey]: true });
-    return has;
+    const names = new Set(value.map(a => a.LogicalName));
+    const numberCol = ["iacrm_driverslicensenumber", "iacrm_driverslicense"].find(n => names.has(n)) ?? null;
+    if (!numberCol) return null;
+    const stateCol = names.has("iacrm_driverslicensestate") ? "iacrm_driverslicensestate" : null;
+    const cols = { numberCol, stateCol };
+    await chrome.storage.local.set({ [cacheKey]: cols });
+    return cols;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function contactHasDlColumns(env: CrmEnvironment): Promise<boolean> {
+  return (await getContactDlColumns(env)) !== null;
 }
 
 export interface KnowledgeNavProps {
