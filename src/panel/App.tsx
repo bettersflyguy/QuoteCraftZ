@@ -53,7 +53,7 @@ export function App() {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <Title3>EZLynx Quote Bridge</Title3>
+        <Title3>D365 Insurance Quote Connector</Title3>
         <EnvBadge dispatch={dispatch} />
       </div>
       <div className={styles.body}>

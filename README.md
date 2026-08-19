@@ -1,6 +1,6 @@
-# EZLynx Quote Bridge
+# D365 Insurance Quote Connector
 
-Chrome/Edge extension that imports EZLynx comparative-rater results into the
+Chrome/Edge extension that imports comparative-rater quote results (EZLynx today; the architecture supports additional quote engines as adapters) into the
 Betters D365 Insurance CRM as `iacrm_quote` records — applicant-matched,
 carrier-mapped, idempotent on re-import, written as the signed-in agent.
 
@@ -22,7 +22,7 @@ pin an Opportunity per line of business → map carriers → review → commit.
 1. Get the `dist/` folder (or build it: `npm ci && npm run build`).
 2. Chrome: `chrome://extensions` → Developer mode ON → **Load unpacked** → select `dist/`.
    Edge: `edge://extensions`, same steps.
-3. Pin "EZLynx Quote Bridge" from the extensions menu (🧩).
+3. Pin "D365 Insurance Quote Connector" from the extensions menu (🧩).
 4. First CRM action prompts a Microsoft sign-in — an account picker appears;
    choose your `@bettersagency.com` account. This happens once per environment.
 

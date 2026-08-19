@@ -102,7 +102,7 @@ export function OptionsApp() {
   return (
     <div className={styles.root}>
       <Text size={600} weight="semibold">
-        EZLynx Quote Bridge — Environments
+        D365 Insurance Quote Connector — Environments
       </Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">
