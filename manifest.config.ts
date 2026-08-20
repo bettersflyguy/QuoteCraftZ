@@ -18,5 +18,14 @@ export default defineManifest({
   ],
   side_panel: { default_path: "src/panel/index.html" },
   options_page: "src/options/index.html",
-  action: { default_title: "EZLynx Quote Bridge" }
+  icons: {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  action: {
+    default_title: "D365 Insurance Quote Connector",
+    default_icon: { "16": "icons/16.png", "32": "icons/32.png" }
+  }
 });

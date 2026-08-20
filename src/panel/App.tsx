@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { makeStyles, tokens, Title3 } from "@fluentui/react-components";
+import { makeStyles, tokens } from "@fluentui/react-components";
 import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
 import { RunPicker } from "./steps/RunPicker";
@@ -19,9 +19,20 @@ const useStyles = makeStyles({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: "8px",
     padding: "8px 12px",
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderBottom: "2px solid #0F6CBD",
     flexShrink: 0
+  },
+  brand: { display: "flex", alignItems: "center", gap: "8px", minWidth: 0 },
+  logo: { width: "24px", height: "24px", flexShrink: 0 },
+  title: {
+    fontSize: "15px",
+    fontWeight: 600,
+    color: tokens.colorNeutralForeground1,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis"
   },
   body: {
     flex: 1,
@@ -53,7 +64,10 @@ export function App() {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <Title3>D365 Insurance Quote Connector</Title3>
+        <div className={styles.brand}>
+          <img className={styles.logo} src="/icons/32.png" alt="" />
+          <span className={styles.title}>D365 Insurance Quote Connector</span>
+        </div>
         <EnvBadge dispatch={dispatch} />
       </div>
       <div className={styles.body}>
