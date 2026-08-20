@@ -21,7 +21,7 @@ const useStyles = makeStyles({
     justifyContent: "space-between",
     gap: "8px",
     padding: "8px 12px",
-    borderBottom: "2px solid #0F6CBD",
+    borderBottom: "2px solid #002f87",
     flexShrink: 0
   },
   brand: { display: "flex", alignItems: "center", gap: "8px", minWidth: 0 },
