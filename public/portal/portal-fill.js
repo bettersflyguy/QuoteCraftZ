@@ -49,14 +49,21 @@
     if ((element.type || "").toLowerCase() === "radio" && legend) {
       return clean(legend.innerText || legend.textContent);
     }
+    /* one PRIMARY label, in priority order; container text only as a fallback
+     * for label-less SPA fields. Concatenating container text onto real labels
+     * let payment-widget verbiage ("bank name and address") hijack matches. */
+    const primary = clean(element.getAttribute("aria-label")) || labelledText(element) || explicitLabel(element) ||
+      clean(legend && (legend.innerText || legend.textContent)) || containerLabel(element);
     const parts = [
-      element.getAttribute("aria-label"), labelledText(element), explicitLabel(element),
-      legend && (legend.innerText || legend.textContent), containerLabel(element),
-      element.getAttribute("placeholder"), element.getAttribute("autocomplete"),
+      primary, element.getAttribute("placeholder"), element.getAttribute("autocomplete"),
       element.name, element.id
     ].map(clean).filter(Boolean);
     return Array.from(new Set(parts)).join(" ");
   }
+
+  /* banking, payment and card fields are NEVER auto-filled — an insurance
+   * application holds nothing that belongs in them */
+  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*plan|autopay|eft|ach)\b/i;
 
   function optionName(element) {
     const label = explicitLabel(element) || clean(element.getAttribute("aria-label"));
@@ -145,7 +152,7 @@
 
     controls.forEach((element) => {
       const name = fieldName(element);
-      if (!name) return;
+      if (!name || PAYMENT_FIELD.test(name)) return;
       if (element.type === "radio") {
         const fieldset = element.closest("fieldset");
         const groupKey = element.name ? `name:${element.name}` : fieldset || element;

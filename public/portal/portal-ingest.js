@@ -104,6 +104,9 @@
     return clean(control.value || control.getAttribute("value"));
   }
 
+  /* banking, payment and card data is never captured */
+  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*plan|autopay|eft|ach)\b/i;
+
   /* cookie/consent widgets contribute nothing but noise */
   function inConsentUi(element) {
     return Boolean(element.closest("[id*='onetrust'], [class*='onetrust'], [id*='cookie'], [class*='cookie-banner'], [id*='consent'], [aria-label*='consent' i]"));
@@ -124,7 +127,9 @@
       .filter((control) => !inConsentUi(control))
       .filter((control) => !["radio", "hidden", "password", "file", "submit", "button", "reset", "search"].includes((control.getAttribute("type") || "").toLowerCase()))
       .forEach((control) => {
-        fields.push({ label: clean(labelFor(control)), value: valueFor(control), name: clean(control.name || control.id), section, group: "", source: "control" });
+        const label = clean(labelFor(control));
+        if (PAYMENT_FIELD.test(label) || PAYMENT_FIELD.test(clean(control.name || control.id))) return;
+        fields.push({ label, value: valueFor(control), name: clean(control.name || control.id), section, group: "", source: "control" });
       });
 
     Array.from(root.querySelectorAll("fieldset"))
