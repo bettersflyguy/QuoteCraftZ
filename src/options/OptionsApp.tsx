@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   Button,
   Input,
@@ -9,12 +9,6 @@ import {
   Text,
   MessageBar,
   MessageBarBody,
-  Table,
-  TableHeader,
-  TableRow,
-  TableHeaderCell,
-  TableBody,
-  TableCell,
   makeStyles,
   tokens
 } from "@fluentui/react-components";
@@ -37,9 +31,29 @@ function makeId(): string {
 const useStyles = makeStyles({
   root: {
     padding: "24px",
-    maxWidth: "900px",
+    maxWidth: "1040px",
     fontFamily: tokens.fontFamilyBase
   },
+  /* one shared grid for header + rows so the columns always line up and
+   * every field owns its own track — no intrinsic-width overlap */
+  grid: {
+    marginTop: "16px",
+    display: "grid",
+    gridTemplateColumns: "56px minmax(120px, 1fr) minmax(240px, 1.8fr) minmax(220px, 1.6fr) 130px 40px",
+    columnGap: "12px",
+    rowGap: "10px",
+    alignItems: "center"
+  },
+  headerCell: {
+    fontSize: "12px",
+    fontWeight: 600,
+    color: tokens.colorNeutralForeground3,
+    paddingBottom: "4px",
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    alignSelf: "end"
+  },
+  cellStack: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 },
+  fullWidth: { width: "100%", minWidth: 0 },
   footer: {
     marginTop: "16px",
     color: tokens.colorNeutralForeground3
@@ -107,72 +121,64 @@ export function OptionsApp() {
       </Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">
-        <Table style={{ marginTop: 16 }}>
-          <TableHeader>
-            <TableRow>
-              <TableHeaderCell>Active</TableHeaderCell>
-              <TableHeaderCell>Name</TableHeaderCell>
-              <TableHeaderCell>Org URL</TableHeaderCell>
-              <TableHeaderCell>App ID (optional, for deep links)</TableHeaderCell>
-              <TableHeaderCell>Color</TableHeaderCell>
-              <TableHeaderCell />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {envs.map(e => (
-              <TableRow key={e.id}>
-                <TableCell>
-                  <Radio value={e.id} />
-                </TableCell>
-                <TableCell>
-                  <Input value={e.name} onChange={(_, d) => update(e.id, { name: d.value })} />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={e.orgUrl}
-                    onChange={(_, d) => update(e.id, { orgUrl: d.value })}
-                    placeholder="https://org.crm.dynamics.com"
-                  />
-                  {urlInvalid.get(e.id) && (
-                    <Text size={200} style={{ color: tokens.colorPaletteRedForeground1, display: "block" }}>
-                      Must match https://org.crm[N].dynamics.com
-                    </Text>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={e.appId ?? ""}
-                    placeholder="model-driven app id (guid)"
-                    onChange={(_, d) => update(e.id, { appId: d.value.trim() || undefined })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Dropdown
-                    value={e.color}
-                    selectedOptions={[e.color]}
-                    onOptionSelect={(_, d) =>
-                      update(e.id, { color: d.optionValue as CrmEnvironment["color"] })
-                    }
-                  >
-                    {COLORS.map(c => (
-                      <Option key={c} value={c}>
-                        {c}
-                      </Option>
-                    ))}
-                  </Dropdown>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    icon={<DeleteRegular />}
-                    disabled={e.id === activeId}
-                    onClick={() => removeRow(e.id)}
-                    title={e.id === activeId ? "Cannot delete the active environment" : "Delete"}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className={styles.grid}>
+          <div className={styles.headerCell}>Active</div>
+          <div className={styles.headerCell}>Name</div>
+          <div className={styles.headerCell}>Org URL</div>
+          <div className={styles.headerCell}>App ID (optional, for deep links)</div>
+          <div className={styles.headerCell}>Color</div>
+          <div className={styles.headerCell} />
+          {envs.map(e => (
+            <Fragment key={e.id}>
+              <Radio value={e.id} />
+              <Input
+                className={styles.fullWidth}
+                value={e.name}
+                onChange={(_, d) => update(e.id, { name: d.value })}
+              />
+              <div className={styles.cellStack}>
+                <Input
+                  className={styles.fullWidth}
+                  value={e.orgUrl}
+                  onChange={(_, d) => update(e.id, { orgUrl: d.value })}
+                  placeholder="https://org.crm.dynamics.com"
+                />
+                {urlInvalid.get(e.id) && (
+                  <Text size={200} style={{ color: tokens.colorPaletteRedForeground1 }}>
+                    Must match https://org.crm[N].dynamics.com
+                  </Text>
+                )}
+              </div>
+              <Input
+                className={styles.fullWidth}
+                value={e.appId ?? ""}
+                placeholder="model-driven app id (guid)"
+                onChange={(_, d) => update(e.id, { appId: d.value.trim() || undefined })}
+              />
+              <Dropdown
+                className={styles.fullWidth}
+                style={{ minWidth: 0 }}
+                value={e.color}
+                selectedOptions={[e.color]}
+                onOptionSelect={(_, d) =>
+                  update(e.id, { color: d.optionValue as CrmEnvironment["color"] })
+                }
+              >
+                {COLORS.map(c => (
+                  <Option key={c} value={c}>
+                    {c}
+                  </Option>
+                ))}
+              </Dropdown>
+              <Button
+                icon={<DeleteRegular />}
+                disabled={e.id === activeId}
+                onClick={() => removeRow(e.id)}
+                title={e.id === activeId ? "Cannot delete the active environment" : "Delete"}
+              />
+            </Fragment>
+          ))}
+        </div>
       </RadioGroup>
 
       <div className={styles.actions}>
