@@ -32,6 +32,28 @@
       .filter(Boolean).map(text).filter(Boolean).join(" ");
   }
 
+  /* SPA portals (GEICO's quote workspace among them) often render the visible
+   * label as plain text in an ancestor container instead of wiring label[for]
+   * or aria attributes. Walk up a few levels, strip the controls out, and use
+   * the container's short text as the label. */
+  function containerLabel(control) {
+    let node = control;
+    for (let hops = 0; hops < 4 && node.parentElement; hops += 1) {
+      node = node.parentElement;
+      const cloned = node.cloneNode(true);
+      cloned.querySelectorAll("select, input, textarea, option, button, [role='listbox']").forEach((x) => x.remove());
+      const t = clean(cloned.innerText);
+      if (t && t.length >= 3 && t.length <= 180) return t;
+      if (t.length > 180) break;
+    }
+    return "";
+  }
+
+  function junkLabel(value) {
+    /* auto-generated ids: Id_dcc96de6-039c-..., guid fragments, pure numbers */
+    return !value || /^id[_-]/i.test(value) || /[0-9a-f]{8}-[0-9a-f]{4}-/i.test(value) || /^[\d_-]+$/.test(value);
+  }
+
   function labelFor(control) {
     const aria = control.getAttribute("aria-label") || control.getAttribute("data-label");
     if (aria) return aria;
@@ -50,7 +72,10 @@
     const fieldset = control.closest("fieldset");
     const legend = fieldset && fieldset.querySelector(":scope > legend");
     if (legend) return text(legend);
-    return control.getAttribute("placeholder") || control.name || control.id || "";
+    const fromContainer = containerLabel(control);
+    if (fromContainer) return fromContainer;
+    const fallback = control.getAttribute("placeholder") || control.name || control.id || "";
+    return junkLabel(fallback) ? "" : fallback;
   }
 
   function optionName(control) {
@@ -79,6 +104,11 @@
     return clean(control.value || control.getAttribute("value"));
   }
 
+  /* cookie/consent widgets contribute nothing but noise */
+  function inConsentUi(element) {
+    return Boolean(element.closest("[id*='onetrust'], [class*='onetrust'], [id*='cookie'], [class*='cookie-banner'], [id*='consent'], [aria-label*='consent' i]"));
+  }
+
   function pageSection() {
     const heading = document.querySelector("main h1, main h2, h1, h2");
     return text(heading) || location.hostname;
@@ -91,6 +121,7 @@
 
     Array.from(root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']"))
       .filter(isVisible)
+      .filter((control) => !inConsentUi(control))
       .filter((control) => !["radio", "hidden", "password", "file", "submit", "button", "reset", "search"].includes((control.getAttribute("type") || "").toLowerCase()))
       .forEach((control) => {
         fields.push({ label: clean(labelFor(control)), value: valueFor(control), name: clean(control.name || control.id), section, group: "", source: "control" });
@@ -125,6 +156,22 @@
       if (children.length === 2 && children[0].length < 180 && children[1].length < 1000) {
         fields.push({ label: children[0], value: children[1], section, group: "", source: "review-row" });
       }
+    });
+
+    /* labeled money lines ("6 Month Total Premium: $3,089.50", "Due Today $516.80")
+     * — premium summaries usually render as plain text, not form controls */
+    root.querySelectorAll("div, li, p, span, dd, td").forEach((el) => {
+      if (!isVisible(el) || el.children.length > 3 || inConsentUi(el)) return;
+      const t = clean(el.innerText);
+      const m = t.match(/^([A-Za-z0-9][A-Za-z0-9 /()&'.-]{2,70}?):?\s*(\$[\d,]+(?:\.\d{2})?)$/);
+      if (m && /[A-Za-z]/.test(m[1])) {
+        fields.push({ label: m[1], value: m[2], section, group: "", source: "money-line" });
+        return;
+      }
+      /* reversed "amount label" form ("$516.80 Due Today") — short labels only,
+       * so trailing button text ("Print Quote Proposal Next") doesn't ride along */
+      const r = t.match(/^(\$[\d,]+(?:\.\d{2})?)\s+([A-Za-z][A-Za-z0-9 /()&'.-]{2,30})$/);
+      if (r && r[2].split(" ").length <= 3) fields.push({ label: r[2], value: r[1], section, group: "", source: "money-line" });
     });
 
     return fields.filter((field) => field.label && field.value);

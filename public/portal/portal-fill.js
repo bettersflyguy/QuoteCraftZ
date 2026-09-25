@@ -27,6 +27,22 @@
     return clean(label && (label.innerText || label.textContent));
   }
 
+  /* SPA portals (e.g. GEICO's quote workspace) put the visible label in an
+   * ancestor container instead of label[for]/aria — mirror the harvester's
+   * fallback so those fields are matchable too. */
+  function containerLabel(control) {
+    let node = control;
+    for (let hops = 0; hops < 4 && node.parentElement; hops += 1) {
+      node = node.parentElement;
+      const cloned = node.cloneNode(true);
+      cloned.querySelectorAll("select, input, textarea, option, button, [role='listbox']").forEach((x) => x.remove());
+      const t = clean(cloned.innerText);
+      if (t && t.length >= 3 && t.length <= 180) return t;
+      if (t.length > 180) break;
+    }
+    return "";
+  }
+
   function fieldName(element) {
     const fieldset = element.closest("fieldset");
     const legend = fieldset && fieldset.querySelector(":scope > legend");
@@ -35,8 +51,9 @@
     }
     const parts = [
       element.getAttribute("aria-label"), labelledText(element), explicitLabel(element),
-      legend && (legend.innerText || legend.textContent), element.getAttribute("placeholder"),
-      element.getAttribute("autocomplete"), element.name, element.id
+      legend && (legend.innerText || legend.textContent), containerLabel(element),
+      element.getAttribute("placeholder"), element.getAttribute("autocomplete"),
+      element.name, element.id
     ].map(clean).filter(Boolean);
     return Array.from(new Set(parts)).join(" ");
   }

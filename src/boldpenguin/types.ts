@@ -9,7 +9,7 @@ export interface CapturedAppField {
   name?: string;
   section: string;
   group: string;
-  source: "control" | "choice-group" | "definition-list" | "table" | "review-row" | "entity-card";
+  source: "control" | "choice-group" | "definition-list" | "table" | "review-row" | "entity-card" | "money-line";
 }
 
 /** Alias-scored projection of the raw fields (business/contact/address/coverage/…).
