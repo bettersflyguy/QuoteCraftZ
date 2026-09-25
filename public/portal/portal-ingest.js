@@ -177,12 +177,7 @@
     return fields.filter((field) => field.label && field.value);
   }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== "INGEST_PAGE") return;
-    try {
-      sendResponse({ ok: true, fields: collect(), title: document.title, url: location.href });
-    } catch (error) {
-      sendResponse({ ok: false, error: error.message || String(error) });
-    }
-  });
+  /* invoked per frame by the worker via chrome.scripting.executeScript func —
+   * fields from every frame are aggregated worker-side */
+  globalThis.__bettersPortalIngest = () => ({ fields: collect(), title: document.title, url: location.href });
 })();

@@ -411,25 +411,41 @@ async function fillPortalTab(
 ): Promise<import("@/boldpenguin/types").PortalFillResult> {
   // On-demand injection: the filler ships as plain scripts (public/portal/) so it
   // can run on ANY carrier portal the user granted, without a declared match.
-  await chrome.scripting.executeScript({ target: { tabId }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
-  const reply = (await chrome.tabs.sendMessage(tabId, { type: "FILL_PORTAL", payload, overwrite })) as
-    | { ok: true; result: import("@/boldpenguin/types").PortalFillResult }
-    | { ok: false; error: string }
-    | undefined;
-  if (!reply) throw new Error("The portal page did not respond. Reload it and retry.");
-  if (!reply.ok) throw new Error(reply.error);
-  return reply.result;
+  // allFrames: agent portals (Progressive FAO among them) often render the quote
+  // form inside an iframe — every frame fills its own fields.
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+  const frames = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: (p: unknown, o: boolean) =>
+      (globalThis as { __bettersPortalFill?: (p: unknown, o: boolean) => unknown }).__bettersPortalFill?.(p, o) ?? null,
+    args: [payload, overwrite]
+  });
+  const results = frames
+    .map(f => f.result as import("@/boldpenguin/types").PortalFillResult | null)
+    .filter((r): r is import("@/boldpenguin/types").PortalFillResult => r !== null);
+  if (!results.length) throw new Error("The portal page did not respond. Reload it and retry.");
+  return results.reduce((a, r) => ({
+    filledCount: a.filledCount + r.filledCount,
+    existingCount: a.existingCount + r.existingCount,
+    optionMismatchCount: a.optionMismatchCount + r.optionMismatchCount,
+    controlCount: a.controlCount + r.controlCount,
+    filled: [...a.filled, ...r.filled]
+  }));
 }
 
 async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }> {
-  await chrome.scripting.executeScript({ target: { tabId }, files: ["portal/portal-ingest.js"] });
-  const reply = (await chrome.tabs.sendMessage(tabId, { type: "INGEST_PAGE" })) as
-    | { ok: true; fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }
-    | { ok: false; error: string }
-    | undefined;
-  if (!reply) throw new Error("The page did not respond. Reload it and retry.");
-  if (!reply.ok) throw new Error(reply.error);
-  return reply;
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-ingest.js"] });
+  type FrameHarvest = { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string };
+  const frames = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => (globalThis as { __bettersPortalIngest?: () => unknown }).__bettersPortalIngest?.() ?? null
+  });
+  const results = frames.map(f => f.result as FrameHarvest | null).filter((r): r is FrameHarvest => r !== null);
+  const top = results[0];
+  if (!top) throw new Error("The page did not respond. Reload it and retry.");
+  // the top frame names the capture; every frame (iframed quote forms included)
+  // contributes its fields
+  return { fields: results.flatMap(r => r.fields), title: top.title, url: top.url };
 }
 
 export const realDeps: Deps = {

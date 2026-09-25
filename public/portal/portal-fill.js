@@ -175,12 +175,8 @@
     };
   }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== "FILL_PORTAL") return;
-    try {
-      sendResponse({ ok: true, result: fill(message.payload, Boolean(message.overwrite)) });
-    } catch (error) {
-      sendResponse({ ok: false, error: error.message || String(error) });
-    }
-  });
+  /* invoked per frame by the worker via chrome.scripting.executeScript func —
+   * each frame (agent portals often put the form in an iframe) fills its own
+   * fields and returns its own counts for the worker to aggregate */
+  globalThis.__bettersPortalFill = (payload, overwrite) => fill(payload, Boolean(overwrite));
 })();

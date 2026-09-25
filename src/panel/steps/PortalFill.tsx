@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
+import { downloadCapture } from "../downloadCapture";
 import type { CapturedApplication, PortalFillResult } from "@/messages";
 
 const useStyles = makeStyles({
@@ -94,7 +95,7 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
     <div className={styles.root}>
       <div className={styles.title}>Carrier portal</div>
       {app
-        ? <div className={styles.ready}>{name ?? "Application ready"}</div>
+        ? <div className={styles.ready}>{name ?? "Application ready"} — {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held</div>
         : <div className={styles.hint}>
             Nothing captured yet. Ingest this page to pull the insured data shown
             here, or capture a completed application in Bold Penguin.
@@ -137,6 +138,7 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
       )}
       {app && (
         <div className={styles.buttons}>
+          <Button onClick={() => downloadCapture(app)}>Download JSON</Button>
           <Button onClick={clear}>Clear captured application</Button>
         </div>
       )}
