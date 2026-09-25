@@ -1,8 +1,21 @@
 # D365 Insurance Quote Connector
 
-Chrome/Edge extension that imports comparative-rater quote results (EZLynx today; the architecture supports additional quote engines as adapters) into the
-Betters D365 Insurance CRM as `iacrm_quote` records — applicant-matched,
-carrier-mapped, idempotent on re-import, written as the signed-in agent.
+Chrome/Edge extension that captures data from the agency's quoting tools and
+moves it where it's needed next:
+
+- **EZLynx (personal lines):** imports comparative-rater quote results into the
+  Betters D365 Insurance CRM as `iacrm_quote` records — applicant-matched,
+  carrier-mapped, idempotent on re-import, written as the signed-in agent.
+- **Bold Penguin (commercial lines):** captures a completed application
+  (every question set, including vehicle VINs) read-only, then fills matching
+  fields on any carrier portal on demand — highlighting what it changed and
+  never clicking Next, Save, Get Quote, or Submit. The capture lives only in
+  browser session storage; a JSON download is available for review.
+
+The side panel switches mode by the active tab: EZLynx shows the import wizard,
+Bold Penguin shows Capture, and any other site shows "Fill this page" once an
+application is captured. Carrier-portal access is requested per site at click
+time (optional host permissions), so the install prompt stays lean.
 
 - **Spec:** `docs/superpowers/specs/2026-08-15-ezlynx-quote-bridge-design.md`
 - **Plan:** `docs/superpowers/plans/2026-08-15-ezlynx-quote-bridge.md`

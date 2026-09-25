@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { makeStyles, tokens } from "@fluentui/react-components";
 import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
@@ -7,6 +7,10 @@ import { AccountMatch } from "./steps/AccountMatch";
 import { OpportunityPin } from "./steps/OpportunityPin";
 import { CarrierMap } from "./steps/CarrierMap";
 import { ReviewCommit } from "./steps/ReviewCommit";
+import { CommercialCapture } from "./steps/CommercialCapture";
+import { PortalFill } from "./steps/PortalFill";
+import { send } from "./api";
+import type { PageContext } from "@/messages";
 
 const useStyles = makeStyles({
   root: {
@@ -45,6 +49,38 @@ const useStyles = makeStyles({
 export function App() {
   const styles = useStyles();
   const [state, dispatch] = useImportState();
+  const [page, setPage] = useState<PageContext | null>(null);
+
+  // The panel's mode follows the ACTIVE tab: EZLynx -> personal-lines wizard,
+  // Bold Penguin -> commercial capture, anything else with a captured
+  // application -> portal fill. Re-query on tab switches and navigations.
+  const refreshPage = useCallback(() => {
+    send<PageContext>({ type: "panel/getPageContext" })
+      .then(setPage)
+      .catch(() => setPage({ kind: "other", hasCapturedApplication: false }));
+  }, []);
+
+  useEffect(() => {
+    refreshPage();
+    const onActivated = () => refreshPage();
+    const onUpdated = (_id: number, info: { status?: string; url?: string }) => {
+      if (info.status === "complete" || info.url) refreshPage();
+    };
+    chrome.tabs.onActivated.addListener(onActivated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    return () => {
+      chrome.tabs.onActivated.removeListener(onActivated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+    };
+  }, [refreshPage]);
+
+  // Portal fill only offers itself while the personal-lines wizard is idle —
+  // glancing at a CRM tab mid-import must not hide the in-progress wizard.
+  const wizardIdle = state.step === "run" && !state.captured;
+  const mode: "commercial" | "fill" | "personal" =
+    page?.kind === "boldpenguin" ? "commercial" :
+    page?.kind === "other" && page.hasCapturedApplication && wizardIdle ? "fill" :
+    "personal";
 
   // The EZLynx content script broadcasts SPA navigations to a different
   // applicant; restart the wizard against them (stale captures cross-wire
@@ -71,6 +107,9 @@ export function App() {
         <EnvBadge dispatch={dispatch} />
       </div>
       <div className={styles.body}>
+        {mode === "commercial" && <CommercialCapture onChanged={refreshPage} />}
+        {mode === "fill" && <PortalFill onCleared={refreshPage} />}
+        {mode === "personal" && <>
         {state.step === "run" && (
           <RunPicker key={state.ezlynxApplicantId ?? "none"} state={state} dispatch={dispatch} />
         )}
@@ -80,6 +119,7 @@ export function App() {
         {(state.step === "review" || state.step === "done") && (
           <ReviewCommit state={state} dispatch={dispatch} />
         )}
+        </>}
       </div>
     </div>
   );

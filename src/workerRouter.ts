@@ -69,6 +69,25 @@ export interface Deps {
   clearToken: typeof clearToken;
   /** Finds the EZLynx tab, relays a BridgeRequest to its content script, returns its Res. */
   sendToEzlynxTab: <T>(req: BridgeRequest) => Promise<Res<T>>;
+  /** Finds the Bold Penguin tab and relays a capture request to its content script.
+   * The scan clicks through every question set, so this can legitimately run minutes. */
+  sendToBoldPenguinTab: <T>(req: { type: string }) => Promise<Res<T>>;
+  /** Active tab in the last focused window (the tab beside the side panel). */
+  getActiveTab: () => Promise<{ id: number; url: string } | null>;
+  getCapturedApplication: () => Promise<import("@/boldpenguin/types").CapturedApplication | null>;
+  setCapturedApplication: (app: import("@/boldpenguin/types").CapturedApplication | null) => Promise<void>;
+  /** Injects the portal filler into the tab and runs it against the payload. */
+  fillPortalTab: (
+    tabId: number,
+    payload: import("@/boldpenguin/types").CapturedApplication,
+    overwrite: boolean
+  ) => Promise<import("@/boldpenguin/types").PortalFillResult>;
+}
+
+function pageKindOf(url: string): import("@/messages").PageKind {
+  if (/^https:\/\/app\.ezlynx\.com\//i.test(url)) return "ezlynx";
+  if (/^https:\/\/([^/]+\.)*boldpenguin\.com\//i.test(url)) return "boldpenguin";
+  return "other";
 }
 
 export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<unknown>> {
@@ -250,6 +269,34 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: results };
       }
 
+      case "panel/getPageContext": {
+        const tab = await deps.getActiveTab();
+        const hasCapturedApplication = (await deps.getCapturedApplication()) !== null;
+        return { ok: true, data: { kind: tab ? pageKindOf(tab.url) : "other", hasCapturedApplication } };
+      }
+
+      case "panel/bpCapture": {
+        const res = await deps.sendToBoldPenguinTab<import("@/boldpenguin/types").CapturedApplication>({ type: "bp/capture" });
+        if (!res.ok) return res;
+        await deps.setCapturedApplication(res.data);
+        return res;
+      }
+
+      case "panel/bpGetCaptured":
+        return { ok: true, data: await deps.getCapturedApplication() };
+
+      case "panel/bpClear":
+        await deps.setCapturedApplication(null);
+        return { ok: true, data: null };
+
+      case "panel/portalFill": {
+        const app = await deps.getCapturedApplication();
+        if (!app) {
+          return { ok: false, error: "The captured application is no longer available. Capture it again in Bold Penguin.", kind: "session" };
+        }
+        return { ok: true, data: await deps.fillPortalTab(msg.tabId, app, msg.overwrite) };
+      }
+
       case "auth/signIn": {
         const env = await deps.getActiveEnvironment();
         // force a fresh interactive sign-in: the cached token may be VALID but
@@ -299,6 +346,64 @@ async function sendToEzlynxTab<T>(req: BridgeRequest): Promise<Res<T>> {
   }
 }
 
+async function sendToBoldPenguinTab<T>(req: { type: string }): Promise<Res<T>> {
+  const tabs = await chrome.tabs.query({ url: "https://*.boldpenguin.com/*" });
+  const tab = tabs[0];
+  if (!tab?.id) {
+    return { ok: false, error: "Open the completed Bold Penguin application in another tab, then retry.", kind: "session" };
+  }
+  try {
+    // The capture walks every question set (including vehicle editors), so allow
+    // minutes — but still bound it so an orphaned content script can't hang the panel.
+    const reply = await Promise.race([
+      chrome.tabs.sendMessage(tab.id, req) as Promise<Res<T>>,
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 180_000))
+    ]);
+    if (!reply) throw new Error("empty reply");
+    return reply;
+  } catch {
+    return {
+      ok: false,
+      error: "Couldn't reach the Bold Penguin tab — reload that tab (the extension was updated since it loaded), then retry.",
+      kind: "session"
+    };
+  }
+}
+
+async function getActiveTab(): Promise<{ id: number; url: string } | null> {
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  return tab?.id && tab.url ? { id: tab.id, url: tab.url } : null;
+}
+
+const BP_STORAGE_KEY = "bp/capturedApplication";
+
+async function getCapturedApplication(): Promise<import("@/boldpenguin/types").CapturedApplication | null> {
+  const stored = await chrome.storage.session.get(BP_STORAGE_KEY);
+  return (stored[BP_STORAGE_KEY] as import("@/boldpenguin/types").CapturedApplication | undefined) ?? null;
+}
+
+async function setCapturedApplication(app: import("@/boldpenguin/types").CapturedApplication | null): Promise<void> {
+  if (app === null) await chrome.storage.session.remove(BP_STORAGE_KEY);
+  else await chrome.storage.session.set({ [BP_STORAGE_KEY]: app });
+}
+
+async function fillPortalTab(
+  tabId: number,
+  payload: import("@/boldpenguin/types").CapturedApplication,
+  overwrite: boolean
+): Promise<import("@/boldpenguin/types").PortalFillResult> {
+  // On-demand injection: the filler ships as plain scripts (public/portal/) so it
+  // can run on ANY carrier portal the user granted, without a declared match.
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+  const reply = (await chrome.tabs.sendMessage(tabId, { type: "FILL_PORTAL", payload, overwrite })) as
+    | { ok: true; result: import("@/boldpenguin/types").PortalFillResult }
+    | { ok: false; error: string }
+    | undefined;
+  if (!reply) throw new Error("The portal page did not respond. Reload it and retry.");
+  if (!reply.ok) throw new Error(reply.error);
+  return reply.result;
+}
+
 export const realDeps: Deps = {
   getEnvironments,
   getActiveEnvironment,
@@ -331,5 +436,10 @@ export const realDeps: Deps = {
   saveCarrierAlias,
   getAccessToken,
   clearToken,
-  sendToEzlynxTab
+  sendToEzlynxTab,
+  sendToBoldPenguinTab,
+  getActiveTab,
+  getCapturedApplication,
+  setCapturedApplication,
+  fillPortalTab
 };

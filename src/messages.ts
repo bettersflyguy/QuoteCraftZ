@@ -1,8 +1,17 @@
 import type { CapturedRun, RunListItem } from "@/types";
 import type { CommitPayload } from "@/crm/mapping";
 import type { NewAccountFields } from "@/crm/dataverse";
+import type { CapturedApplication, PortalFillResult } from "@/boldpenguin/types";
 
-export type { CommitPayload };
+export type { CommitPayload, CapturedApplication, PortalFillResult };
+
+/** What kind of page the active tab is showing — drives the panel's mode. */
+export type PageKind = "ezlynx" | "boldpenguin" | "other";
+export interface PageContext {
+  kind: PageKind;
+  /** A Bold Penguin application is held in session storage, ready to fill portals. */
+  hasCapturedApplication: boolean;
+}
 
 export type BridgeRequest =
   | { type: "ezlynx/getContext" }
@@ -23,6 +32,11 @@ export type PanelRequest =
   | { type: "panel/getStagesForLob"; lobId: string | null }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }
+  | { type: "panel/getPageContext" }
+  | { type: "panel/bpCapture" }
+  | { type: "panel/bpGetCaptured" }
+  | { type: "panel/bpClear" }
+  | { type: "panel/portalFill"; tabId: number; overwrite: boolean }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };

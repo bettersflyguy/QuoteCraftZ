@@ -17,13 +17,18 @@ export class PanelError extends Error {
 const TIMEOUT_MS = 25_000;
 /** Interactive sign-in legitimately waits on a human at the account picker. */
 const AUTH_TIMEOUT_MS = 180_000;
+/** Bold Penguin capture walks every question set in the application — minutes, not seconds. */
+const BP_CAPTURE_TIMEOUT_MS = 240_000;
 
 /** Wraps chrome.runtime.sendMessage with the PanelRequest/Res<T> contract.
  * A message that never gets a response (dead worker, orphaned content script
  * holding the port open) surfaces as a diagnosable error instead of an
  * infinite spinner. */
 export async function send<T>(msg: PanelRequest): Promise<T> {
-  const timeoutMs = msg.type === "auth/signIn" ? AUTH_TIMEOUT_MS : TIMEOUT_MS;
+  const timeoutMs =
+    msg.type === "auth/signIn" ? AUTH_TIMEOUT_MS :
+    msg.type === "panel/bpCapture" ? BP_CAPTURE_TIMEOUT_MS :
+    TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
