@@ -34,6 +34,7 @@ import {
   createServicingTeamMember
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
+import { mergeIngestedFields } from "@/boldpenguin/ingest";
 
 export interface Deps {
   getEnvironments: () => Promise<CrmEnvironment[]>;
@@ -82,12 +83,16 @@ export interface Deps {
     payload: import("@/boldpenguin/types").CapturedApplication,
     overwrite: boolean
   ) => Promise<import("@/boldpenguin/types").PortalFillResult>;
+  /** Injects the page harvester into the tab and returns its visible fields. */
+  ingestPortalTab: (tabId: number) => Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }>;
 }
 
 function pageKindOf(url: string): import("@/messages").PageKind {
   if (/^https:\/\/app\.ezlynx\.com\//i.test(url)) return "ezlynx";
   if (/^https:\/\/([^/]+\.)*boldpenguin\.com\//i.test(url)) return "boldpenguin";
-  return "other";
+  if (/^https:\/\/[^/]+\.(crm[0-9]*\.)?dynamics\.com\//i.test(url) || /^https:\/\/login\.microsoftonline\.com\//i.test(url)) return "crm";
+  if (/^https:/i.test(url)) return "other";
+  return "crm"; // chrome://, edge://, file:, http: — never a fillable/ingestable portal
 }
 
 export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<unknown>> {
@@ -297,6 +302,18 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: await deps.fillPortalTab(msg.tabId, app, msg.overwrite) };
       }
 
+      case "panel/portalIngest": {
+        const harvested = await deps.ingestPortalTab(msg.tabId);
+        const existing = await deps.getCapturedApplication();
+        const outcome = mergeIngestedFields(existing, harvested.fields, {
+          system: new URL(harvested.url).hostname,
+          url: harvested.url,
+          title: harvested.title
+        });
+        await deps.setCapturedApplication(outcome.app);
+        return { ok: true, data: outcome };
+      }
+
       case "auth/signIn": {
         const env = await deps.getActiveEnvironment();
         // force a fresh interactive sign-in: the cached token may be VALID but
@@ -404,6 +421,17 @@ async function fillPortalTab(
   return reply.result;
 }
 
+async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }> {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["portal/portal-ingest.js"] });
+  const reply = (await chrome.tabs.sendMessage(tabId, { type: "INGEST_PAGE" })) as
+    | { ok: true; fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }
+    | { ok: false; error: string }
+    | undefined;
+  if (!reply) throw new Error("The page did not respond. Reload it and retry.");
+  if (!reply.ok) throw new Error(reply.error);
+  return reply;
+}
+
 export const realDeps: Deps = {
   getEnvironments,
   getActiveEnvironment,
@@ -441,5 +469,6 @@ export const realDeps: Deps = {
   getActiveTab,
   getCapturedApplication,
   setCapturedApplication,
-  fillPortalTab
+  fillPortalTab,
+  ingestPortalTab
 };

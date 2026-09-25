@@ -74,12 +74,13 @@ export function App() {
     };
   }, [refreshPage]);
 
-  // Portal fill only offers itself while the personal-lines wizard is idle —
-  // glancing at a CRM tab mid-import must not hide the in-progress wizard.
+  // The portal card (ingest/fill) only offers itself while the personal-lines
+  // wizard is idle — glancing at another tab mid-import must not hide the
+  // in-progress wizard. CRM and sign-in tabs never present as portals.
   const wizardIdle = state.step === "run" && !state.captured;
-  const mode: "commercial" | "fill" | "personal" =
+  const mode: "commercial" | "portal" | "personal" =
     page?.kind === "boldpenguin" ? "commercial" :
-    page?.kind === "other" && page.hasCapturedApplication && wizardIdle ? "fill" :
+    page?.kind === "other" && wizardIdle ? "portal" :
     "personal";
 
   // The EZLynx content script broadcasts SPA navigations to a different
@@ -108,7 +109,7 @@ export function App() {
       </div>
       <div className={styles.body}>
         {mode === "commercial" && <CommercialCapture onChanged={refreshPage} />}
-        {mode === "fill" && <PortalFill onCleared={refreshPage} />}
+        {mode === "portal" && <PortalFill onChanged={refreshPage} />}
         {mode === "personal" && <>
         {state.step === "run" && (
           <RunPicker key={state.ezlynxApplicantId ?? "none"} state={state} dispatch={dispatch} />

@@ -5,8 +5,10 @@ import type { CapturedApplication, PortalFillResult } from "@/boldpenguin/types"
 
 export type { CommitPayload, CapturedApplication, PortalFillResult };
 
-/** What kind of page the active tab is showing — drives the panel's mode. */
-export type PageKind = "ezlynx" | "boldpenguin" | "other";
+/** What kind of page the active tab is showing — drives the panel's mode.
+ * "crm" (Dynamics / Microsoft sign-in) renders the default wizard, never the
+ * portal card. "other" is a candidate carrier portal (ingest/fill). */
+export type PageKind = "ezlynx" | "boldpenguin" | "crm" | "other";
 export interface PageContext {
   kind: PageKind;
   /** A Bold Penguin application is held in session storage, ready to fill portals. */
@@ -37,6 +39,7 @@ export type PanelRequest =
   | { type: "panel/bpGetCaptured" }
   | { type: "panel/bpClear" }
   | { type: "panel/portalFill"; tabId: number; overwrite: boolean }
+  | { type: "panel/portalIngest"; tabId: number }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };

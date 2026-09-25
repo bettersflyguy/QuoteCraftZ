@@ -19,7 +19,8 @@ export type NormalizedApplication = Record<string, Record<string, string | strin
 export interface CapturedApplication {
   schemaVersion: "1.1";
   capturedAt: string;
-  source: { system: "Bold Penguin"; url: string; title: string };
+  /** "Bold Penguin" for application captures; the site hostname for portal ingests. */
+  source: { system: string; url: string; title: string };
   completion: { likelyCompleted: boolean; matchedPhrases: string[]; hasReviewStep: boolean };
   scannedSections: string[];
   normalized: NormalizedApplication;
