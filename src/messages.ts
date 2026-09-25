@@ -40,6 +40,7 @@ export type PanelRequest =
   | { type: "panel/bpClear" }
   | { type: "panel/portalFill"; tabId: number; overwrite: boolean }
   | { type: "panel/portalIngest"; tabId: number }
+  | { type: "panel/appCommit"; accountId: string }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };

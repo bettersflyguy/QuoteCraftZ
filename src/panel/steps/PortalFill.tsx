@@ -3,6 +3,7 @@ import { Button, Checkbox, Spinner, makeStyles, tokens } from "@fluentui/react-c
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { downloadCapture } from "../downloadCapture";
+import { LoadToCrm } from "./LoadToCrm";
 import type { CapturedApplication, PortalFillResult } from "@/messages";
 
 const useStyles = makeStyles({
@@ -136,6 +137,7 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
           {fillResult.filledCount ? " Review the highlighted values before moving on." : " Move to the portal page that shows the application form and retry."}
         </div>
       )}
+      {app && <LoadToCrm key={app.capturedAt} app={app} />}
       {app && (
         <div className={styles.buttons}>
           <Button onClick={() => downloadCapture(app)}>Download JSON</Button>

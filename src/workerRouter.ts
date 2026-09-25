@@ -35,6 +35,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
+import { applicantFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 
 export interface Deps {
   getEnvironments: () => Promise<CrmEnvironment[]>;
@@ -312,6 +313,47 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         });
         await deps.setCapturedApplication(outcome.app);
         return { ok: true, data: outcome };
+      }
+
+      case "panel/appCommit": {
+        const app = await deps.getCapturedApplication();
+        if (!app) {
+          return { ok: false, error: "The captured application is no longer available. Capture or ingest it again.", kind: "session" };
+        }
+        const env = await deps.getActiveEnvironment();
+        const results: import("@/crm/dataverse").BatchItemResult[] = [];
+        // same best-effort structure as the EZLynx commit: enrichment first,
+        // then the knowledge write, each surfacing its own result row.
+        try {
+          const en = await ensureInsuredData(env, msg.accountId, applicantFromCapture(app), {
+            getAccountEnrichmentState: deps.getAccountEnrichmentState,
+            updateAccount: deps.updateAccount,
+            getAccountContacts: deps.getAccountContacts,
+            createContact: deps.createContact,
+            contactHasDlColumns: deps.contactHasDlColumns
+          });
+          const bits = [];
+          if (en.filledFields.length) bits.push(`filled ${en.filledFields.length} field${en.filledFields.length === 1 ? "" : "s"}`);
+          if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
+          if (en.primaryContactSet) bits.push("set primary contact");
+          results.push({ key: `Insured profile — ${bits.length ? bits.join("; ") : "already complete"}`, status: 204, error: null, entityId: null });
+        } catch (e) {
+          results.push({ key: "Insured profile", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
+        try {
+          const know = await writeApplicationKnowledge(env, app, msg.accountId, {
+            getKnowledgeNavProps: deps.getKnowledgeNavProps,
+            executeBatch: deps.executeBatch
+          });
+          if (know.skipped === "no-tables") {
+            results.push({ key: "Application data — waiting on CRM tables (iacrm_carrierquestion); nothing logged", status: 204, error: null, entityId: null });
+          } else {
+            results.push({ key: `Application data — ${know.answersUpserted} fields logged to the risk-data layer`, status: 204, error: null, entityId: null });
+          }
+        } catch (e) {
+          results.push({ key: "Application data", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
+        return { ok: true, data: results };
       }
 
       case "auth/signIn": {

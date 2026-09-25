@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
+import { LoadToCrm } from "./LoadToCrm";
 import type { CapturedApplication } from "@/messages";
 
 const useStyles = makeStyles({
@@ -118,6 +119,7 @@ export function CommercialCapture({ onChanged }: { onChanged: () => void }) {
             Captured {new Date(app.capturedAt).toLocaleString()}. Switch to a carrier
             portal tab — this panel offers "Fill this page" there.
           </div>
+          <LoadToCrm key={app.capturedAt} app={app} />
           <div className={styles.buttons}>
             <Button disabled={busy} onClick={capture}>{busy ? <Spinner size="tiny" /> : "Re-capture"}</Button>
             <Button onClick={() => downloadJson(app)}>Download JSON</Button>
