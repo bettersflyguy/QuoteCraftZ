@@ -134,17 +134,32 @@ function fieldValue(app: CapturedApplication, labelRe: RegExp): string {
   return f ? clean(f.value) : "";
 }
 
+function addMonthsUs(usDate: string, months: number): string {
+  const m = usDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return "";
+  const d = new Date(Number(m[3]), Number(m[1]) - 1 + months, Number(m[2]));
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
 export function policyFromCapture(app: CapturedApplication): PolicyDraft {
   const number = str(app, "policy", "number") ?? fieldValue(app, /^policy\s*(number|no|#)\b/i);
-  const premium = str(app, "policy", "premium") ??
-    fieldValue(app, /total\s+premium|premium\s*:?\s*$/i) ??
-    "";
+  const premium = str(app, "policy", "premium") ||
+    fieldValue(app, /total\s+premium|premium\s*:?\s*$/i);
+  const effectiveDate = str(app, "coverage", "effectiveDate") ?? fieldValue(app, /effective\s*date/i);
+  let expirationDate = str(app, "coverage", "expirationDate") ?? fieldValue(app, /expiration\s*date/i);
+  if (!expirationDate && effectiveDate) {
+    // sale screens rarely print the expiration — derive it from the term
+    // ("Policy Term: 6 months" / "6 Month Auto Premium")
+    const termText = fieldValue(app, /policy\s*term/i) || app.fields.find(f => /\b(6|12)\s*[- ]?month/i.test(f.label) && /premium/i.test(f.label))?.label || "";
+    const term = termText.match(/\b(6|12)\b/);
+    if (term) expirationDate = addMonthsUs(effectiveDate, Number(term[1]));
+  }
   return {
     hasPolicy: Boolean(number),
     number: number ?? "",
     premiumText: premium,
-    effectiveDate: str(app, "coverage", "effectiveDate") ?? fieldValue(app, /effective\s*date/i),
-    expirationDate: str(app, "coverage", "expirationDate") ?? fieldValue(app, /expiration\s*date/i),
+    effectiveDate,
+    expirationDate,
     carrierName: carrierGuess(app)
   };
 }

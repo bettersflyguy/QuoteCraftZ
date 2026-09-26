@@ -179,6 +179,29 @@
       if (r && r[2].split(" ").length <= 3) fields.push({ label: r[2], value: r[1], section, group: "", source: "money-line" });
     });
 
+    /* sale/confirmation facts are usually PROSE, not form fields ("GEICO Auto
+     * Policy Number: 6277201270", "Your coverage is effective 9/27/2026",
+     * "Your 6 Month Auto Premium is $922.00") — pattern-match the page text */
+    const bodyText = clean((document.body.innerText || "").slice(0, 150000));
+    const saleSeen = new Set();
+    const salePush = (label, value) => {
+      if (value && !saleSeen.has(label)) { saleSeen.add(label); fields.push({ label, value: clean(value), section, group: "", source: "sale" }); }
+    };
+    const pol = bodyText.match(/policy\s*(?:number|#)\s*:?\s*([A-Z0-9][A-Z0-9-]{4,19})/i);
+    if (pol) salePush("Policy Number", pol[1]);
+    const eff = bodyText.match(/(?:coverage is\s+)?effective(?:\s*date)?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    if (eff) salePush("Effective Date", eff[1]);
+    const exp = bodyText.match(/expiration(?:\s*date)?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    if (exp) salePush("Expiration Date", exp[1]);
+    const termPrem = bodyText.match(/(\d{1,2})\s*[- ]?month[^$.]{0,40}?premium[^$]{0,15}\$\s*([\d,]+(?:\.\d{2})?)/i);
+    if (termPrem) {
+      salePush("Total Premium", "$" + termPrem[2]);
+      salePush("Policy Term", termPrem[1] + " months");
+    } else {
+      const prem = bodyText.match(/total\s+premium\s*:?\s*\$\s*([\d,]+(?:\.\d{2})?)/i);
+      if (prem) salePush("Total Premium", "$" + prem[1]);
+    }
+
     return fields.filter((field) => field.label && field.value);
   }
 

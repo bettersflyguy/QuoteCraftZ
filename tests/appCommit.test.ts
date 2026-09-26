@@ -104,6 +104,24 @@ describe("policyFromCapture (sale screen)", () => {
     expect(policyFromCapture(capture()).hasPolicy).toBe(false);
   });
 
+  it("derives the expiration from effective + term when the sale screen omits it (live GEICO shape)", () => {
+    const sold = capture({
+      normalized: {},
+      fields: [
+        { label: "Policy Number", value: "6277201270", section: "Sale", group: "", source: "sale" },
+        { label: "Effective Date", value: "9/27/2026", section: "Sale", group: "", source: "sale" },
+        { label: "Total Premium", value: "$922.00", section: "Sale", group: "", source: "sale" },
+        { label: "Policy Term", value: "6 months", section: "Sale", group: "", source: "sale" }
+      ]
+    });
+    const d = policyFromCapture(sold);
+    expect(d.hasPolicy).toBe(true);
+    expect(d.number).toBe("6277201270");
+    expect(d.premiumText).toBe("$922.00");
+    expect(d.effectiveDate).toBe("9/27/2026");
+    expect(d.expirationDate).toBe("3/27/2027");
+  });
+
   it("parses money text into numbers", () => {
     expect(parseMoney("$3,089.50")).toBe(3089.5);
     expect(parseMoney("516")).toBe(516);
