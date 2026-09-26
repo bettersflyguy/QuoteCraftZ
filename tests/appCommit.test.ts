@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applicantFromCapture, accountNameFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
+import { applicantFromCapture, accountNameFromCapture, carrierGuess, detectPhone, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CrmEnvironment } from "@/crm/environments";
 
@@ -46,6 +46,40 @@ describe("applicantFromCapture", () => {
   it("never writes an unparseable birthdate", () => {
     expect(toIsoDate("Nov 18 1949")).toBeNull();
     expect(toIsoDate("2026-10-01")).toBe("2026-10-01");
+  });
+});
+
+describe("detectPhone", () => {
+  it("rejects a phone TYPE that landed in the phone slot and finds the real number", () => {
+    const app = capture({
+      normalized: { contact: { phone: "Cellular telephone" } },
+      fields: [
+        { label: "Phone Type", value: "Cellular telephone", section: "Q", group: "", source: "control" },
+        { label: "Phone Number", value: "(555) 010-0123", section: "Q", group: "", source: "control" }
+      ]
+    });
+    expect(detectPhone(app)).toEqual({ number: "(555) 010-0123", isMobile: true });
+    // the enrichment applicant carries the mobile type so iacrm_mobilephone fills
+    expect(applicantFromCapture(app).phones).toEqual([{ type: "Mobile", number: "(555) 010-0123" }]);
+  });
+
+  it("prefers an explicit cell/mobile-labeled number", () => {
+    const app = capture({
+      normalized: {},
+      fields: [{ label: "Cell Phone", value: "555-010-0123", section: "Q", group: "", source: "control" }]
+    });
+    expect(detectPhone(app)).toEqual({ number: "555-010-0123", isMobile: true });
+  });
+
+  it("returns null when nothing has enough digits", () => {
+    expect(detectPhone(capture({ normalized: { contact: { phone: "Home" } }, fields: [] }))).toBeNull();
+  });
+});
+
+describe("carrierGuess", () => {
+  it("maps known portal hosts to carrier names", () => {
+    expect(carrierGuess(capture())).toBe("GEICO");
+    expect(carrierGuess(capture({ source: { system: "www.foragentsonly.com", url: "https://www.foragentsonly.com/q", title: "FAO" } }))).toBe("Progressive");
   });
 });
 

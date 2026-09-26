@@ -35,7 +35,8 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { applicantFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { writeApplicationKnowledge } from "@/crm/appCommit";
+import { createLead } from "@/crm/dataverse";
 
 export interface Deps {
   getEnvironments: () => Promise<CrmEnvironment[]>;
@@ -65,6 +66,7 @@ export interface Deps {
   getKnowledgeNavProps: typeof getKnowledgeNavProps;
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
+  createLead: typeof createLead;
   getCarrierAliases: typeof getCarrierAliases;
   saveCarrierAlias: typeof saveCarrierAlias;
   getAccessToken: typeof getAccessToken;
@@ -325,7 +327,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         // same best-effort structure as the EZLynx commit: enrichment first,
         // then the knowledge write, each surfacing its own result row.
         try {
-          const en = await ensureInsuredData(env, msg.accountId, applicantFromCapture(app), {
+          const en = await ensureInsuredData(env, msg.accountId, msg.applicant, {
             getAccountEnrichmentState: deps.getAccountEnrichmentState,
             updateAccount: deps.updateAccount,
             getAccountContacts: deps.getAccountContacts,
@@ -339,6 +341,14 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           results.push({ key: `Insured profile — ${bits.length ? bits.join("; ") : "already complete"}`, status: 204, error: null, entityId: null });
         } catch (e) {
           results.push({ key: "Insured profile", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
+        if (msg.insuredType != null) {
+          try {
+            await deps.updateAccount(env, msg.accountId, { iacrm_insuredtype: msg.insuredType });
+            results.push({ key: `Insured type — set to ${msg.insuredType === 2 ? "Commercial" : "Personal"}`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            results.push({ key: "Insured type", status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
         }
         try {
           const know = await writeApplicationKnowledge(env, app, msg.accountId, {
@@ -354,6 +364,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           results.push({ key: "Application data", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
         return { ok: true, data: results };
+      }
+
+      case "panel/createLead": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.createLead(env, msg.fields) };
       }
 
       case "auth/signIn": {
@@ -518,6 +533,7 @@ export const realDeps: Deps = {
   getKnowledgeNavProps,
   executeBatch,
   buildQuoteOps,
+  createLead,
   getCarrierAliases,
   saveCarrierAlias,
   getAccessToken,

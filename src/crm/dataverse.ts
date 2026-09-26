@@ -123,6 +123,31 @@ export async function createAccount(env: CrmEnvironment, f: NewAccountFields): P
   return { accountId: r["accountid"]!, name: r["name"] ?? f.name };
 }
 
+export interface NewLeadFields extends NewAccountFields {
+  firstName: string | null;
+  lastName: string | null;
+  /** Fills mobilephone instead of telephone1 when the number is a cell. */
+  phoneIsMobile: boolean;
+  /** Lead subject, e.g. "Progressive Auto Quote — Dearris Thomas". */
+  topic: string;
+}
+
+export async function createLead(env: CrmEnvironment, f: NewLeadFields): Promise<{ leadId: string; name: string }> {
+  const body: Record<string, unknown> = { subject: f.topic };
+  if (f.firstName) body["firstname"] = f.firstName;
+  if (f.lastName) body["lastname"] = f.lastName;
+  // companyname: the business name for commercial leads only
+  if (f.name && f.name !== `${f.firstName ?? ""} ${f.lastName ?? ""}`.trim()) body["companyname"] = f.name;
+  if (f.street) body["address1_line1"] = f.street;
+  if (f.city) body["address1_city"] = f.city;
+  if (f.state) body["address1_stateorprovince"] = f.state;
+  if (f.postalCode) body["address1_postalcode"] = f.postalCode;
+  if (f.phone) body[f.phoneIsMobile ? "mobilephone" : "telephone1"] = f.phone;
+  if (f.email) body["emailaddress1"] = f.email;
+  const r = await dvPost<Record<string, string>>(env, "leads?$select=leadid,fullname", body);
+  return { leadId: r["leadid"]!, name: r["fullname"] ?? f.topic };
+}
+
 export async function getLinesOfBusiness(env: CrmEnvironment): Promise<LobRow[]> {
   const { value } = await dvJson<{ value: Record<string, string>[] }>(
     env, `iacrm_lineofbusinesses?$select=iacrm_lineofbusinessid,iacrm_lineofbusiness_name&$filter=statecode eq 0&$orderby=iacrm_lineofbusiness_name`

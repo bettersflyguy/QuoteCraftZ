@@ -25,36 +25,101 @@ export function toIsoDate(value: string | null): string | null {
   return null;
 }
 
-/** Projects the capture's normalized identity into the shape the existing
- * enrichment pipeline (ensureInsuredData) already consumes. */
-export function applicantFromCapture(app: CapturedApplication): CapturedApplicant {
+const digitsOf = (v: string | null) => (v ?? "").replace(/\D/g, "");
+
+/** A usable phone number, with mobile detection. Portals often pair a
+ * "Phone Type" select ("Cellular telephone") with the number in a separate
+ * control — a value without >=7 digits is a TYPE, never a number. */
+export function detectPhone(app: CapturedApplication): { number: string; isMobile: boolean } | null {
+  const typeField = app.fields.find(f => /\bphone\s*type\b|\btype\s*of\s*phone\b/i.test(f.label));
+  const typeSaysMobile = Boolean(typeField && /cell|mobile|wireless/i.test(typeField.value));
+
+  const normalized = str(app, "contact", "phone");
+  if (normalized && digitsOf(normalized).length >= 7) return { number: normalized, isMobile: typeSaysMobile };
+
+  const mobileField = app.fields.find(f =>
+    /\b(cell|mobile|cellular)\b/i.test(f.label) && /phone|number|telephone/i.test(f.label + " phone") && digitsOf(f.value).length >= 7);
+  if (mobileField) return { number: clean(mobileField.value), isMobile: true };
+
+  const anyField = app.fields.find(f => /\bphone\b|\btelephone\b/i.test(f.label) && !/\btype\b/i.test(f.label) && digitsOf(f.value).length >= 7);
+  if (anyField) return { number: clean(anyField.value), isMobile: typeSaysMobile };
+  return null;
+}
+
+/** The editable identity the panel shows before anything is written —
+ * captured data is a starting point the agent reviews, not gospel. */
+export interface CaptureIdentity {
+  firstName: string;
+  lastName: string;
+  businessName: string;
+  street: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  phone: string;
+  phoneIsMobile: boolean;
+  email: string;
+  dateOfBirth: string;
+}
+
+export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   let firstName = str(app, "contact", "firstName") ?? "";
   let lastName = str(app, "contact", "lastName") ?? "";
   if (!firstName && !lastName) {
-    const full = clean(str(app, "contact", "fullName") ?? "");
-    const parts = full.split(" ");
+    const parts = clean(str(app, "contact", "fullName") ?? "").split(" ");
     firstName = parts[0] ?? "";
     lastName = parts.slice(1).join(" ");
   }
-  const street = [str(app, "address", "street1"), str(app, "address", "street2")].filter(Boolean).join(", ");
-  const city = str(app, "address", "city");
-  const state = str(app, "address", "state");
-  const postalCode = str(app, "address", "postalCode");
-  const phone = str(app, "contact", "phone");
-  const email = str(app, "contact", "email");
+  const phone = detectPhone(app);
   return {
-    ezlynxApplicantId: 0,
     firstName,
     lastName,
-    dateOfBirth: toIsoDate(str(app, "contact", "dateOfBirth")),
+    businessName: str(app, "business", "legalName") ?? "",
+    street: [str(app, "address", "street1"), str(app, "address", "street2")].filter(Boolean).join(", "),
+    city: str(app, "address", "city") ?? "",
+    state: str(app, "address", "state") ?? "",
+    postalCode: str(app, "address", "postalCode") ?? "",
+    phone: phone?.number ?? "",
+    phoneIsMobile: phone?.isMobile ?? false,
+    email: str(app, "contact", "email") ?? "",
+    dateOfBirth: str(app, "contact", "dateOfBirth") ?? ""
+  };
+}
+
+/** Builds the enrichment-pipeline applicant from the agent-reviewed identity. */
+export function applicantFromIdentity(id: CaptureIdentity, isCommercial: boolean): CapturedApplicant {
+  const hasAddress = Boolean(id.street || id.city || id.postalCode);
+  return {
+    ezlynxApplicantId: 0,
+    firstName: clean(id.firstName),
+    lastName: clean(id.lastName),
+    dateOfBirth: toIsoDate(clean(id.dateOfBirth) || null),
     dlNumber: null,
     dlState: null,
-    address: street || city || postalCode ? { street, city: city ?? "", state: state ?? "", postalCode: postalCode ?? "" } : null,
-    phones: phone ? [{ type: null, number: phone }] : [],
-    emails: email ? [email] : [],
+    address: hasAddress ? { street: clean(id.street), city: clean(id.city), state: clean(id.state), postalCode: clean(id.postalCode) } : null,
+    phones: clean(id.phone) ? [{ type: id.phoneIsMobile ? "Mobile" : null, number: clean(id.phone) }] : [],
+    emails: clean(id.email) ? [clean(id.email)] : [],
     coApplicants: [],
-    isCommercial: Boolean(str(app, "business", "legalName"))
+    isCommercial
   };
+}
+
+/** Projects the capture's normalized identity into the shape the existing
+ * enrichment pipeline (ensureInsuredData) already consumes. */
+export function applicantFromCapture(app: CapturedApplication): CapturedApplicant {
+  return applicantFromIdentity(identityFromCapture(app), Boolean(str(app, "business", "legalName")));
+}
+
+/** Best-guess carrier from the capture source, for opportunity naming. */
+export function carrierGuess(app: CapturedApplication): string {
+  const s = `${app.source.system} ${app.source.url}`.toLowerCase();
+  if (s.includes("geico")) return "GEICO";
+  if (s.includes("progressive") || s.includes("foragentsonly")) return "Progressive";
+  if (s.includes("safeco")) return "Safeco";
+  if (s.includes("travelers")) return "Travelers";
+  if (s.includes("libertymutual")) return "Liberty Mutual";
+  if (s.includes("boldpenguin")) return "Bold Penguin";
+  return app.source.system;
 }
 
 /** The account name a new record should get: business name for commercial,

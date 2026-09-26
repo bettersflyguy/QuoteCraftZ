@@ -1,4 +1,4 @@
-import type { CapturedRun, RunListItem } from "@/types";
+import type { CapturedApplicant, CapturedRun, RunListItem } from "@/types";
 import type { CommitPayload } from "@/crm/mapping";
 import type { NewAccountFields } from "@/crm/dataverse";
 import type { CapturedApplication, PortalFillResult } from "@/boldpenguin/types";
@@ -40,7 +40,10 @@ export type PanelRequest =
   | { type: "panel/bpClear" }
   | { type: "panel/portalFill"; tabId: number; overwrite: boolean }
   | { type: "panel/portalIngest"; tabId: number }
-  | { type: "panel/appCommit"; accountId: string }
+  /** applicant is the agent-REVIEWED identity from the panel, not the raw
+   * capture; insuredType is iacrm_insuredtype (1 Personal, 2 Commercial). */
+  | { type: "panel/appCommit"; accountId: string; applicant: CapturedApplicant; insuredType: 1 | 2 | null }
+  | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };
