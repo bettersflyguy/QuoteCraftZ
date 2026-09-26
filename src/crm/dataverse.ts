@@ -238,6 +238,11 @@ export async function findInsuredMatches(env: CrmEnvironment, q: MatchQuery): Pr
     leadFilters.push(`telephone1 eq '${oesc(p)}'`, `mobilephone eq '${oesc(p)}'`);
   }
   for (const t of nameTerms) accFilters.push(`contains(name,'${oesc(t)}')`);
+  if (!q.businessName && q.firstName && q.lastName) {
+    // catches accounts whose display name doesn't carry the person's name at all
+    // ("Downing Household"); custom columns, so guarded like iacrm_mobilephone
+    accMobileFilters.push(`(iacrm_insuredfirstname eq '${oesc(q.firstName)}' and iacrm_insuredlastname eq '${oesc(q.lastName)}')`);
+  }
   if (q.businessName) leadFilters.push(`contains(companyname,'${oesc(q.businessName)}')`);
   if (q.firstName && q.lastName) leadFilters.push(`(firstname eq '${oesc(q.firstName)}' and lastname eq '${oesc(q.lastName)}')`);
   if (!accFilters.length && !accMobileFilters.length && !leadFilters.length) return [];
