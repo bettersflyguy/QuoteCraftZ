@@ -186,28 +186,61 @@ const oesc = (v: string) => v.replace(/'/g, "''");
 /** Duplicate gate before any create: existing Accounts AND open Leads matched
  * by email first, then phone, then name (business name when commercial).
  * Ordered by match strength; each record reports WHY it matched. */
+/** Dataverse cannot normalize a phone inside a filter, so the only way to match a number
+ * that was stored in a different shape is to ask for every shape it is plausibly in.
+ * "8133457954" is one string to us and at least six to the people who typed it. */
+export function phoneFilterVariants(phone: string | null): string[] {
+  const d = (phone ?? "").replace(/\D/g, "");
+  const ten = d.length > 10 && d.startsWith("1") ? d.slice(1) : d;
+  const out = new Set<string>();
+  if (phone && phone.trim()) out.add(phone.trim());
+  if (d.length >= 7) out.add(d);
+  if (ten.length === 10) {
+    const [a, b, c] = [ten.slice(0, 3), ten.slice(3, 6), ten.slice(6)];
+    out.add(ten);
+    out.add(`(${a}) ${b}-${c}`);
+    out.add(`(${a})${b}-${c}`);
+    out.add(`${a}-${b}-${c}`);
+    out.add(`${a}.${b}.${c}`);
+    out.add(`${a} ${b} ${c}`);
+    out.add(`+1${ten}`);
+    out.add(`1${ten}`);
+  }
+  return [...out];
+}
+
+/** Account primary names arrive from several places and do not agree on word order:
+ * this extension writes "Mathew Downing", an AMS sync commonly writes "Downing, Mathew". */
+export function personNameVariants(firstName: string | null, lastName: string | null): string[] {
+  const f = (firstName ?? "").trim(), l = (lastName ?? "").trim();
+  if (!f || !l) return [f || l].filter(Boolean);
+  return [`${f} ${l}`, `${l}, ${f}`, `${l} ${f}`];
+}
+
 export async function findInsuredMatches(env: CrmEnvironment, q: MatchQuery): Promise<ExistingMatch[]> {
   const digits = (q.phone ?? "").replace(/\D/g, "");
-  const phoneVariants = [...new Set([q.phone, digits].filter((p): p is string => Boolean(p && p.length >= 7)))];
-  const personName = `${q.firstName ?? ""} ${q.lastName ?? ""}`.trim();
-  const nameTerm = q.businessName || personName;
+  const phoneVariants = phoneFilterVariants(q.phone);
+  const nameTerms = q.businessName ? [q.businessName] : personNameVariants(q.firstName, q.lastName);
 
   const accFilters: string[] = [];
+  const accMobileFilters: string[] = [];
   const leadFilters: string[] = [];
   if (q.email) {
     accFilters.push(`emailaddress1 eq '${oesc(q.email)}'`);
     leadFilters.push(`emailaddress1 eq '${oesc(q.email)}'`);
   }
   for (const p of phoneVariants) {
-    accFilters.push(`telephone1 eq '${oesc(p)}'`, `iacrm_mobilephone eq '${oesc(p)}'`);
+    accFilters.push(`telephone1 eq '${oesc(p)}'`);
+    // iacrm_mobilephone is a CUSTOM column on a SYSTEM table, so it is exactly the kind of
+    // component that can be missing from an environment's solution. Kept separate so a 400
+    // over that one column costs us the mobile clause, not the whole account search.
+    accMobileFilters.push(`iacrm_mobilephone eq '${oesc(p)}'`);
     leadFilters.push(`telephone1 eq '${oesc(p)}'`, `mobilephone eq '${oesc(p)}'`);
   }
-  if (nameTerm) {
-    accFilters.push(`contains(name,'${oesc(nameTerm)}')`);
-    if (q.businessName) leadFilters.push(`contains(companyname,'${oesc(q.businessName)}')`);
-    if (q.firstName && q.lastName) leadFilters.push(`(firstname eq '${oesc(q.firstName)}' and lastname eq '${oesc(q.lastName)}')`);
-  }
-  if (!accFilters.length && !leadFilters.length) return [];
+  for (const t of nameTerms) accFilters.push(`contains(name,'${oesc(t)}')`);
+  if (q.businessName) leadFilters.push(`contains(companyname,'${oesc(q.businessName)}')`);
+  if (q.firstName && q.lastName) leadFilters.push(`(firstname eq '${oesc(q.firstName)}' and lastname eq '${oesc(q.lastName)}')`);
+  if (!accFilters.length && !accMobileFilters.length && !leadFilters.length) return [];
 
   const emailNorm = (q.email ?? "").toLowerCase();
   const phoneDigits = digits.length >= 7 ? digits.slice(-10) : "";
@@ -217,12 +250,23 @@ export async function findInsuredMatches(env: CrmEnvironment, q: MatchQuery): Pr
     return "name";
   };
 
+  const accountQuery = (withMobile: boolean) => {
+    const filters = withMobile ? [...accFilters, ...accMobileFilters] : accFilters;
+    const select = `accountid,name,address1_city,address1_postalcode,emailaddress1,telephone1${withMobile ? ",iacrm_mobilephone" : ""}`;
+    return `accounts?$select=${select}&$filter=statecode eq 0 and (${filters.join(" or ")})&$top=10`;
+  };
+
   const out: ExistingMatch[] = [];
-  if (accFilters.length) {
-    const { value } = await dvJson<{ value: Record<string, string>[] }>(
-      env,
-      `accounts?$select=accountid,name,address1_city,address1_postalcode,emailaddress1,telephone1,iacrm_mobilephone&$filter=statecode eq 0 and (${accFilters.join(" or ")})&$top=10`
-    );
+  if (accFilters.length || accMobileFilters.length) {
+    let value: Record<string, string>[] = [];
+    try {
+      ({ value } = await dvJson<{ value: Record<string, string>[] }>(env, accountQuery(true)));
+    } catch {
+      // The mobile column is absent from this environment (or otherwise unusable). Showing the
+      // matches we CAN find beats showing none and letting a duplicate through.
+      if (!accFilters.length) throw new Error("account match failed and no non-mobile filter remained");
+      ({ value } = await dvJson<{ value: Record<string, string>[] }>(env, accountQuery(false)));
+    }
     for (const a of value) {
       out.push({
         kind: "account", id: a["accountid"]!, name: a["name"] ?? "",

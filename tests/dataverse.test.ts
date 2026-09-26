@@ -6,7 +6,8 @@ vi.mock("@/crm/auth", () => ({
   AuthRequiredError: class extends Error {}
 }));
 
-import { altKeyUrl, executeBatch, getExistingQuoteStatuses, searchAccounts, CrmAccessError } from "@/crm/dataverse";
+import { altKeyUrl, executeBatch, getExistingQuoteStatuses, searchAccounts, CrmAccessError,
+  phoneFilterVariants, personNameVariants, findInsuredMatches } from "@/crm/dataverse";
 
 const ENV = { id: "dev", name: "DEV", orgUrl: "https://org.crm.dynamics.com", color: "green" as const };
 
@@ -111,5 +112,76 @@ describe("getExistingQuoteStatuses", () => {
     const m = await getExistingQuoteStatuses(ENV, ["ezlynx:1:req", "ezlynx:2:req"]);
     expect(m.get("ezlynx:1:req")).toBe(738590002);
     expect(m.has("ezlynx:2:req")).toBe(false);
+  });
+});
+
+describe("duplicate gate matching", () => {
+  it("asks for every shape a phone number is plausibly stored in", () => {
+    const v = phoneFilterVariants("813-345-7954");
+    // the shape the portal gave us, plus the shapes a human or an AMS would have typed
+    expect(v).toContain("813-345-7954");
+    expect(v).toContain("8133457954");
+    expect(v).toContain("(813) 345-7954");
+    expect(v).toContain("+18133457954");
+  });
+
+  it("strips a leading country code before building variants", () => {
+    expect(phoneFilterVariants("+1 813 345 7954")).toContain("(813) 345-7954");
+  });
+
+  it("ignores a number too short to identify anybody", () => {
+    expect(phoneFilterVariants("911")).toEqual(["911"]);
+    expect(phoneFilterVariants(null)).toEqual([]);
+  });
+
+  it("looks for the account name in both word orders", () => {
+    expect(personNameVariants("Mathew", "Downing")).toEqual(["Mathew Downing", "Downing, Mathew", "Downing Mathew"]);
+  });
+
+  it("finds an account whose phone is stored formatted, not as digits", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/accounts")) {
+        return new Response(JSON.stringify({ value: [{
+          accountid: "acc-1", name: "Downing, Mathew", telephone1: "(813) 345-7954",
+          address1_city: "Lakeland", address1_postalcode: "33811"
+        }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ value: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await findInsuredMatches(ENV, {
+      email: null, phone: "813-345-7954", firstName: "Mathew", lastName: "Downing", businessName: null
+    });
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ kind: "account", id: "acc-1", matchedBy: "phone" });
+  });
+
+  it("still returns matches when the environment has no iacrm_mobilephone column", async () => {
+    const seen: string[] = [];
+    const fetchMock = vi.fn(async (url: string) => {
+      const u = String(url);
+      seen.push(u);
+      if (u.includes("/accounts") && u.includes("iacrm_mobilephone")) {
+        // what Dataverse says when a custom column is missing from the environment
+        return new Response(JSON.stringify({ error: { message: "'Account' entity doesn't contain attribute with Name = 'iacrm_mobilephone'" } }),
+          { status: 400, headers: { "Content-Type": "application/json" } });
+      }
+      if (u.includes("/accounts")) {
+        return new Response(JSON.stringify({ value: [{ accountid: "acc-2", name: "Mathew Downing", telephone1: "813-345-7954" }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ value: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await findInsuredMatches(ENV, {
+      email: null, phone: "813-345-7954", firstName: "Mathew", lastName: "Downing", businessName: null
+    });
+
+    expect(out.map(m => m.id)).toEqual(["acc-2"]);
+    expect(seen.some(u => u.includes("iacrm_mobilephone"))).toBe(true);
+    expect(seen.some(u => u.includes("/accounts") && !u.includes("iacrm_mobilephone"))).toBe(true);
   });
 });

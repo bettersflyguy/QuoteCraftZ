@@ -42,6 +42,8 @@ interface OppState { create: boolean; lobId: string | null; name: string; nameEd
  * not gospel), picks Insured-vs-Lead and Personal/Commercial. Step 2 targets
  * the record (account search/create, or lead create) and optionally creates
  * the carrier opportunity. Worker runs enrichment + risk-data logging. */
+const MATCH_LABEL = { email: "email match", phone: "phone match", name: "name match" } as const;
+
 export function LoadToCrm({ app }: { app: CapturedApplication }) {
   const styles = useStyles();
   const [step, setStep] = useState<"closed" | "review" | "target">("closed");
@@ -72,15 +74,9 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
 
   useEffect(() => { getActiveEnvironment().then(setEnv).catch(() => {}); }, []);
 
-  /** The duplicate gate: BOTH targets pass through here. Existing accounts and
-   * open leads are matched by email, then phone, then name before anything
-   * can be created. */
-  const toTarget = async () => {
-    setStep("target");
-    setQuery(recordName);
-    setError(null);
-    setDupes(null);
-    setMatches(null);
+  /** The duplicate gate. Existing accounts and open leads are matched by email,
+   * then phone, then name. */
+  const runMatch = async () => {
     setBusy("dupes");
     try {
       setDupes(await send<ExistingMatch[]>({
@@ -94,6 +90,28 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
         }
       }));
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
+  };
+
+  /** The gate runs while the producer is still REVIEWING, not after they have already
+   * decided to create something: an existing insured is the most important fact on the
+   * screen, and deciding "Insured vs Lead" without it is deciding blind. Re-runs as the
+   * identity is edited, because a corrected phone or spelling is often what finds the
+   * record the first pass missed. */
+  useEffect(() => {
+    if (step !== "review") return;
+    const t = setTimeout(() => { void runMatch(); }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, identity.email, identity.phone, identity.firstName, identity.lastName, identity.businessName, insuredType]);
+
+  /** BOTH targets pass through here; the gate is re-checked so a match found during
+   * review cannot go stale between the two screens. */
+  const toTarget = async () => {
+    setStep("target");
+    setQuery(recordName);
+    setError(null);
+    setMatches(null);
+    await runMatch();
   };
 
   const search = async () => {
@@ -205,6 +223,29 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
       <div className={styles.root}>
         <div className={styles.title}>Review before loading — edit anything that's wrong</div>
         {error && <ErrorBar error={error} />}
+        {busy === "dupes" && <Spinner size="tiny" label="Checking CRM for this person…" />}
+        {dupes && dupes.length > 0 && (
+          <>
+            <div className={styles.hint}>
+              Already in CRM — load into one of these instead of creating a duplicate:
+            </div>
+            {dupes.map(d => (
+              <div key={`${d.kind}:${d.id}`} className={styles.match}>
+                <span className={styles.matchText}>
+                  <b>{d.kind === "lead" ? "Lead" : "Account"}</b> — {d.name}
+                  {d.city ? `, ${d.city}` : ""}{d.postalCode ? ` ${d.postalCode}` : ""} ({MATCH_LABEL[d.matchedBy]})
+                </span>
+                {d.kind === "account" ? (
+                  <Button size="small" disabled={busy !== null} onClick={() => commit(d.id, d.name)}>
+                    {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                  </Button>
+                ) : (
+                  env && <Button size="small" as="a" href={crmRecordUrl(env, "lead", d.id)} target="_blank">Open</Button>
+                )}
+              </div>
+            ))}
+          </>
+        )}
         <div className={styles.row}>
           <Input className={styles.grow} value={identity.firstName} onChange={(_, d) => set({ firstName: d.value })} placeholder="First name" />
           <Input className={styles.grow} value={identity.lastName} onChange={(_, d) => set({ lastName: d.value })} placeholder="Last name" />
@@ -271,8 +312,6 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
       </div>
     );
   }
-
-  const MATCH_LABEL = { email: "email match", phone: "phone match", name: "name match" } as const;
 
   return (
     <div className={styles.root}>
