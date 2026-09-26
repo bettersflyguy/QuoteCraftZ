@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { applicantFromCapture, accountNameFromCapture, carrierGuess, detectPhone, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
+import { applicantFromCapture, accountNameFromCapture, carrierGuess, detectPhone, parseMoney, policyFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
+import { normalize } from "@/boldpenguin/normalize";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CrmEnvironment } from "@/crm/environments";
 
@@ -73,6 +74,41 @@ describe("detectPhone", () => {
 
   it("returns null when nothing has enough digits", () => {
     expect(detectPhone(capture({ normalized: { contact: { phone: "Home" } }, fields: [] }))).toBeNull();
+  });
+});
+
+describe("policyFromCapture (sale screen)", () => {
+  it("normalizes policy number and premium from sale-screen labels", () => {
+    const n = normalize([
+      { label: "Policy Number", value: "PGR-9912345" },
+      { label: "6 Month Total Premium", value: "$3,089.50" },
+      { label: "Effective Date", value: "10/01/2026" }
+    ]);
+    expect(n["policy"]?.["number"]).toBe("PGR-9912345");
+    expect(n["policy"]?.["premium"]).toBe("$3,089.50");
+  });
+
+  it("builds an editable draft, flagged only when a policy number exists", () => {
+    const sold = capture({
+      normalized: {
+        policy: { number: "PGR-9912345", premium: "$3,089.50" },
+        coverage: { effectiveDate: "10/01/2026", expirationDate: "04/01/2027" }
+      }
+    });
+    const d = policyFromCapture(sold);
+    expect(d.hasPolicy).toBe(true);
+    expect(d.number).toBe("PGR-9912345");
+    expect(d.premiumText).toBe("$3,089.50");
+    expect(d.effectiveDate).toBe("10/01/2026");
+    expect(d.carrierName).toBe("GEICO");
+    expect(policyFromCapture(capture()).hasPolicy).toBe(false);
+  });
+
+  it("parses money text into numbers", () => {
+    expect(parseMoney("$3,089.50")).toBe(3089.5);
+    expect(parseMoney("516")).toBe(516);
+    expect(parseMoney("I decline")).toBeNull();
+    expect(parseMoney(null)).toBeNull();
   });
 });
 

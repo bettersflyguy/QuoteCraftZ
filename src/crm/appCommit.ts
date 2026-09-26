@@ -110,6 +110,45 @@ export function applicantFromCapture(app: CapturedApplication): CapturedApplican
   return applicantFromIdentity(identityFromCapture(app), Boolean(str(app, "business", "legalName")));
 }
 
+/** "$3,089.50" -> 3089.5; null when no parsable amount. */
+export function parseMoney(text: string | null): number | null {
+  if (!text) return null;
+  const m = text.replace(/,/g, "").match(/\$?\s*(\d+(?:\.\d{1,2})?)/);
+  return m ? Number(m[1]) : null;
+}
+
+/** What a sale/confirmation screen yields toward a CRM policy record.
+ * hasPolicy (a policy number was captured) is the signal that the ingest
+ * happened on a sale screen rather than mid-quote. */
+export interface PolicyDraft {
+  hasPolicy: boolean;
+  number: string;
+  premiumText: string;
+  effectiveDate: string;
+  expirationDate: string;
+  carrierName: string;
+}
+
+function fieldValue(app: CapturedApplication, labelRe: RegExp): string {
+  const f = app.fields.find(x => labelRe.test(x.label) && x.value);
+  return f ? clean(f.value) : "";
+}
+
+export function policyFromCapture(app: CapturedApplication): PolicyDraft {
+  const number = str(app, "policy", "number") ?? fieldValue(app, /^policy\s*(number|no|#)\b/i);
+  const premium = str(app, "policy", "premium") ??
+    fieldValue(app, /total\s+premium|premium\s*:?\s*$/i) ??
+    "";
+  return {
+    hasPolicy: Boolean(number),
+    number: number ?? "",
+    premiumText: premium,
+    effectiveDate: str(app, "coverage", "effectiveDate") ?? fieldValue(app, /effective\s*date/i),
+    expirationDate: str(app, "coverage", "expirationDate") ?? fieldValue(app, /expiration\s*date/i),
+    carrierName: carrierGuess(app)
+  };
+}
+
 /** Intake source for lead attribution (iacrm_leadsource), from the capture's
  * origin. Lead marketplaces get their proper name; anything else records the
  * host so the source is never lost. */

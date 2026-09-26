@@ -164,6 +164,40 @@ export async function createLead(env: CrmEnvironment, f: NewLeadFields): Promise
   return { leadId: r["leadid"]!, name: r["fullname"] ?? f.topic };
 }
 
+export interface NewPolicyFields {
+  name: string;
+  policyNumber: string;
+  premium: number | null;
+  /** ISO dates (yyyy-mm-dd) or null. */
+  effectiveDate: string | null;
+  expirationDate: string | null;
+  accountId: string;
+  carrierId: string | null;
+  lobId: string | null;
+  opportunityId: string | null;
+}
+
+/** Creates an ACTIVE policy from a carrier sale screen: bound today, tied to
+ * the insured and (when known) carrier / LOB / originating opportunity.
+ * Schema-cased nav props verified against live metadata. */
+export async function createPolicy(env: CrmEnvironment, f: NewPolicyFields): Promise<{ policyId: string }> {
+  const body: Record<string, unknown> = {
+    iacrm_policy_name: f.name,
+    iacrm_policynumber: f.policyNumber,
+    iacrm_binddate: new Date().toISOString().slice(0, 10),
+    iacrm_status: 738590000, // Active
+    "iacrm_InsuredId@odata.bind": `/accounts(${f.accountId})`
+  };
+  if (f.premium != null) body["iacrm_premium"] = f.premium;
+  if (f.effectiveDate) body["iacrm_effectivedate"] = f.effectiveDate;
+  if (f.expirationDate) body["iacrm_expirationdate"] = f.expirationDate;
+  if (f.carrierId) body["iacrm_CarrierId@odata.bind"] = `/iacrm_carriers(${f.carrierId})`;
+  if (f.lobId) body["iacrm_LineOfBusinessId@odata.bind"] = `/iacrm_lineofbusinesses(${f.lobId})`;
+  if (f.opportunityId) body["iacrm_OpportunityId@odata.bind"] = `/opportunities(${f.opportunityId})`;
+  const r = await dvPost<Record<string, string>>(env, "iacrm_policies?$select=iacrm_policyid", body);
+  return { policyId: r["iacrm_policyid"]! };
+}
+
 export interface ExistingMatch {
   kind: "account" | "lead";
   id: string;

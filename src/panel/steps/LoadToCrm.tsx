@@ -3,9 +3,9 @@ import { Button, Checkbox, Dropdown, Input, Option, Radio, RadioGroup, Spinner, 
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import type { CapturedApplication } from "@/messages";
-import type { AccountMatch, BatchItemResult, ExistingMatch, LobRow, PipelineStages } from "@/crm/dataverse";
+import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages } from "@/crm/dataverse";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, carrierGuess, identityFromCapture, leadSourceGuess, type CaptureIdentity } from "@/crm/appCommit";
+import { applicantFromIdentity, carrierGuess, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -36,6 +36,7 @@ const useStyles = makeStyles({
 });
 
 interface OppState { create: boolean; lobId: string | null; name: string; nameEdited: boolean }
+interface PolicyState { create: boolean; number: string; premium: string; effective: string; expiration: string; carrierId: string | null; lobId: string | null }
 
 /** Loads the held captured application into the active CRM environment.
  * Step 1 reviews and EDITS the identity (captured data is a starting point,
@@ -51,6 +52,13 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
   const [target, setTarget] = useState<"insured" | "lead">("insured");
   const [insuredType, setInsuredType] = useState<1 | 2>(() => identityFromCapture(app).businessName ? 2 : 1);
   const [opp, setOpp] = useState<OppState>({ create: false, lobId: null, name: "", nameEdited: false });
+  // A captured policy number means the ingest happened on a SALE screen —
+  // policy creation offers itself pre-checked with the captured terms.
+  const [policy, setPolicy] = useState<PolicyState>(() => {
+    const d = policyFromCapture(app);
+    return { create: d.hasPolicy, number: d.number, premium: d.premiumText, effective: d.effectiveDate, expiration: d.expirationDate, carrierId: null, lobId: null };
+  });
+  const [carriers, setCarriers] = useState<CarrierRow[] | null>(null);
   const [lobs, setLobs] = useState<LobRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<AccountMatch[] | null>(null);
@@ -121,12 +129,36 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
   };
 
+  const loadLobs = async () => {
+    if (lobs !== null) return;
+    try { setLobs(await send<LobRow[]>({ type: "panel/getLobs" })); } catch { setLobs([]); }
+  };
+
   const toggleOpp = async (create: boolean) => {
     setOpp(o => ({ ...o, create }));
-    if (create && lobs === null) {
-      try { setLobs(await send<LobRow[]>({ type: "panel/getLobs" })); } catch { setLobs([]); }
+    if (create) await loadLobs();
+  };
+
+  const togglePolicy = async (create: boolean) => {
+    setPolicy(p => ({ ...p, create }));
+    if (!create) return;
+    await loadLobs();
+    if (carriers === null) {
+      try {
+        const list = await send<CarrierRow[]>({ type: "panel/getCarriers" });
+        setCarriers(list);
+        const guess = carrierGuess(app).toLowerCase();
+        const hit = list.find(c => c.name.toLowerCase().includes(guess) || guess.includes(c.name.toLowerCase()));
+        if (hit) setPolicy(p => (p.carrierId ? p : { ...p, carrierId: hit.carrierId }));
+      } catch { setCarriers([]); }
     }
   };
+
+  // sale-screen captures arrive with the checkbox pre-checked: hydrate its dropdowns
+  useEffect(() => {
+    if (step === "review" && policy.create) void togglePolicy(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const commit = async (accountId: string, accountName: string) => {
     setBusy(accountId); setError(null);
@@ -137,20 +169,45 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
         applicant: applicantFromIdentity(identity, insuredType === 2),
         insuredType
       });
+      let createdOppId: string | null = null;
       if (opp.create && opp.lobId) {
         const lobName = lobs?.find(l => l.lobId === opp.lobId)?.name ?? null;
         const name = opp.name.trim() || oppName(lobName);
         try {
           const stages = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId: opp.lobId });
-          await send({
+          const createdOpp = await send<OppSummary>({
             type: "panel/createOpportunity",
             accountId, lobId: opp.lobId, name,
             pipelineId: stages?.pipelineId ?? null,
             stageId: stages?.stages[0]?.stageId ?? null
           });
+          createdOppId = createdOpp.opportunityId;
           rows.push({ key: `Opportunity — created "${name}"`, status: 204, error: null, entityId: null });
         } catch (e) {
           rows.push({ key: "Opportunity", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
+      }
+      if (policy.create && policy.number.trim()) {
+        try {
+          const carrierName = carriers?.find(c => c.carrierId === policy.carrierId)?.name ?? carrierGuess(app);
+          const lobName = lobs?.find(l => l.lobId === (policy.lobId ?? opp.lobId))?.name ?? null;
+          await send<{ policyId: string }>({
+            type: "panel/createPolicy",
+            fields: {
+              name: `${carrierName}${lobName ? ` ${lobName}` : ""} — ${policy.number.trim()}`,
+              policyNumber: policy.number.trim(),
+              premium: parseMoney(policy.premium),
+              effectiveDate: toIsoDate(policy.effective.trim() || null),
+              expirationDate: toIsoDate(policy.expiration.trim() || null),
+              accountId,
+              carrierId: policy.carrierId,
+              lobId: policy.lobId ?? opp.lobId,
+              opportunityId: createdOppId
+            }
+          });
+          rows.push({ key: `Policy — created ${policy.number.trim()} (Active)`, status: 204, error: null, entityId: null });
+        } catch (e) {
+          rows.push({ key: "Policy", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
       }
       setResults(rows);
@@ -303,8 +360,53 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
             )}
           </>
         )}
+        {target === "insured" && (
+          <Checkbox
+            checked={policy.create}
+            onChange={(_, d) => void togglePolicy(Boolean(d.checked))}
+            label="Create policy (sold — policy number captured)"
+          />
+        )}
+        {target === "insured" && policy.create && (
+          <>
+            <div className={styles.row}>
+              <Input className={styles.grow} value={policy.number} onChange={(_, d) => setPolicy(p => ({ ...p, number: d.value }))} placeholder="Policy number" />
+              <Input style={{ width: 110 }} value={policy.premium} onChange={(_, d) => setPolicy(p => ({ ...p, premium: d.value }))} placeholder="Premium $" />
+            </div>
+            <div className={styles.row}>
+              <Input className={styles.grow} value={policy.effective} onChange={(_, d) => setPolicy(p => ({ ...p, effective: d.value }))} placeholder="Effective m/d/yyyy" />
+              <Input className={styles.grow} value={policy.expiration} onChange={(_, d) => setPolicy(p => ({ ...p, expiration: d.value }))} placeholder="Expiration m/d/yyyy" />
+            </div>
+            <Dropdown
+              placeholder="Carrier"
+              value={carriers?.find(c => c.carrierId === policy.carrierId)?.name ?? ""}
+              selectedOptions={policy.carrierId ? [policy.carrierId] : []}
+              onOptionSelect={(_, d) => setPolicy(p => ({ ...p, carrierId: d.optionValue ?? null }))}
+            >
+              {(carriers ?? []).map(c => <Option key={c.carrierId} value={c.carrierId}>{c.name}</Option>)}
+            </Dropdown>
+            <Dropdown
+              placeholder={opp.create && opp.lobId ? `Line of business (${lobs?.find(l => l.lobId === opp.lobId)?.name ?? "from opportunity"})` : "Line of business"}
+              value={lobs?.find(l => l.lobId === policy.lobId)?.name ?? ""}
+              selectedOptions={policy.lobId ? [policy.lobId] : []}
+              onOptionSelect={(_, d) => setPolicy(p => ({ ...p, lobId: d.optionValue ?? null }))}
+            >
+              {(lobs ?? []).map(l => <Option key={l.lobId} value={l.lobId}>{l.name}</Option>)}
+            </Dropdown>
+          </>
+        )}
+        {target === "lead" && policy.create && (
+          <div className={styles.hint}>
+            A policy number was captured — policies attach to insured Accounts.
+            Switch "Create as" to Insured to write the policy.
+          </div>
+        )}
         <div className={styles.row}>
-          <Button appearance="primary" disabled={!recordName || (opp.create && target === "insured" && !opp.lobId)} onClick={toTarget}>
+          <Button
+            appearance="primary"
+            disabled={!recordName || (opp.create && target === "insured" && !opp.lobId) || (policy.create && target === "insured" && !policy.number.trim())}
+            onClick={toTarget}
+          >
             Continue
           </Button>
           <Button onClick={() => setStep("closed")}>Cancel</Button>

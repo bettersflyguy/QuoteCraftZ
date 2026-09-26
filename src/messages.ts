@@ -45,6 +45,7 @@ export type PanelRequest =
   | { type: "panel/appCommit"; accountId: string; applicant: CapturedApplicant; insuredType: 1 | 2 | null }
   | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
   | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
+  | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };

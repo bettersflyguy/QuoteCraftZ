@@ -40,6 +40,8 @@ const rules: [string, string[]][] = [
   ["coverage.currentPremium", ["current annual premium", "current premium", "annual premium"]],
   ["coverage.lines", ["coverage types", "lines of business", "products selected", "coverages requested"]],
   ["coverage.autoLiabilityLimit", ["bodily injury property damage for this commercial auto policy", "commercial auto liability limit"]],
+  ["policy.number", ["policy number", "policy no", "policy id"]],
+  ["policy.premium", ["total policy premium", "6 month total premium", "12 month total premium", "total premium", "policy premium"]],
   ["history.lossesLastFiveYears", ["loss or claim in the last 5 years"]],
   ["history.coverageIssuesLastThreeYears", ["lapse of coverage been declined canceled or nonrenewed in the last 3 years"]],
   ["building.occupancyType", ["what type of building do you operate your business out of", "building occupancy type"]],
