@@ -44,6 +44,17 @@ export function EnvBadge({ dispatch }: { dispatch: (a: Action) => void }) {
 
   useEffect(() => {
     refresh();
+    // Environments are edited on the Options page while the panel stays open —
+    // without this, a newly saved environment never appears in the menu.
+    const onChanged = (changes: Record<string, unknown>, area: string) => {
+      if (area !== "local") return;
+      if ("env/list" in changes || "env/active" in changes) void refresh();
+      // switching the active org from the Options page invalidates the panel's
+      // CRM selections exactly like switching from this menu does
+      if ("env/active" in changes) dispatch({ t: "reset" });
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
 
   async function choose(id: string) {
@@ -57,7 +68,7 @@ export function EnvBadge({ dispatch }: { dispatch: (a: Action) => void }) {
   if (!active) return null;
 
   return (
-    <Menu>
+    <Menu onOpenChange={(_, d) => { if (d.open) void refresh(); }}>
       <MenuTrigger disableButtonEnhancement>
         <Button
           appearance="subtle"
