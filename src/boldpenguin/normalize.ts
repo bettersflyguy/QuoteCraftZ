@@ -23,7 +23,7 @@ const rules: [string, string[]][] = [
   ["payroll.subcontractors", ["subcontractors"]],
   ["contact.firstName", ["policyholders first name", "contact first name", "first name"]],
   ["contact.lastName", ["policyholders last name", "contact last name", "last name"]],
-  ["contact.fullName", ["primary contact", "contact name", "applicant name", "full name"]],
+  ["contact.fullName", ["primary contact", "contact name", "applicant name", "full name", "name insured", "named insured", "insured name"]],
   ["contact.email", ["email address", "email"]],
   ["contact.phone", ["phone number", "telephone", "phone"]],
   ["contact.dateOfBirth", ["date of birth", "birth date", "birthdate", "dob"]],

@@ -179,6 +179,34 @@
       if (r && r[2].split(" ").length <= 3) fields.push({ label: r[2], value: r[1], section, group: "", source: "money-line" });
     });
 
+    /* bold-label prose runs — "<strong>Name Insured</strong> <span>Edward
+     * Parkin</span> <br> <strong>Mailing Address</strong>…" — the standard
+     * carrier policy-details pattern (GEICO renders the whole block as one
+     * <p> with many strong/span/br children). Each strong starts a pair; the
+     * value is everything until the next strong or a line break. */
+    root.querySelectorAll("p, div, li").forEach((el) => {
+      if (!isVisible(el) || inConsentUi(el)) return;
+      const strongs = el.querySelectorAll(":scope > strong, :scope > b");
+      strongs.forEach((sEl) => {
+        const label = clean(sEl.innerText).replace(/[:*]+$/, "");
+        if (!label || label.length > 80) return;
+        let value = "";
+        for (let n = sEl.nextSibling; n; n = n.nextSibling) {
+          if (n.nodeType === 1) {
+            if (/^(STRONG|B)$/.test(n.tagName)) break;
+            if (n.tagName === "BR") { if (value.trim()) break; else continue; }
+            value += " " + (n.innerText || "");
+          } else if (n.nodeType === 3) {
+            value += " " + n.textContent;
+          }
+        }
+        value = clean(value);
+        if (value && value.length <= 300 && !PAYMENT_FIELD.test(label)) {
+          fields.push({ label, value, section, group: "", source: "review-row" });
+        }
+      });
+    });
+
     /* sale/confirmation facts are usually PROSE, not form fields ("GEICO Auto
      * Policy Number: 6277201270", "Your coverage is effective 9/27/2026",
      * "Your 6 Month Auto Premium is $922.00") — pattern-match the page text */
@@ -189,6 +217,12 @@
     };
     const pol = bodyText.match(/policy\s*(?:number|#)\s*:?\s*([A-Z0-9][A-Z0-9-]{4,19})/i);
     if (pol) salePush("Policy Number", pol[1]);
+    /* "Effective Dates 9/27/2026-03/27/2027" carries BOTH dates */
+    const range = bodyText.match(/effective\s*dates?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*[-–—]\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    if (range) {
+      salePush("Effective Date", range[1]);
+      salePush("Expiration Date", range[2]);
+    }
     const eff = bodyText.match(/(?:coverage is\s+)?effective(?:\s*date)?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
     if (eff) salePush("Effective Date", eff[1]);
     const exp = bodyText.match(/expiration(?:\s*date)?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
@@ -200,6 +234,21 @@
     } else {
       const prem = bodyText.match(/total\s+premium\s*:?\s*\$\s*([\d,]+(?:\.\d{2})?)/i);
       if (prem) salePush("Total Premium", "$" + prem[1]);
+    }
+
+    /* vehicles ("2000 Chevrolet Suburban xxxxxxxxxxxxx7277") and drivers
+     * ("Edward Parkin License number : XXXXXXXXX9522") from covered lists */
+    let vi = 0;
+    for (const m of bodyText.matchAll(/\b((?:19|20)\d{2}\s+[A-Z][A-Za-z-]+(?:\s+[A-Za-z0-9-]+){1,3}?)\s+[xX*]{4,}(\w{4})/g)) {
+      vi += 1;
+      if (vi > 6) break;
+      salePush(`Vehicle ${vi}`, `${m[1]} (...${m[2]})`);
+    }
+    let di = 0;
+    for (const m of bodyText.matchAll(/([A-Z][a-zA-Z'-]+ [A-Z][a-zA-Z'-]+)\s+License number\s*:?\s*[xX*]{4,}\w{2,6}/g)) {
+      di += 1;
+      if (di > 6) break;
+      salePush(`Driver ${di}`, m[1]);
     }
 
     return fields.filter((field) => field.label && field.value);

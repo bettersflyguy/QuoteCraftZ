@@ -62,6 +62,27 @@ export interface CaptureIdentity {
   dateOfBirth: string;
 }
 
+/** "7631 ANGELINE DR MINNEAPOLIS, MN 55428" -> parts. Carrier confirmation
+ * screens print the whole mailing address on one line. */
+export function splitUsAddress(line: string): { street: string; city: string; state: string; postalCode: string } | null {
+  const m = clean(line).match(/^(.+?)\s+([A-Za-z][A-Za-z .'-]*?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+  if (!m) return null;
+  // the boundary between street and city is ambiguous without a comma; take the
+  // last capitalized word-run before the state as the city
+  const before = `${m[1]} ${m[2]}`.trim().replace(/,$/, "");
+  const words = before.split(/\s+/);
+  const cityWords: string[] = [];
+  for (let i = words.length - 1; i >= 0 && cityWords.length < 3; i -= 1) {
+    const w = words[i]!;
+    if (/^\d/.test(w) || /^(DR|ST|AVE|RD|LN|CT|BLVD|WAY|TRL|PL|CIR|HWY|PKWY|TER|DRIVE|STREET|AVENUE|ROAD|LANE|COURT|BOULEVARD|TRAIL|PLACE|CIRCLE|APT|UNIT|STE|SUITE|#\w*)$/i.test(w)) break;
+    cityWords.unshift(w);
+  }
+  if (!cityWords.length) return null;
+  const city = cityWords.join(" ");
+  const street = before.slice(0, before.length - city.length).trim().replace(/,$/, "");
+  return street ? { street, city, state: m[3]!, postalCode: m[4]! } : null;
+}
+
 export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   let firstName = str(app, "contact", "firstName") ?? "";
   let lastName = str(app, "contact", "lastName") ?? "";
@@ -71,14 +92,23 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
     lastName = parts.slice(1).join(" ");
   }
   const phone = detectPhone(app);
+  let street = [str(app, "address", "street1"), str(app, "address", "street2")].filter(Boolean).join(", ");
+  let city = str(app, "address", "city") ?? "";
+  let state = str(app, "address", "state") ?? "";
+  let postalCode = str(app, "address", "postalCode") ?? "";
+  if (street && !city && !postalCode) {
+    // the whole "street city, ST zip" line landed in one field
+    const split = splitUsAddress(street);
+    if (split) ({ street, city, state, postalCode } = split);
+  }
   return {
     firstName,
     lastName,
     businessName: str(app, "business", "legalName") ?? "",
-    street: [str(app, "address", "street1"), str(app, "address", "street2")].filter(Boolean).join(", "),
-    city: str(app, "address", "city") ?? "",
-    state: str(app, "address", "state") ?? "",
-    postalCode: str(app, "address", "postalCode") ?? "",
+    street,
+    city,
+    state,
+    postalCode,
     phone: phone?.number ?? "",
     phoneIsMobile: phone?.isMobile ?? false,
     email: str(app, "contact", "email") ?? "",

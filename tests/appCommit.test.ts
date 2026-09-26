@@ -130,6 +130,33 @@ describe("policyFromCapture (sale screen)", () => {
   });
 });
 
+describe("splitUsAddress via identityFromCapture", () => {
+  it("splits a one-line carrier mailing address into parts (live GEICO shape)", async () => {
+    const { identityFromCapture, splitUsAddress } = await import("@/crm/appCommit");
+    expect(splitUsAddress("7631 ANGELINE DR MINNEAPOLIS, MN 55428")).toEqual({
+      street: "7631 ANGELINE DR", city: "MINNEAPOLIS", state: "MN", postalCode: "55428"
+    });
+    const app = capture({
+      normalized: {
+        contact: { fullName: "Edward Parkin", email: "edwardparkin@example.com", phone: "(612) 490-7742" },
+        address: { street1: "7631 ANGELINE DR MINNEAPOLIS, MN 55428" }
+      }
+    });
+    const id = identityFromCapture(app);
+    expect(id.street).toBe("7631 ANGELINE DR");
+    expect(id.city).toBe("MINNEAPOLIS");
+    expect(id.state).toBe("MN");
+    expect(id.postalCode).toBe("55428");
+  });
+
+  it("leaves an already-split address untouched", async () => {
+    const { identityFromCapture } = await import("@/crm/appCommit");
+    const id = identityFromCapture(capture());
+    expect(id.street).toBe("100 Main St");
+    expect(id.city).toBe("Duluth");
+  });
+});
+
 describe("carrierGuess", () => {
   it("maps known portal hosts to carrier names", () => {
     expect(carrierGuess(capture())).toBe("GEICO");
