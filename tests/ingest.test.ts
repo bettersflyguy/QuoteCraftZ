@@ -39,12 +39,54 @@ describe("portal ingest merge", () => {
     expect(app.normalized["business"]?.["fein"]).toBe("12-3456789");
   });
 
-  it("never lets a later page replace an already-normalized value", () => {
-    const existing = mergeIngestedFields(null, [field("Legal Business Name", "Northwind Bakery LLC")], site).app;
-    const { app } = mergeIngestedFields(existing, [field("Company Name", "Wrong Name Inc")], site);
+  it("never lets a later page replace an already-normalized value (same person)", () => {
+    const existing = mergeIngestedFields(null, [
+      field("Legal Business Name", "Northwind Bakery LLC"),
+      field("Email Address", "owner@northwind.example")
+    ], site).app;
+    // same email = same person, so the odd company-name variant merges…
+    const { app, replaced } = mergeIngestedFields(existing, [
+      field("Email Address", "owner@northwind.example"),
+      field("Company Name", "Wrong Name Inc")
+    ], site);
+    expect(replaced).toBe(false);
+    // …but the already-normalized value is never displaced
     expect(app.normalized["business"]?.["legalName"]).toBe("Northwind Bakery LLC");
     // the raw field is still retained for portal filling by its own label
     expect(app.fields.some(f => f.value === "Wrong Name Inc")).toBe(true);
+  });
+
+  it("REPLACES the capture when the page belongs to a different person", () => {
+    const mark = mergeIngestedFields(null, [
+      field("Contact Name", "Mark Downing"),
+      field("Email Address", "mark@example.com")
+    ], site).app;
+    const { app, replaced } = mergeIngestedFields(mark, [
+      field("Contact Name", "Terry Tivly"),
+      field("Email Address", "terry@example.com"),
+      field("Phone Number", "555-020-0200")
+    ], { system: "tivly.com", url: "https://tivly.com/client/leads", title: "Tivly" });
+
+    expect(replaced).toBe(true);
+    expect(app.source.system).toBe("tivly.com");
+    expect(app.normalized["contact"]?.["email"]).toBe("terry@example.com");
+    // nothing of Mark's survives in the new capture
+    expect(app.fields.some(f => /mark/i.test(f.value))).toBe(false);
+  });
+
+  it("still merges when the page shows the same person or no identity at all", () => {
+    const base = mergeIngestedFields(null, [
+      field("Contact Name", "Mark Downing"),
+      field("Email Address", "mark@example.com")
+    ], site).app;
+    const same = mergeIngestedFields(base, [
+      field("Email Address", "MARK@example.com"),
+      field("Year Built", "1999")
+    ], site);
+    expect(same.replaced).toBe(false);
+    const noIdentity = mergeIngestedFields(base, [field("Deductible", "$500")], site);
+    expect(noIdentity.replaced).toBe(false);
+    expect(noIdentity.total).toBe(3);
   });
 
   it("works against a Bold Penguin capture as the base", () => {

@@ -130,10 +130,26 @@ export interface NewLeadFields extends NewAccountFields {
   phoneIsMobile: boolean;
   /** Lead subject, e.g. "Progressive Auto Quote — Dearris Thomas". */
   topic: string;
+  /** Intake source name ("Tivly", ...) — resolved-or-created in iacrm_leadsource. */
+  leadSource: string | null;
+}
+
+/** Find-or-create an iacrm_leadsource row by name (e.g. "Tivly"). */
+export async function getLeadSourceId(env: CrmEnvironment, name: string): Promise<string> {
+  const { value } = await dvJson<{ value: Record<string, string>[] }>(
+    env, `iacrm_leadsources?$select=iacrm_leadsourceid&$filter=iacrm_leadsource_name eq '${name.replace(/'/g, "''")}'&$top=1`
+  );
+  if (value[0]) return value[0]["iacrm_leadsourceid"]!;
+  const r = await dvPost<Record<string, string>>(env, "iacrm_leadsources?$select=iacrm_leadsourceid", { iacrm_leadsource_name: name });
+  return r["iacrm_leadsourceid"]!;
 }
 
 export async function createLead(env: CrmEnvironment, f: NewLeadFields): Promise<{ leadId: string; name: string }> {
   const body: Record<string, unknown> = { subject: f.topic };
+  if (f.leadSource) {
+    // schema-cased nav prop (metadata-verified: iacrm_LeadSourceId)
+    body["iacrm_LeadSourceId@odata.bind"] = `/iacrm_leadsources(${await getLeadSourceId(env, f.leadSource)})`;
+  }
   if (f.firstName) body["firstname"] = f.firstName;
   if (f.lastName) body["lastname"] = f.lastName;
   // companyname: the business name for commercial leads only
@@ -146,6 +162,91 @@ export async function createLead(env: CrmEnvironment, f: NewLeadFields): Promise
   if (f.email) body["emailaddress1"] = f.email;
   const r = await dvPost<Record<string, string>>(env, "leads?$select=leadid,fullname", body);
   return { leadId: r["leadid"]!, name: r["fullname"] ?? f.topic };
+}
+
+export interface ExistingMatch {
+  kind: "account" | "lead";
+  id: string;
+  name: string;
+  matchedBy: "email" | "phone" | "name";
+  city: string | null;
+  postalCode: string | null;
+}
+
+export interface MatchQuery {
+  email: string | null;
+  phone: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  businessName: string | null;
+}
+
+const oesc = (v: string) => v.replace(/'/g, "''");
+
+/** Duplicate gate before any create: existing Accounts AND open Leads matched
+ * by email first, then phone, then name (business name when commercial).
+ * Ordered by match strength; each record reports WHY it matched. */
+export async function findInsuredMatches(env: CrmEnvironment, q: MatchQuery): Promise<ExistingMatch[]> {
+  const digits = (q.phone ?? "").replace(/\D/g, "");
+  const phoneVariants = [...new Set([q.phone, digits].filter((p): p is string => Boolean(p && p.length >= 7)))];
+  const personName = `${q.firstName ?? ""} ${q.lastName ?? ""}`.trim();
+  const nameTerm = q.businessName || personName;
+
+  const accFilters: string[] = [];
+  const leadFilters: string[] = [];
+  if (q.email) {
+    accFilters.push(`emailaddress1 eq '${oesc(q.email)}'`);
+    leadFilters.push(`emailaddress1 eq '${oesc(q.email)}'`);
+  }
+  for (const p of phoneVariants) {
+    accFilters.push(`telephone1 eq '${oesc(p)}'`, `iacrm_mobilephone eq '${oesc(p)}'`);
+    leadFilters.push(`telephone1 eq '${oesc(p)}'`, `mobilephone eq '${oesc(p)}'`);
+  }
+  if (nameTerm) {
+    accFilters.push(`contains(name,'${oesc(nameTerm)}')`);
+    if (q.businessName) leadFilters.push(`contains(companyname,'${oesc(q.businessName)}')`);
+    if (q.firstName && q.lastName) leadFilters.push(`(firstname eq '${oesc(q.firstName)}' and lastname eq '${oesc(q.lastName)}')`);
+  }
+  if (!accFilters.length && !leadFilters.length) return [];
+
+  const emailNorm = (q.email ?? "").toLowerCase();
+  const phoneDigits = digits.length >= 7 ? digits.slice(-10) : "";
+  const why = (email: string | null | undefined, phones: (string | null | undefined)[]): ExistingMatch["matchedBy"] => {
+    if (emailNorm && (email ?? "").toLowerCase() === emailNorm) return "email";
+    if (phoneDigits && phones.some(p => (p ?? "").replace(/\D/g, "").slice(-10) === phoneDigits)) return "phone";
+    return "name";
+  };
+
+  const out: ExistingMatch[] = [];
+  if (accFilters.length) {
+    const { value } = await dvJson<{ value: Record<string, string>[] }>(
+      env,
+      `accounts?$select=accountid,name,address1_city,address1_postalcode,emailaddress1,telephone1,iacrm_mobilephone&$filter=statecode eq 0 and (${accFilters.join(" or ")})&$top=10`
+    );
+    for (const a of value) {
+      out.push({
+        kind: "account", id: a["accountid"]!, name: a["name"] ?? "",
+        matchedBy: why(a["emailaddress1"], [a["telephone1"], a["iacrm_mobilephone"]]),
+        city: a["address1_city"] ?? null, postalCode: a["address1_postalcode"] ?? null
+      });
+    }
+  }
+  if (leadFilters.length) {
+    const { value } = await dvJson<{ value: Record<string, string>[] }>(
+      env,
+      `leads?$select=leadid,fullname,companyname,address1_city,address1_postalcode,emailaddress1,telephone1,mobilephone&$filter=statecode eq 0 and (${leadFilters.join(" or ")})&$top=10`
+    );
+    for (const l of value) {
+      out.push({
+        kind: "lead", id: l["leadid"]!,
+        name: [l["fullname"], l["companyname"]].filter(Boolean).join(" — "),
+        matchedBy: why(l["emailaddress1"], [l["telephone1"], l["mobilephone"]]),
+        city: l["address1_city"] ?? null, postalCode: l["address1_postalcode"] ?? null
+      });
+    }
+  }
+  const rank = { email: 0, phone: 1, name: 2 } as const;
+  return out.sort((a, b) => rank[a.matchedBy] - rank[b.matchedBy]);
 }
 
 export async function getLinesOfBusiness(env: CrmEnvironment): Promise<LobRow[]> {

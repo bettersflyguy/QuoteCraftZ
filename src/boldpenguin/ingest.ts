@@ -15,6 +15,43 @@ export interface IngestOutcome {
   app: CapturedApplication;
   added: number;
   total: number;
+  /** The page belonged to a DIFFERENT person than the held capture, so a
+   * fresh capture replaced it instead of merging (cross-lead contamination). */
+  replaced: boolean;
+}
+
+interface IdentitySignals { email: string; phone: string; lastName: string; business: string }
+
+function signalsOf(n: NormalizedApplication): IdentitySignals {
+  const contact = n["contact"] ?? {};
+  const email = typeof contact["email"] === "string" ? contact["email"].toLowerCase().trim() : "";
+  const phoneRaw = typeof contact["phone"] === "string" ? contact["phone"].replace(/\D/g, "") : "";
+  let lastName = typeof contact["lastName"] === "string" ? contact["lastName"] : "";
+  if (!lastName && typeof contact["fullName"] === "string") {
+    lastName = contact["fullName"].trim().split(" ").slice(-1)[0] ?? "";
+  }
+  const businessRaw = n["business"]?.["legalName"];
+  return {
+    email,
+    phone: phoneRaw.length >= 7 ? phoneRaw.slice(-10) : "",
+    lastName: canonical(lastName),
+    business: typeof businessRaw === "string" ? canonical(businessRaw) : ""
+  };
+}
+
+/** True when the page belongs to a DIFFERENT person/lead — merging would
+ * cross-wire customers. An agreeing strong signal (same email or phone)
+ * confirms the same person regardless of name variants; otherwise any signal
+ * present on both sides that disagrees is a different person. A page with no
+ * identity signals (e.g. a coverage screen) never conflicts. */
+export function identityConflict(existing: NormalizedApplication, incoming: NormalizedApplication): boolean {
+  const a = signalsOf(existing);
+  const b = signalsOf(incoming);
+  const same = (x: string, y: string) => Boolean(x && y && x === y);
+  if (same(a.email, b.email) || same(a.phone, b.phone)) return false;
+  const differs = (x: string, y: string) => Boolean(x && y && x !== y);
+  return differs(a.email, b.email) || differs(a.phone, b.phone) ||
+    differs(a.business, b.business) || differs(a.lastName, b.lastName);
 }
 
 function fieldKey(field: CapturedAppField): string {
@@ -53,9 +90,10 @@ export function mergeIngestedFields(
   site: IngestSite
 ): IngestOutcome {
   const incoming = sanitize(harvested);
+  const incomingNormalized = normalize(incoming);
 
-  if (!existing) {
-    const app: CapturedApplication = {
+  const fresh = (replaced: boolean): IngestOutcome => ({
+    app: {
       schemaVersion: "1.1",
       capturedAt: new Date().toISOString(),
       source: { system: site.system, url: site.url, title: site.title },
@@ -63,11 +101,17 @@ export function mergeIngestedFields(
       // completion heuristics apply
       completion: { likelyCompleted: true, matchedPhrases: [], hasReviewStep: false },
       scannedSections: Array.from(new Set(incoming.map(f => f.section))),
-      normalized: normalize(incoming),
+      normalized: incomingNormalized,
       fields: incoming
-    };
-    return { app, added: incoming.length, total: incoming.length };
-  }
+    },
+    added: incoming.length,
+    total: incoming.length,
+    replaced
+  });
+
+  if (!existing) return fresh(false);
+  // a different person's page must never merge into the held capture
+  if (identityConflict(existing.normalized, incomingNormalized)) return fresh(true);
 
   const known = new Set(existing.fields.map(fieldKey));
   const added = incoming.filter(field => !known.has(fieldKey(field)));
@@ -79,5 +123,5 @@ export function mergeIngestedFields(
     normalized: mergeNormalized(existing.normalized, fields),
     fields
   };
-  return { app, added: added.length, total: fields.length };
+  return { app, added: added.length, total: fields.length, replaced: false };
 }

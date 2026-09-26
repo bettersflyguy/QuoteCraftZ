@@ -44,6 +44,7 @@ export type PanelRequest =
    * capture; insuredType is iacrm_insuredtype (1 Personal, 2 Commercial). */
   | { type: "panel/appCommit"; accountId: string; applicant: CapturedApplicant; insuredType: 1 | 2 | null }
   | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
+  | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };

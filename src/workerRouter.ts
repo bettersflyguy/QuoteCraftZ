@@ -36,7 +36,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { writeApplicationKnowledge } from "@/crm/appCommit";
-import { createLead } from "@/crm/dataverse";
+import { createLead, findInsuredMatches } from "@/crm/dataverse";
 
 export interface Deps {
   getEnvironments: () => Promise<CrmEnvironment[]>;
@@ -67,6 +67,7 @@ export interface Deps {
   executeBatch: typeof executeBatch;
   buildQuoteOps: typeof buildQuoteOps;
   createLead: typeof createLead;
+  findInsuredMatches: typeof findInsuredMatches;
   getCarrierAliases: typeof getCarrierAliases;
   saveCarrierAlias: typeof saveCarrierAlias;
   getAccessToken: typeof getAccessToken;
@@ -371,6 +372,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: await deps.createLead(env, msg.fields) };
       }
 
+      case "panel/findMatches": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.findInsuredMatches(env, msg.query) };
+      }
+
       case "auth/signIn": {
         const env = await deps.getActiveEnvironment();
         // force a fresh interactive sign-in: the cached token may be VALID but
@@ -534,6 +540,7 @@ export const realDeps: Deps = {
   executeBatch,
   buildQuoteOps,
   createLead,
+  findInsuredMatches,
   getCarrierAliases,
   saveCarrierAlias,
   getAccessToken,

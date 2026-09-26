@@ -110,6 +110,16 @@ export function applicantFromCapture(app: CapturedApplication): CapturedApplican
   return applicantFromIdentity(identityFromCapture(app), Boolean(str(app, "business", "legalName")));
 }
 
+/** Intake source for lead attribution (iacrm_leadsource), from the capture's
+ * origin. Lead marketplaces get their proper name; anything else records the
+ * host so the source is never lost. */
+export function leadSourceGuess(app: CapturedApplication): string {
+  const s = `${app.source.system} ${app.source.url}`.toLowerCase();
+  if (s.includes("tivly")) return "Tivly";
+  if (s.includes("boldpenguin")) return "Bold Penguin";
+  return app.source.system;
+}
+
 /** Best-guess carrier from the capture source, for opportunity naming. */
 export function carrierGuess(app: CapturedApplication): string {
   const s = `${app.source.system} ${app.source.url}`.toLowerCase();

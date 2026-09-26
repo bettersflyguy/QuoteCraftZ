@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Checkbox, Dropdown, Input, Option, Radio, RadioGroup, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import type { CapturedApplication } from "@/messages";
-import type { AccountMatch, BatchItemResult, LobRow, PipelineStages } from "@/crm/dataverse";
-import { applicantFromIdentity, carrierGuess, identityFromCapture, type CaptureIdentity } from "@/crm/appCommit";
+import type { AccountMatch, BatchItemResult, ExistingMatch, LobRow, PipelineStages } from "@/crm/dataverse";
+import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
+import { applicantFromIdentity, carrierGuess, identityFromCapture, leadSourceGuess, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -51,6 +52,8 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
   const [lobs, setLobs] = useState<LobRow[] | null>(null);
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<AccountMatch[] | null>(null);
+  const [dupes, setDupes] = useState<ExistingMatch[] | null>(null);
+  const [env, setEnv] = useState<CrmEnvironment | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<PanelError | null>(null);
   const [results, setResults] = useState<BatchItemResult[] | null>(null);
@@ -67,16 +70,30 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
 
   const openReview = () => { setStep("review"); setError(null); };
 
+  useEffect(() => { getActiveEnvironment().then(setEnv).catch(() => {}); }, []);
+
+  /** The duplicate gate: BOTH targets pass through here. Existing accounts and
+   * open leads are matched by email, then phone, then name before anything
+   * can be created. */
   const toTarget = async () => {
     setStep("target");
     setQuery(recordName);
     setError(null);
-    if (target === "insured") {
-      setBusy("search");
-      try {
-        setMatches(await send<AccountMatch[]>({ type: "panel/searchAccounts", name: recordName, postalCode: identity.postalCode || null }));
-      } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
-    }
+    setDupes(null);
+    setMatches(null);
+    setBusy("dupes");
+    try {
+      setDupes(await send<ExistingMatch[]>({
+        type: "panel/findMatches",
+        query: {
+          email: identity.email.trim() || null,
+          phone: identity.phone.trim() || null,
+          firstName: identity.firstName.trim() || null,
+          lastName: identity.lastName.trim() || null,
+          businessName: insuredType === 2 ? identity.businessName.trim() || null : null
+        }
+      }));
+    } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
   };
 
   const search = async () => {
@@ -152,10 +169,11 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
           street: identity.street || null, city: identity.city || null,
           state: identity.state || null, postalCode: identity.postalCode || null,
           phone: identity.phone || null, phoneIsMobile: identity.phoneIsMobile,
-          email: identity.email || null
+          email: identity.email || null,
+          leadSource: leadSourceGuess(app)
         }
       });
-      setResults([{ key: `Lead created — ${created.name}`, status: 204, error: null, entityId: null },
+      setResults([{ key: `Lead created — ${created.name} (source: ${leadSourceGuess(app)})`, status: 204, error: null, entityId: null },
         { key: "Risk-data logging requires an insured Account — convert the lead to load it", status: 204, error: null, entityId: null }]);
       setLoadedInto(created.name);
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
@@ -245,8 +263,8 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
           </>
         )}
         <div className={styles.row}>
-          <Button appearance="primary" disabled={!recordName || (opp.create && target === "insured" && !opp.lobId)} onClick={target === "insured" ? toTarget : createLead}>
-            {busy === "lead" ? <Spinner size="tiny" /> : target === "insured" ? "Continue" : "Create lead"}
+          <Button appearance="primary" disabled={!recordName || (opp.create && target === "insured" && !opp.lobId)} onClick={toTarget}>
+            Continue
           </Button>
           <Button onClick={() => setStep("closed")}>Cancel</Button>
         </div>
@@ -254,31 +272,68 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
     );
   }
 
+  const MATCH_LABEL = { email: "email match", phone: "phone match", name: "name match" } as const;
+
   return (
     <div className={styles.root}>
-      <div className={styles.title}>Pick the insured account</div>
-      {error && <ErrorBar error={error} onRetry={search} />}
-      <div className={styles.row}>
-        <Input className={styles.grow} value={query} onChange={(_, d) => setQuery(d.value)}
-          onKeyDown={e => { if (e.key === "Enter") void search(); }} placeholder="Account name" />
-        <Button disabled={busy !== null} onClick={search}>
-          {busy === "search" ? <Spinner size="tiny" /> : "Search"}
+      <div className={styles.title}>{target === "insured" ? "Pick the insured account" : "Create the lead"}</div>
+      {error && <ErrorBar error={error} onRetry={toTarget} />}
+      {busy === "dupes" && <Spinner size="tiny" label="Checking for existing records…" />}
+      {dupes && dupes.length > 0 && (
+        <>
+          <div className={styles.hint}>
+            Existing records for this person — load into one instead of creating a duplicate:
+          </div>
+          {dupes.map(d => (
+            <div key={`${d.kind}:${d.id}`} className={styles.match}>
+              <span className={styles.matchText}>
+                <b>{d.kind === "lead" ? "Lead" : "Account"}</b> — {d.name}
+                {d.city ? `, ${d.city}` : ""}{d.postalCode ? ` ${d.postalCode}` : ""} ({MATCH_LABEL[d.matchedBy]})
+              </span>
+              {d.kind === "account" ? (
+                <Button size="small" disabled={busy !== null} onClick={() => commit(d.id, d.name)}>
+                  {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                </Button>
+              ) : (
+                env && <Button size="small" as="a" href={crmRecordUrl(env, "lead", d.id)} target="_blank">Open</Button>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+      {dupes && dupes.length === 0 && <div className={styles.hint}>No existing account or lead matched by email, phone, or name.</div>}
+
+      {target === "lead" && dupes && (
+        <Button appearance="primary" disabled={busy !== null} onClick={createLead}>
+          {busy === "lead" ? <Spinner size="tiny" /> : dupes.length ? "Create lead anyway" : "Create lead"}
         </Button>
-      </div>
-      {matches?.map(m => (
-        <div key={m.accountId} className={styles.match}>
-          <span className={styles.matchText}>
-            {m.name}{m.city ? ` — ${m.city}` : ""}{m.postalCode ? ` ${m.postalCode}` : ""}
-          </span>
-          <Button size="small" disabled={busy !== null} onClick={() => commit(m.accountId, m.name)}>
-            {busy === m.accountId ? <Spinner size="tiny" /> : "Load"}
+      )}
+
+      {target === "insured" && dupes && (
+        <>
+          <div className={styles.row}>
+            <Input className={styles.grow} value={query} onChange={(_, d) => setQuery(d.value)}
+              onKeyDown={e => { if (e.key === "Enter") void search(); }} placeholder="Search other accounts" />
+            <Button disabled={busy !== null} onClick={search}>
+              {busy === "search" ? <Spinner size="tiny" /> : "Search"}
+            </Button>
+          </div>
+          {matches?.map(m => (
+            <div key={m.accountId} className={styles.match}>
+              <span className={styles.matchText}>
+                {m.name}{m.city ? ` — ${m.city}` : ""}{m.postalCode ? ` ${m.postalCode}` : ""}
+              </span>
+              <Button size="small" disabled={busy !== null} onClick={() => commit(m.accountId, m.name)}>
+                {busy === m.accountId ? <Spinner size="tiny" /> : "Load"}
+              </Button>
+            </div>
+          ))}
+          {matches && matches.length === 0 && <div className={styles.hint}>No matching accounts.</div>}
+          <Button disabled={busy !== null} onClick={createAndCommit}>
+            {busy === "create" ? <Spinner size="tiny" /> : `Create "${query.trim() || recordName}"${dupes.length ? " anyway" : ""} and load`}
           </Button>
-        </div>
-      ))}
-      {matches && matches.length === 0 && <div className={styles.hint}>No matching accounts.</div>}
-      <Button disabled={busy !== null} onClick={createAndCommit}>
-        {busy === "create" ? <Spinner size="tiny" /> : `Create "${query.trim() || recordName}" and load`}
-      </Button>
+        </>
+      )}
       <div className={styles.row}>
         <Button onClick={() => setStep("review")}>Back</Button>
       </div>

@@ -20,7 +20,7 @@ const useStyles = makeStyles({
   buttons: { display: "flex", gap: "8px", flexWrap: "wrap" }
 });
 
-interface IngestOutcome { added: number; total: number; app: CapturedApplication }
+interface IngestOutcome { added: number; total: number; app: CapturedApplication; replaced: boolean }
 
 function businessName(app: CapturedApplication | null): string | null {
   const name = app?.normalized["business"]?.["legalName"] ?? app?.normalized["contact"]?.["fullName"];
@@ -125,6 +125,9 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
       )}
       {ingestResult && (
         <div className={styles.result}>
+          {ingestResult.replaced && (
+            <>This page belongs to a <b>different person</b> than the previous capture — started a fresh one (the old capture was discarded, not mixed in). </>
+          )}
           Ingested {ingestResult.added} new field{ingestResult.added === 1 ? "" : "s"} from this page
           ({ingestResult.total} held in total). Switch to the next portal or rater and fill from it.
         </div>
