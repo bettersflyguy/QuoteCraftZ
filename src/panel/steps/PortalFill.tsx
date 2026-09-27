@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Checkbox, Spinner, makeStyles, tokens } from "@fluentui/react-components";
+import { Button, Checkbox, Input, Spinner, makeStyles, tokens } from "@fluentui/react-components";
+import type { InsuredSearchRow } from "@/crm/dataverse";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
@@ -30,6 +31,19 @@ const useStyles = makeStyles({
     gap: "2px"
   },
   fieldSection: { fontWeight: 600, color: tokens.colorNeutralForeground3, fontSize: "11px", marginTop: "4px" },
+  match: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "12px",
+    backgroundColor: tokens.colorNeutralBackground3,
+    borderRadius: "4px",
+    padding: "6px 8px"
+  },
+  matchText: { minWidth: 0, overflowWrap: "anywhere" },
+  row: { display: "flex", gap: "6px" },
+  grow: { flex: 1, minWidth: 0 },
   fieldRow: { display: "flex", gap: "6px", minWidth: 0 },
   fieldLabel: { color: tokens.colorNeutralForeground3, flexShrink: 0, maxWidth: "45%", overflowWrap: "anywhere" },
   fieldValue: { minWidth: 0, overflowWrap: "anywhere" }
@@ -65,13 +79,17 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
   const styles = useStyles();
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [overwrite, setOverwrite] = useState(false);
-  const [busy, setBusy] = useState<"fill" | "ingest" | "autocap" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<PanelError | null>(null);
   const [fillResult, setFillResult] = useState<PortalFillResult | null>(null);
   const [ingestResult, setIngestResult] = useState<IngestOutcome | null>(null);
 
   const [autoCap, setAutoCap] = useState(false);
   const [live, setLive] = useState<CaptureUpdatedBroadcast | null>(null);
+  const [crmOpen, setCrmOpen] = useState(false);
+  const [crmQuery, setCrmQuery] = useState("");
+  const [crmRows, setCrmRows] = useState<InsuredSearchRow[] | null>(null);
+  const [crmNote, setCrmNote] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(setApp).catch(() => {});
@@ -131,6 +149,37 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
     }
   };
 
+  const crmSearch = async () => {
+    setBusy("crm");
+    setError(null);
+    try {
+      setCrmRows(await send<InsuredSearchRow[]>({ type: "panel/crmSearch", query: crmQuery.trim() }));
+    } catch (e) {
+      setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const crmPull = async (row: InsuredSearchRow) => {
+    setBusy(row.id);
+    setError(null);
+    try {
+      const outcome = await send<IngestOutcome>({ type: "panel/crmPull", kind: row.kind, id: row.id, name: row.name });
+      setApp(outcome.app);
+      setCrmNote(
+        `${outcome.replaced ? "Started a fresh application from" : "Merged"} ${row.name}: ` +
+        `${outcome.added} field${outcome.added === 1 ? "" : "s"} from the CRM (${outcome.total} held). Ready to fill this quote sheet.`
+      );
+      setCrmOpen(false);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const clear = async () => {
     await send({ type: "panel/bpClear" }).catch(() => {});
     setApp(null);
@@ -161,7 +210,39 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
         <Button appearance="primary" disabled={busy !== null || !app} onClick={() => run("fill")}>
           {busy === "fill" ? <Spinner size="tiny" /> : "Fill this page"}
         </Button>
+        <Button disabled={busy !== null} onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}>
+          Fill from CRM…
+        </Button>
       </div>
+      {crmOpen && (
+        <>
+          <div className={styles.row}>
+            <Input
+              className={styles.grow}
+              value={crmQuery}
+              onChange={(_, d) => setCrmQuery(d.value)}
+              onKeyDown={e => { if (e.key === "Enter" && crmQuery.trim()) void crmSearch(); }}
+              placeholder="Search accounts and contacts"
+            />
+            <Button disabled={busy !== null || !crmQuery.trim()} onClick={crmSearch}>
+              {busy === "crm" ? <Spinner size="tiny" /> : "Search"}
+            </Button>
+          </div>
+          {crmRows?.map(r => (
+            <div key={`${r.kind}:${r.id}`} className={styles.match}>
+              <span className={styles.matchText}>
+                <b>{r.kind === "account" ? "Account" : "Contact"}</b> — {r.name}
+                {r.city ? `, ${r.city}` : ""}{r.postalCode ? ` ${r.postalCode}` : ""}
+              </span>
+              <Button size="small" disabled={busy !== null} onClick={() => crmPull(r)}>
+                {busy === r.id ? <Spinner size="tiny" /> : "Use"}
+              </Button>
+            </div>
+          ))}
+          {crmRows && crmRows.length === 0 && <div className={styles.hint}>No matching accounts or contacts.</div>}
+        </>
+      )}
+      {crmNote && <div className={styles.result}>{crmNote}</div>}
       {autoCap && (
         <div className={styles.result}>
           Auto-capturing this tab — every page you visit is read and merged

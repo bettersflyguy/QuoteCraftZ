@@ -58,6 +58,8 @@ export type PanelRequest =
   | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
   | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }
   | { type: "panel/autoCapture"; tabId: number; enable: boolean }
+  | { type: "panel/crmSearch"; query: string }
+  | { type: "panel/crmPull"; kind: "account" | "contact"; id: string; name: string }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };

@@ -198,6 +198,76 @@ export async function createPolicy(env: CrmEnvironment, f: NewPolicyFields): Pro
   return { policyId: r["iacrm_policyid"]! };
 }
 
+export interface InsuredSearchRow {
+  kind: "account" | "contact";
+  id: string;
+  name: string;
+  city: string | null;
+  postalCode: string | null;
+}
+
+/** Free-text CRM search over accounts and contacts, for picking the insured
+ * whose data should fill a carrier quote sheet. */
+export async function searchInsureds(env: CrmEnvironment, query: string): Promise<InsuredSearchRow[]> {
+  const q = query.replace(/'/g, "''");
+  const out: InsuredSearchRow[] = [];
+  const acc = await dvJson<{ value: Record<string, string>[] }>(
+    env, `accounts?$select=accountid,name,address1_city,address1_postalcode&$filter=statecode eq 0 and contains(name,'${q}')&$orderby=name&$top=8`
+  );
+  for (const a of acc.value) out.push({ kind: "account", id: a["accountid"]!, name: a["name"] ?? "", city: a["address1_city"] ?? null, postalCode: a["address1_postalcode"] ?? null });
+  const con = await dvJson<{ value: Record<string, string>[] }>(
+    env, `contacts?$select=contactid,fullname,address1_city,address1_postalcode&$filter=statecode eq 0 and contains(fullname,'${q}')&$orderby=fullname&$top=8`
+  );
+  for (const c of con.value) out.push({ kind: "contact", id: c["contactid"]!, name: c["fullname"] ?? "", city: c["address1_city"] ?? null, postalCode: c["address1_postalcode"] ?? null });
+  return out;
+}
+
+const ACCOUNT_SOURCE_SELECT = "accountid,name,address1_line1,address1_line2,address1_city,address1_stateorprovince,address1_postalcode,telephone1,emailaddress1,iacrm_insuredtype,iacrm_insuredfirstname,iacrm_insuredlastname,_primarycontactid_value";
+const CONTACT_SOURCE_SELECT = "contactid,firstname,lastname,fullname,birthdate,gendercode,familystatuscode,mobilephone,telephone1,emailaddress1,address1_line1,address1_line2,address1_city,address1_stateorprovince,address1_postalcode,_parentcustomerid_value";
+
+/** The raw records behind an insured pick: the account (with iacrm_mobilephone
+ * when the column exists), its primary contact, and logged risk answers when
+ * the knowledge tables exist. Best-effort on every custom piece. */
+export async function getInsuredSourceRecords(
+  env: CrmEnvironment, kind: "account" | "contact", id: string
+): Promise<import("./crmSource").CrmSourceRecords> {
+  let account: Record<string, unknown> | null = null;
+  let contact: Record<string, unknown> | null = null;
+
+  if (kind === "account") {
+    try {
+      account = await dvJson<Record<string, unknown>>(env, `accounts(${id})?$select=${ACCOUNT_SOURCE_SELECT},iacrm_mobilephone`);
+    } catch {
+      account = await dvJson<Record<string, unknown>>(env, `accounts(${id})?$select=${ACCOUNT_SOURCE_SELECT}`);
+    }
+    const primaryId = account?.["_primarycontactid_value"];
+    if (typeof primaryId === "string" && primaryId) {
+      try { contact = await dvJson<Record<string, unknown>>(env, `contacts(${primaryId})?$select=${CONTACT_SOURCE_SELECT}`); } catch { /* keep account-only */ }
+    }
+  } else {
+    contact = await dvJson<Record<string, unknown>>(env, `contacts(${id})?$select=${CONTACT_SOURCE_SELECT}`);
+    const parentId = contact?.["_parentcustomerid_value"];
+    if (typeof parentId === "string" && parentId) {
+      try {
+        account = await dvJson<Record<string, unknown>>(env, `accounts(${parentId})?$select=${ACCOUNT_SOURCE_SELECT},iacrm_mobilephone`);
+      } catch { /* contact-only */ }
+    }
+  }
+
+  const riskAnswers: { label: string; value: string }[] = [];
+  const accountId = (account?.["accountid"] as string | undefined) ?? (kind === "account" ? id : undefined);
+  if (accountId) {
+    try {
+      const { value } = await dvJson<{ value: Record<string, string>[] }>(
+        env, `iacrm_riskanswers?$select=iacrm_riskanswer_name,iacrm_value&$filter=_iacrm_accountid_value eq ${accountId} and statecode eq 0&$top=200`
+      );
+      for (const r of value) riskAnswers.push({ label: r["iacrm_riskanswer_name"] ?? "", value: r["iacrm_value"] ?? "" });
+    } catch { /* knowledge tables absent in this org */ }
+  }
+
+  return { account, contact, riskAnswers };
+}
+
 /** One evergreen note per subject per account: found by subject -> PATCH,
  * else POST bound to the account. Returns "created" | "updated". */
 export async function upsertAccountNote(env: CrmEnvironment, accountId: string, subject: string, text: string): Promise<"created" | "updated"> {

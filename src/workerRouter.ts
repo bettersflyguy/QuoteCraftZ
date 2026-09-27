@@ -36,7 +36,8 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { buildSupplementalNote, writeApplicationKnowledge } from "@/crm/appCommit";
-import { createLead, createPolicy, findInsuredMatches, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { buildCrmCaptureFields } from "@/crm/crmSource";
 
 export interface Deps {
   getEnvironments: () => Promise<CrmEnvironment[]>;
@@ -70,6 +71,8 @@ export interface Deps {
   findInsuredMatches: typeof findInsuredMatches;
   createPolicy: typeof createPolicy;
   upsertAccountNote: typeof upsertAccountNote;
+  searchInsureds: typeof searchInsureds;
+  getInsuredSourceRecords: typeof getInsuredSourceRecords;
   getCarrierAliases: typeof getCarrierAliases;
   saveCarrierAlias: typeof saveCarrierAlias;
   getAccessToken: typeof getAccessToken;
@@ -293,6 +296,26 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/autoCapture": {
         await deps.setAutoCapture(msg.tabId, msg.enable);
         return { ok: true, data: null };
+      }
+
+      case "panel/crmSearch": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.searchInsureds(env, msg.query) };
+      }
+
+      case "panel/crmPull": {
+        const env = await deps.getActiveEnvironment();
+        const records = await deps.getInsuredSourceRecords(env, msg.kind, msg.id);
+        const fields = buildCrmCaptureFields(records);
+        if (!fields.length) {
+          return { ok: false, error: "That record has no usable insured data.", kind: "http" };
+        }
+        const existing = await deps.getCapturedApplication();
+        const outcome = mergeIngestedFields(existing, fields, {
+          system: `CRM (${env.name})`, url: env.orgUrl, title: msg.name
+        });
+        await deps.setCapturedApplication(outcome.app);
+        return { ok: true, data: outcome };
       }
 
       case "panel/bpCapture": {
@@ -631,6 +654,8 @@ export const realDeps: Deps = {
   findInsuredMatches,
   createPolicy,
   upsertAccountNote,
+  searchInsureds,
+  getInsuredSourceRecords,
   getCarrierAliases,
   saveCarrierAlias,
   getAccessToken,
