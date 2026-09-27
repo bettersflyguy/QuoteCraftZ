@@ -43,6 +43,17 @@ describe("portal mapper", () => {
     expect(matchField("Search this website", candidates)).toBeNull();
   });
 
+  it("a generic captured 'Name' field never poisons name/city matching; fullName splits (live FAO regression)", () => {
+    const candidates = buildCandidates({
+      normalized: { contact: { fullName: "Edward Parkin" } },
+      fields: [{ section: "Personal Information", label: "Name", value: "Edward Parkin" }]
+    });
+    // FAO's internal field ids contain "NamedInsured" — must not match a bare Name field
+    expect(matchField("City NamedInsured.City", candidates)).toBeNull();
+    expect(matchField("First Name NamedInsured.FirstName", candidates)?.value).toBe("Edward");
+    expect(matchField("Last Name NamedInsured.LastName", candidates)?.value).toBe("Parkin");
+  });
+
   it("matches compact portal VIN field names to the captured vehicle VIN", () => {
     const candidates = buildCandidates({
       normalized: {},

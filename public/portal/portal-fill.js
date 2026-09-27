@@ -84,10 +84,32 @@
     return `${match[3]}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
   }
 
-  function dispatch(element) {
-    element.dispatchEvent(new Event("input", { bubbles: true }));
+  /* address autocompletes ("Begin typing an address...") DISCARD programmatic
+   * values on blur unless a suggestion is chosen - leave those focused with
+   * the text typed so the agent confirms with one click */
+  function isSuggestive(element) {
+    return Boolean(
+      element.getAttribute("aria-autocomplete") === "list" ||
+      element.closest("[role='combobox']") ||
+      /begin typing|start typing/i.test(element.getAttribute("placeholder") || "")
+    );
+  }
+
+  function dispatch(element, typed) {
+    if (typed) {
+      element.focus();
+      element.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: String(typed).slice(-1) }));
+      try {
+        element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: String(typed) }));
+      } catch (_e) {
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: String(typed).slice(-1) }));
+    } else {
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }
     element.dispatchEvent(new Event("change", { bubbles: true }));
-    element.dispatchEvent(new Event("blur", { bubbles: true }));
+    if (!typed || !isSuggestive(element)) element.dispatchEvent(new Event("blur", { bubbles: true }));
     element.dataset.bettersFilled = "true";
     element.style.outline = "2px solid #1c8a72";
     element.style.outlineOffset = "2px";
@@ -137,7 +159,7 @@
     }
     const value = type === "date" ? dateValue(candidate.value) : candidate.value;
     setNativeValue(element, value);
-    dispatch(element);
+    dispatch(element, value);
     return { status: "filled" };
   }
 

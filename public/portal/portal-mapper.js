@@ -63,14 +63,32 @@
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
   }
 
+  /* raw captured labels this generic are POISON as fill candidates: a field
+   * captured as "Name: Edward Parkin" would substring-match First Name, Last
+   * Name and NamedInsured.City alike. The normalized identity (with proper
+   * alias sets) covers these; the raw duplicates are dropped. */
+  const GENERIC_LABELS = new Set(["name", "full name", "address", "mailing address", "city", "state", "zip", "zip code", "phone", "phone number", "email", "email address"]);
+
   function buildCandidates(payload) {
     const candidates = [];
+    const normalized = (payload && payload.normalized) || {};
     rules.forEach(([path, aliases]) => {
-      const value = getPath(payload && payload.normalized, path);
+      const value = getPath(normalized, path);
       if (comparable(value) && clean(value)) candidates.push({ path, aliases, value: clean(value), source: "normalized" });
     });
+    /* a capture holding only a glued full name still fills First/Last: split
+     * on the fly (middle names dropped — mirrors the identity rules) */
+    const contact = normalized.contact || {};
+    if (clean(contact.fullName) && !clean(contact.firstName)) {
+      const parts = clean(contact.fullName).split(" ");
+      if (parts.length > 1) {
+        candidates.push({ path: "contact.firstName", aliases: rules.find(function (r) { return r[0] === "contact.firstName"; })[1], value: parts[0], source: "normalized" });
+        candidates.push({ path: "contact.lastName", aliases: rules.find(function (r) { return r[0] === "contact.lastName"; })[1], value: parts[parts.length - 1], source: "normalized" });
+      }
+    }
     (payload && payload.fields || []).forEach((field, index) => {
       if (!comparable(field.value) || !clean(field.value) || !clean(field.label)) return;
+      if (GENERIC_LABELS.has(canonical(field.label))) return;
       const aliases = [field.label];
       if (/\bvin\b/i.test(field.label)) aliases.push("VIN", "VIN number", "vehicle VIN", "vehicle identification number");
       if (field.group) aliases.push(`${field.group} ${field.label}`);
@@ -86,7 +104,9 @@
     if (!field || !wanted) return 0;
     if (field === wanted) return 120;
     if (field.startsWith(`${wanted} `) || field.endsWith(` ${wanted}`)) return 100;
-    if (field.includes(wanted)) return 90;
+    /* substring matches need a distinctive alias — a short single word inside
+     * a longer field name ("name" in "named insured city") proves nothing */
+    if (field.includes(wanted) && (wanted.length >= 8 || wanted.indexOf(" ") > 0)) return 90;
     if (wanted.length >= 8 && wanted.includes(field)) return 78;
     const tokens = wanted.split(" ").filter((token) => token.length > 2);
     const actual = new Set(field.split(" "));
