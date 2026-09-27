@@ -115,7 +115,7 @@
   }
 
   /* banking, payment and card data is never captured */
-  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*plan|autopay|eft|ach)\b/i;
+  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*method|method\s*of\s*payment|pay\s*plan|auto\s*pay|autopay|amount\s*due|paid\s*to\s*date|balance|eft|ach)\b/i;
 
   /* cookie/consent widgets contribute nothing but noise */
   function inConsentUi(element) {
@@ -189,6 +189,20 @@
       if (r && r[2].split(" ").length <= 3) fields.push({ label: r[2], value: r[1], section, group: "", source: "money-line" });
     });
 
+    /* label-left / value-right rows — servicing portals (GEICO Edge) print
+     * facts as a container with exactly two text children ("Issuing State
+     * (or Country)" | "MINNESOTA"). Guards keep navs and menus out. */
+    root.querySelectorAll("div, li").forEach((row) => {
+      if (!isVisible(row) || inConsentUi(row) || row.children.length !== 2) return;
+      if (row.querySelector("input, select, textarea, button, a, svg, [role='combobox'], [role='radiogroup']")) return;
+      const c0 = row.children[0], c1 = row.children[1];
+      if (c0.children.length > 2 || c1.children.length > 3) return;
+      const label = text(c0).replace(/[:*]+$/, "");
+      const value = text(c1);
+      if (!label || !value || label === value || label.length > 80 || value.length > 300) return;
+      fields.push({ label, value, section, group: "", source: "review-row" });
+    });
+
     /* bold-label prose runs — "<strong>Name Insured</strong> <span>Edward
      * Parkin</span> <br> <strong>Mailing Address</strong>…" — the standard
      * carrier policy-details pattern (GEICO renders the whole block as one
@@ -225,8 +239,19 @@
     const salePush = (label, value) => {
       if (value && !saleSeen.has(label)) { saleSeen.add(label); fields.push({ label, value: clean(value), section, group: "", source: "sale" }); }
     };
-    const pol = bodyText.match(/policy\s*(?:number|#)\s*:?\s*([A-Z0-9][A-Z0-9-]{4,19})/i);
+    const pol = bodyText.match(/policy\s*(?:number|#)\s*:?\s*([A-Z0-9][A-Z0-9-]{4,19})/i) ||
+      /* servicing portals shorthand: "Auto #6277201270" */
+      bodyText.match(/\b(?:auto|home|renters?|umbrella)\s*#\s*([A-Z0-9-]{5,15})\b/i);
     if (pol) salePush("Policy Number", pol[1]);
+    /* raw VINs (17 chars, no I/O/Q) — servicing pages print them bare */
+    let vinN = 0;
+    for (const vm of bodyText.matchAll(/(?:^|[\s#])([A-HJ-NPR-Z0-9]{17})(?=\s|$)/g)) {
+      if (/[A-HJ-NPR-Z]/.test(vm[1]) && /\d/.test(vm[1])) {
+        vinN += 1;
+        if (vinN > 6) break;
+        salePush(vinN === 1 ? "VIN" : "VIN " + vinN, vm[1]);
+      }
+    }
     /* a full US address printed as bare text ("203 WALL STREET EAST SAINT
      * LOUIS, IL 62206" under a confirmation heading) — no label structure */
     const addr = bodyText.match(/\b\d{1,6}\s+[A-Za-z0-9 .'#-]{3,60}?,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/);
@@ -241,6 +266,13 @@
     if (eff) salePush("Effective Date", eff[1]);
     const exp = bodyText.match(/expiration(?:\s*date)?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
     if (exp) salePush("Expiration Date", exp[1]);
+    /* bare policy-term range ("09/27/2026 - 03/27/2027") — only as a fallback
+     * when no labeled dates were found on the page */
+    const bare = bodyText.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s*[-–—]\s*(\d{1,2}\/\d{1,2}\/\d{4})/);
+    if (bare) {
+      salePush("Effective Date", bare[1]);
+      salePush("Expiration Date", bare[2]);
+    }
     const termPrem = bodyText.match(/(\d{1,2})\s*[- ]?month[^$.]{0,40}?premium[^$]{0,15}\$\s*([\d,]+(?:\.\d{2})?)/i);
     if (termPrem) {
       salePush("Total Premium", "$" + termPrem[2]);
@@ -265,8 +297,12 @@
       salePush(`Driver ${di}`, m[1]);
     }
 
-    /* a "value" hundreds of characters long is a swallowed widget, not data */
-    return fields.filter((field) => field.label && field.value && field.value.length <= 300);
+    /* a "value" hundreds of characters long is a swallowed widget, not data;
+     * confirm-dialog prompts and fully masked values are junk too */
+    return fields.filter((field) =>
+      field.label && field.value && field.value.length <= 300 &&
+      !/are you sure|delete this/i.test(field.label) &&
+      !/^[•*xX.•-]{4,}$/.test(field.value));
   }
 
   /* invoked per frame by the worker via chrome.scripting.executeScript func —

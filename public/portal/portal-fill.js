@@ -63,7 +63,7 @@
 
   /* banking, payment and card fields are NEVER auto-filled — an insurance
    * application holds nothing that belongs in them */
-  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*plan|autopay|eft|ach)\b/i;
+  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*method|method\s*of\s*payment|pay\s*plan|auto\s*pay|autopay|amount\s*due|paid\s*to\s*date|balance|eft|ach)\b/i;
 
   function optionName(element) {
     const label = explicitLabel(element) || clean(element.getAttribute("aria-label"));
