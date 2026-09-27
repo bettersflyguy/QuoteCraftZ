@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
-import { downloadCapture } from "../downloadCapture";
+import { exportCaptureToExcel } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
 import type { CaptureUpdatedBroadcast, CapturedApplication, PageContext, PortalFillResult } from "@/messages";
 
@@ -17,7 +17,22 @@ const useStyles = makeStyles({
     borderRadius: "4px",
     padding: "8px"
   },
-  buttons: { display: "flex", gap: "8px", flexWrap: "wrap" }
+  buttons: { display: "flex", gap: "8px", flexWrap: "wrap" },
+  fieldList: {
+    maxHeight: "220px",
+    overflowY: "auto",
+    fontSize: "12px",
+    backgroundColor: tokens.colorNeutralBackground3,
+    borderRadius: "4px",
+    padding: "6px 8px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px"
+  },
+  fieldSection: { fontWeight: 600, color: tokens.colorNeutralForeground3, fontSize: "11px", marginTop: "4px" },
+  fieldRow: { display: "flex", gap: "6px", minWidth: 0 },
+  fieldLabel: { color: tokens.colorNeutralForeground3, flexShrink: 0, maxWidth: "45%", overflowWrap: "anywhere" },
+  fieldValue: { minWidth: 0, overflowWrap: "anywhere" }
 });
 
 interface IngestOutcome { added: number; total: number; app: CapturedApplication; replaced: boolean }
@@ -158,12 +173,21 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
           )}
         </div>
       )}
-      <div className={styles.hint}>
-        Ingest reads the insured data visible on this page into the held
-        application (existing values are never replaced). Fill populates this
-        page's form from it, highlighting what changed — it never clicks Next,
-        Save, Get Quote, or Submit. Each site is granted individually.
-      </div>
+      {app && (
+        <div className={styles.fieldList}>
+          {[...new Set(app.fields.map(f => f.section))].map(section => (
+            <div key={section}>
+              <div className={styles.fieldSection}>{section}</div>
+              {app.fields.filter(f => f.section === section).map((f, i) => (
+                <div key={`${f.label}:${i}`} className={styles.fieldRow}>
+                  <span className={styles.fieldLabel}>{f.group ? `${f.group} — ` : ""}{f.label}</span>
+                  <span className={styles.fieldValue}>{f.value}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       {app && (
         <Checkbox
           checked={overwrite}
@@ -191,7 +215,7 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
       {app && <LoadToCrm key={app.capturedAt} app={app} />}
       {app && (
         <div className={styles.buttons}>
-          <Button onClick={() => downloadCapture(app)}>Download JSON</Button>
+          <Button onClick={() => exportCaptureToExcel(app)}>Export to Excel</Button>
           <Button onClick={clear}>Clear captured application</Button>
         </div>
       )}

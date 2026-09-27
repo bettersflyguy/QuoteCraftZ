@@ -3,6 +3,7 @@ import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components"
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { LoadToCrm } from "./LoadToCrm";
+import { exportCaptureToExcel } from "../downloadCapture";
 import type { CapturedApplication } from "@/messages";
 
 const useStyles = makeStyles({
@@ -32,17 +33,6 @@ const useStyles = makeStyles({
 function lookup(app: CapturedApplication, path: string): string {
   const value = path.split(".").reduce<unknown>((v, key) => (v as Record<string, unknown> | undefined)?.[key], app.normalized);
   return typeof value === "string" && value ? value : "—";
-}
-
-function downloadJson(app: CapturedApplication): void {
-  const id = lookup(app, "application.id");
-  const safeId = id === "—" ? new Date().toISOString().slice(0, 10) : id.replace(/[^a-z0-9_-]/gi, "-");
-  const url = URL.createObjectURL(new Blob([JSON.stringify(app, null, 2)], { type: "application/json" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `bold-penguin-${safeId}.json`;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** Commercial-lines mode: the active tab is a Bold Penguin application.
@@ -122,7 +112,7 @@ export function CommercialCapture({ onChanged }: { onChanged: () => void }) {
           <LoadToCrm key={app.capturedAt} app={app} />
           <div className={styles.buttons}>
             <Button disabled={busy} onClick={capture}>{busy ? <Spinner size="tiny" /> : "Re-capture"}</Button>
-            <Button onClick={() => downloadJson(app)}>Download JSON</Button>
+            <Button onClick={() => exportCaptureToExcel(app)}>Export to Excel</Button>
             <Button onClick={clear}>Clear</Button>
           </div>
         </>
