@@ -22,6 +22,27 @@ describe("Bold Penguin normalizer", () => {
     });
   });
 
+  it("maps GEICO's bare policyholder labels (live shape)", () => {
+    const result = normalize([
+      { label: "First Name", value: "Dearris" },
+      { label: "Last Name", value: "Thomas" },
+      { label: "Date of Birth", value: "12/12/1994" },
+      { label: "Address", value: "203 WALL STREET" },
+      { label: "Apt #", value: "4B" },
+      { label: "5-Digit ZIP Code", value: "62206" },
+      { label: "Email Address", value: "dearris.thomas@gmail.com" },
+      { label: "Mobile Phone Number", value: "(618) 600-2169" },
+      { label: "Coverage Start Date", value: "09/26/2026" }
+    ]);
+    expect(result["address"]?.["street1"]).toBe("203 WALL STREET");
+    expect(result["address"]?.["street2"]).toBe("4B");
+    expect(result["address"]?.["postalCode"]).toBe("62206");
+    // bare "address" must never steal the email
+    expect(result["contact"]?.["email"]).toBe("dearris.thomas@gmail.com");
+    expect(result["contact"]?.["phone"]).toBe("(618) 600-2169");
+    expect(result["coverage"]?.["effectiveDate"]).toBe("09/26/2026");
+  });
+
   it("never mistakes a lienholder/finance company for the insured's business name", () => {
     const result = normalize([
       { label: "Finance or Leasing Company Name", value: "Chase Auto Finance" },

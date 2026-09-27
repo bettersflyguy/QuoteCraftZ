@@ -29,12 +29,14 @@ const rules: [string, string[]][] = [
   ["contact.dateOfBirth", ["date of birth", "birth date", "birthdate", "dob"]],
   ["contact.gender", ["gender", "sex"]],
   ["contact.maritalStatus", ["marital status"]],
-  ["address.street1", ["business address", "street address", "address line 1", "address 1", "street"]],
-  ["address.street2", ["address line 2", "address 2", "suite", "unit"]],
+  // bare "address" is safe as the LAST alias here: the contact rules run
+  // first, so "Email Address" is claimed before this rule can see it
+  ["address.street1", ["business address", "street address", "address line 1", "address 1", "street", "mailing address", "garaging address", "home address", "residence address", "address"]],
+  ["address.street2", ["address line 2", "address 2", "suite", "unit", "apt", "apartment", "apt #"]],
   ["address.city", ["business city", "city"]],
   ["address.state", ["business state", "state", "province"]],
   ["address.postalCode", ["postal code", "zip code", "zipcode", "zip"]],
-  ["coverage.effectiveDate", ["desired effective date", "policy effective date", "effective date"]],
+  ["coverage.effectiveDate", ["desired effective date", "policy effective date", "effective date", "coverage start date"]],
   ["coverage.expirationDate", ["policy expiration date", "expiration date"]],
   ["coverage.currentCarrier", ["current insurance carrier", "current carrier", "prior carrier"]],
   ["coverage.currentPremium", ["current annual premium", "current premium", "annual premium"]],
