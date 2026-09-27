@@ -4,7 +4,7 @@ import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { downloadCapture } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
-import type { CapturedApplication, PortalFillResult } from "@/messages";
+import type { CaptureUpdatedBroadcast, CapturedApplication, PageContext, PortalFillResult } from "@/messages";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -50,15 +50,49 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
   const styles = useStyles();
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [overwrite, setOverwrite] = useState(false);
-  const [busy, setBusy] = useState<"fill" | "ingest" | null>(null);
+  const [busy, setBusy] = useState<"fill" | "ingest" | "autocap" | null>(null);
   const [error, setError] = useState<PanelError | null>(null);
   const [fillResult, setFillResult] = useState<PortalFillResult | null>(null);
   const [ingestResult, setIngestResult] = useState<IngestOutcome | null>(null);
+
+  const [autoCap, setAutoCap] = useState(false);
+  const [live, setLive] = useState<CaptureUpdatedBroadcast | null>(null);
 
   const refresh = useCallback(() => {
     send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(setApp).catch(() => {});
   }, []);
   useEffect(refresh, [refresh]);
+
+  useEffect(() => {
+    send<PageContext>({ type: "panel/getPageContext" }).then(c => setAutoCap(c.autoCapturing)).catch(() => {});
+    // live merges from the auto-capture driver while the agent works the site
+    const onMsg = (m: unknown) => {
+      const b = m as CaptureUpdatedBroadcast;
+      if (b?.type === "portal/captureUpdated") {
+        setLive(b);
+        refresh();
+        onChanged();
+      }
+    };
+    chrome.runtime.onMessage.addListener(onMsg);
+    return () => chrome.runtime.onMessage.removeListener(onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleAutoCap = async () => {
+    setBusy("autocap");
+    setError(null);
+    try {
+      const tab = await grantActiveTab();
+      await send({ type: "panel/autoCapture", tabId: tab.id, enable: !autoCap });
+      setAutoCap(!autoCap);
+      if (autoCap) setLive(null);
+    } catch (e) {
+      setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const run = async (kind: "fill" | "ingest") => {
     setBusy(kind);
@@ -103,13 +137,27 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
           </div>}
       {error && <ErrorBar error={error} />}
       <div className={styles.buttons}>
-        <Button appearance={app ? "secondary" : "primary"} disabled={busy !== null} onClick={() => run("ingest")}>
+        <Button appearance={autoCap ? "secondary" : "primary"} disabled={busy !== null} onClick={toggleAutoCap}>
+          {busy === "autocap" ? <Spinner size="tiny" /> : autoCap ? "Stop auto-capture" : "Auto-capture as I work"}
+        </Button>
+        <Button disabled={busy !== null} onClick={() => run("ingest")}>
           {busy === "ingest" ? <Spinner size="tiny" /> : "Ingest this page"}
         </Button>
         <Button appearance="primary" disabled={busy !== null || !app} onClick={() => run("fill")}>
           {busy === "fill" ? <Spinner size="tiny" /> : "Fill this page"}
         </Button>
       </div>
+      {autoCap && (
+        <div className={styles.result}>
+          Auto-capturing this tab — every page you visit is read and merged
+          automatically (still never clicks or types).
+          {live && (
+            <> {live.replaced
+              ? " New person detected — started a fresh capture."
+              : ` Last page added ${live.added} field${live.added === 1 ? "" : "s"} (${live.total} held).`}</>
+          )}
+        </div>
+      )}
       <div className={styles.hint}>
         Ingest reads the insured data visible on this page into the held
         application (existing values are never replaced). Fill populates this

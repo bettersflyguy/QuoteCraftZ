@@ -90,6 +90,9 @@ export interface Deps {
   ) => Promise<import("@/boldpenguin/types").PortalFillResult>;
   /** Injects the page harvester into the tab and returns its visible fields. */
   ingestPortalTab: (tabId: number) => Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }>;
+  /** Starts/stops passive auto-capture on the tab (observer scripts, no clicks). */
+  setAutoCapture: (tabId: number, enable: boolean) => Promise<void>;
+  isAutoCapturing: (tabId: number) => Promise<boolean>;
 }
 
 function pageKindOf(url: string): import("@/messages").PageKind {
@@ -282,7 +285,13 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/getPageContext": {
         const tab = await deps.getActiveTab();
         const hasCapturedApplication = (await deps.getCapturedApplication()) !== null;
-        return { ok: true, data: { kind: tab ? pageKindOf(tab.url) : "other", hasCapturedApplication } };
+        const autoCapturing = tab ? await deps.isAutoCapturing(tab.id) : false;
+        return { ok: true, data: { kind: tab ? pageKindOf(tab.url) : "other", hasCapturedApplication, autoCapturing } };
+      }
+
+      case "panel/autoCapture": {
+        await deps.setAutoCapture(msg.tabId, msg.enable);
+        return { ok: true, data: null };
       }
 
       case "panel/bpCapture": {
@@ -517,6 +526,67 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   return { fields: results.flatMap(r => r.fields), title: top.title, url: top.url };
 }
 
+const AUTOCAP_KEY = "autocap/tabs";
+
+async function autoCapTabs(): Promise<number[]> {
+  const s = await chrome.storage.session.get(AUTOCAP_KEY);
+  return (s[AUTOCAP_KEY] as number[] | undefined) ?? [];
+}
+
+async function injectAutoCapture(tabId: number): Promise<void> {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: ["portal/portal-ingest.js", "portal/portal-autocap.js"]
+  });
+  await chrome.tabs.sendMessage(tabId, { type: "portal/autoCaptureStart" }).catch(() => {});
+}
+
+async function setAutoCapture(tabId: number, enable: boolean): Promise<void> {
+  const tabs = await autoCapTabs();
+  const next = enable ? [...new Set([...tabs, tabId])] : tabs.filter(t => t !== tabId);
+  await chrome.storage.session.set({ [AUTOCAP_KEY]: next });
+  if (enable) await injectAutoCapture(tabId);
+  else await chrome.tabs.sendMessage(tabId, { type: "portal/autoCaptureStop" }).catch(() => {});
+}
+
+async function isAutoCapturing(tabId: number): Promise<boolean> {
+  return (await autoCapTabs()).includes(tabId);
+}
+
+/** Handles a page harvest sent by the auto-capture driver: merges it into the
+ * held application (identity guard included) and tells the panel. Called by
+ * the worker's message listener with the SENDER'S tab id — a tab that is not
+ * auto-capture-enabled is ignored. */
+export async function handleAutoCaptured(
+  msg: { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string },
+  senderTabId: number | undefined
+): Promise<void> {
+  if (senderTabId == null || !(await isAutoCapturing(senderTabId))) return;
+  const existing = await getCapturedApplication();
+  const outcome = mergeIngestedFields(existing, msg.fields, {
+    system: new URL(msg.url).hostname, url: msg.url, title: msg.title
+  });
+  // only persist + announce when something actually changed
+  if (!outcome.replaced && existing !== null && outcome.added === 0) return;
+  await setCapturedApplication(outcome.app);
+  chrome.runtime.sendMessage({
+    type: "portal/captureUpdated", added: outcome.added, total: outcome.total, replaced: outcome.replaced
+  } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
+}
+
+/** Full page loads kill content scripts — re-arm auto-capture on enabled tabs
+ * (the per-origin permission the user granted persists across navigations). */
+export function registerAutoCapReinjection(): void {
+  chrome.tabs.onUpdated.addListener((tabId, info) => {
+    if (info.status !== "complete") return;
+    void (async () => {
+      if (!(await isAutoCapturing(tabId))) return;
+      try { await injectAutoCapture(tabId); } catch { await setAutoCapture(tabId, false); }
+    })();
+  });
+  chrome.tabs.onRemoved.addListener(tabId => { void setAutoCapture(tabId, false); });
+}
+
 export const realDeps: Deps = {
   getEnvironments,
   getActiveEnvironment,
@@ -558,5 +628,7 @@ export const realDeps: Deps = {
   getCapturedApplication,
   setCapturedApplication,
   fillPortalTab,
-  ingestPortalTab
+  ingestPortalTab,
+  setAutoCapture,
+  isAutoCapturing
 };

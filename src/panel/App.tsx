@@ -57,7 +57,7 @@ export function App() {
   const refreshPage = useCallback(() => {
     send<PageContext>({ type: "panel/getPageContext" })
       .then(setPage)
-      .catch(() => setPage({ kind: "other", hasCapturedApplication: false }));
+      .catch(() => setPage({ kind: "other", hasCapturedApplication: false, autoCapturing: false }));
   }, []);
 
   useEffect(() => {

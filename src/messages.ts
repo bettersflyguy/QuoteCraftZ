@@ -13,6 +13,17 @@ export interface PageContext {
   kind: PageKind;
   /** A Bold Penguin application is held in session storage, ready to fill portals. */
   hasCapturedApplication: boolean;
+  /** Auto-capture is running on the active tab. */
+  autoCapturing: boolean;
+}
+
+/** Worker -> panel broadcast after an auto-capture merge, so the held-field
+ * count updates live while the agent works the carrier site. */
+export interface CaptureUpdatedBroadcast {
+  type: "portal/captureUpdated";
+  added: number;
+  total: number;
+  replaced: boolean;
 }
 
 export type BridgeRequest =
@@ -46,6 +57,7 @@ export type PanelRequest =
   | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
   | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
   | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }
+  | { type: "panel/autoCapture"; tabId: number; enable: boolean }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };
