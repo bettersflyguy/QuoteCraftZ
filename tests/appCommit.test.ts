@@ -38,6 +38,23 @@ describe("applicantFromCapture", () => {
     expect(a.isCommercial).toBe(false);
   });
 
+  it("drops middle names and prefers the exact Name fact row (live GEICO Edge shape)", async () => {
+    const { identityFromCapture } = await import("@/crm/appCommit");
+    // rail heading glued the middle name in; the Personal Information tab's
+    // "Name" row has the clean form
+    const app = capture({
+      normalized: { contact: { fullName: "Edward La-Valle Parkin" } },
+      fields: [{ label: "Name", value: "Edward Parkin", section: "Personal Information", group: "", source: "review-row" }]
+    });
+    const id = identityFromCapture(app);
+    expect(id.firstName).toBe("Edward");
+    expect(id.lastName).toBe("Parkin");
+    // even without the Name row, the middle name never lands in the surname
+    const railOnly = identityFromCapture(capture({ normalized: { contact: { fullName: "Edward La-Valle Parkin" } } }));
+    expect(railOnly.firstName).toBe("Edward");
+    expect(railOnly.lastName).toBe("Parkin");
+  });
+
   it("is commercial when a business legal name exists, and names the account after it", () => {
     const app = capture({ normalized: { business: { legalName: "Northwind Bakery LLC" } } });
     expect(applicantFromCapture(app).isCommercial).toBe(true);

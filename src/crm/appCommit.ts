@@ -87,9 +87,14 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   let firstName = str(app, "contact", "firstName") ?? "";
   let lastName = str(app, "contact", "lastName") ?? "";
   if (!firstName && !lastName) {
-    const parts = clean(str(app, "contact", "fullName") ?? "").split(" ");
+    // an exactly-labeled "Name" fact row (GEICO Edge's Personal Information
+    // tab) beats rail headings that glue the middle name in ("Edward
+    // La-Valle Parkin"); middle tokens are middle names — last word is the
+    // surname, editable in review for multi-word surnames
+    const exact = app.fields.find(f => /^(name|full name|policyholder name|insured name)$/i.test(clean(f.label)) && f.value);
+    const parts = clean(exact?.value ?? str(app, "contact", "fullName") ?? "").split(" ").filter(Boolean);
     firstName = parts[0] ?? "";
-    lastName = parts.slice(1).join(" ");
+    lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
   }
   const phone = detectPhone(app);
   let street = [str(app, "address", "street1"), str(app, "address", "street2")].filter(Boolean).join(", ");
