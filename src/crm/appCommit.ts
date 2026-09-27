@@ -96,10 +96,16 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   let city = str(app, "address", "city") ?? "";
   let state = str(app, "address", "state") ?? "";
   let postalCode = str(app, "address", "postalCode") ?? "";
-  if (street && !city && !postalCode) {
-    // the whole "street city, ST zip" line landed in one field
+  if (street && !city) {
+    // the whole "street city, ST zip" line landed in one field (the ZIP may
+    // already be known separately — rate-by-zip flows capture it first)
     const split = splitUsAddress(street);
-    if (split) ({ street, city, state, postalCode } = split);
+    if (split) {
+      street = split.street;
+      city = split.city;
+      state = state || split.state;
+      postalCode = postalCode || split.postalCode;
+    }
   }
   return {
     firstName,

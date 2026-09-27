@@ -227,6 +227,10 @@
     };
     const pol = bodyText.match(/policy\s*(?:number|#)\s*:?\s*([A-Z0-9][A-Z0-9-]{4,19})/i);
     if (pol) salePush("Policy Number", pol[1]);
+    /* a full US address printed as bare text ("203 WALL STREET EAST SAINT
+     * LOUIS, IL 62206" under a confirmation heading) — no label structure */
+    const addr = bodyText.match(/\b\d{1,6}\s+[A-Za-z0-9 .'#-]{3,60}?,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/);
+    if (addr) salePush("Mailing Address", addr[0]);
     /* "Effective Dates 9/27/2026-03/27/2027" carries BOTH dates */
     const range = bodyText.match(/effective\s*dates?\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*[-–—]\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
     if (range) {

@@ -149,6 +149,30 @@ describe("splitUsAddress via identityFromCapture", () => {
     expect(id.postalCode).toBe("55428");
   });
 
+  it("splits a bare confirmation-line address even when the ZIP was already rated (live GEICO billing shape)", async () => {
+    const { identityFromCapture, splitUsAddress } = await import("@/crm/appCommit");
+    expect(splitUsAddress("203 WALL STREET EAST SAINT LOUIS, IL 62206")).toEqual({
+      street: "203 WALL STREET", city: "EAST SAINT LOUIS", state: "IL", postalCode: "62206"
+    });
+    // the ingest sale-pattern emits label "Mailing Address"; ZIP 62206 was
+    // already captured from the rate-by-zip start page
+    const app = capture({
+      normalized: {
+        contact: { fullName: "Dearris Thomas" },
+        address: { street1: "203 WALL STREET EAST SAINT LOUIS, IL 62206", postalCode: "62206" }
+      }
+    });
+    const id = identityFromCapture(app);
+    expect(id.street).toBe("203 WALL STREET");
+    expect(id.city).toBe("EAST SAINT LOUIS");
+    expect(id.state).toBe("IL");
+    expect(id.postalCode).toBe("62206");
+    // the ingest regex that feeds this path matches the on-page line
+    const re = /\b\d{1,6}\s+[A-Za-z0-9 .'#-]{3,60}?,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/;
+    expect("Billing Address Confirmation 203 WALL STREET EAST SAINT LOUIS, IL 62206 Is this the correct billing address?".match(re)?.[0])
+      .toBe("203 WALL STREET EAST SAINT LOUIS, IL 62206");
+  });
+
   it("leaves an already-split address untouched", async () => {
     const { identityFromCapture } = await import("@/crm/appCommit");
     const id = identityFromCapture(capture());
