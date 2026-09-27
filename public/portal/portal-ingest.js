@@ -99,7 +99,17 @@
       return Array.from(control.selectedOptions).map((option) => text(option)).filter(Boolean).join(", ");
     }
     if (role === "combobox") {
-      return clean(control.getAttribute("data-value") || text(control));
+      /* custom comboboxes (GEICO's finance-company picker) keep their whole
+       * option list in the DOM, often off-screen rather than display:none —
+       * innerText then returns EVERY option. Read the selected option, else
+       * the wrapper text with list parts stripped, and never accept a value
+       * that is plainly a list. */
+      const selected = control.querySelector("[aria-selected='true']");
+      if (selected) return clean(text(selected));
+      const cloned = control.cloneNode(true);
+      cloned.querySelectorAll("[role='listbox'], [role='option'], option, ul, ol, li").forEach((x) => x.remove());
+      const v = clean(control.getAttribute("data-value") || cloned.innerText || cloned.textContent);
+      return v.length > 120 ? "" : v;
     }
     return clean(control.value || control.getAttribute("value"));
   }
@@ -251,7 +261,8 @@
       salePush(`Driver ${di}`, m[1]);
     }
 
-    return fields.filter((field) => field.label && field.value);
+    /* a "value" hundreds of characters long is a swallowed widget, not data */
+    return fields.filter((field) => field.label && field.value && field.value.length <= 300);
   }
 
   /* invoked per frame by the worker via chrome.scripting.executeScript func —

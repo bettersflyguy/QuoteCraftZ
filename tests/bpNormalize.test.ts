@@ -22,6 +22,16 @@ describe("Bold Penguin normalizer", () => {
     });
   });
 
+  it("never mistakes a lienholder/finance company for the insured's business name", () => {
+    const result = normalize([
+      { label: "Finance or Leasing Company Name", value: "Chase Auto Finance" },
+      { label: "Legal Business Name", value: "Northwind Bakery LLC" }
+    ]);
+    expect(result["business"]?.["legalName"]).toBe("Northwind Bakery LLC");
+    const financeOnly = normalize([{ label: "Finance or Leasing Company Name", value: "Other" }]);
+    expect(financeOnly["business"]).toBeUndefined();
+  });
+
   it("does not reuse a generic field for multiple normalized properties", () => {
     const result = normalize([{ label: "Status", value: "Complete" }]);
     expect(result).toEqual({ application: { status: "Complete" } });

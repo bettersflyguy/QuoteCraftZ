@@ -56,6 +56,14 @@ const rules: [string, string[]][] = [
   ["application.status", ["application status", "submission status", "status"]]
 ];
 
+/** Labels that must never claim a rule even when an alias scores: a
+ * "Finance or Leasing Company Name" is a lienholder, not the insured's
+ * business name. */
+const excludes: Record<string, RegExp> = {
+  "business.legalName": /financ|leas|lien|mortgag|\bbank\b|lender/,
+  "business.dba": /financ|leas|lien|mortgag|\bbank\b|lender/
+};
+
 export function clean(value: unknown): string {
   return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
 }
@@ -100,6 +108,7 @@ export function normalize(fields: NormalizableField[]): NormalizedApplication {
     fields.forEach((field, index) => {
       if (claimed.has(index) || !clean(field.value)) return;
       const label = canonical([field.label, field.name, field.section].filter(Boolean).join(" "));
+      if (excludes[path]?.test(label)) return;
       const fieldScore = Math.max(...aliases.map(alias => score(label, canonical(alias))));
       if (fieldScore > 0 && (!best || fieldScore > best.score)) best = { index, score: fieldScore, value: clean(field.value) };
     });
