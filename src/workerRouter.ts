@@ -35,8 +35,8 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { writeApplicationKnowledge } from "@/crm/appCommit";
-import { createLead, createPolicy, findInsuredMatches } from "@/crm/dataverse";
+import { buildSupplementalNote, writeApplicationKnowledge } from "@/crm/appCommit";
+import { createLead, createPolicy, findInsuredMatches, upsertAccountNote } from "@/crm/dataverse";
 
 export interface Deps {
   getEnvironments: () => Promise<CrmEnvironment[]>;
@@ -69,6 +69,7 @@ export interface Deps {
   createLead: typeof createLead;
   findInsuredMatches: typeof findInsuredMatches;
   createPolicy: typeof createPolicy;
+  upsertAccountNote: typeof upsertAccountNote;
   getCarrierAliases: typeof getCarrierAliases;
   saveCarrierAlias: typeof saveCarrierAlias;
   getAccessToken: typeof getAccessToken;
@@ -374,6 +375,17 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         } catch (e) {
           results.push({ key: "Application data", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
+        // supplemental data with no CRM column (employment, payment plan,
+        // coverage elections…) -> one evergreen timeline note per source
+        try {
+          const note = buildSupplementalNote(app);
+          if (note) {
+            const outcome = await deps.upsertAccountNote(env, msg.accountId, note.subject, note.body);
+            results.push({ key: `Supplemental data — timeline note ${outcome} with ${note.count} unmapped field${note.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+          }
+        } catch (e) {
+          results.push({ key: "Supplemental data note", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
         return { ok: true, data: results };
       }
 
@@ -618,6 +630,7 @@ export const realDeps: Deps = {
   createLead,
   findInsuredMatches,
   createPolicy,
+  upsertAccountNote,
   getCarrierAliases,
   saveCarrierAlias,
   getAccessToken,

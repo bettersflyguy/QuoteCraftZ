@@ -115,7 +115,7 @@
   }
 
   /* banking, payment and card data is never captured */
-  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*method|method\s*of\s*payment|pay\s*plan|auto\s*pay|autopay|amount\s*due|paid\s*to\s*date|balance|eft|ach)\b/i;
+  const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|pay\s*method|method\s*of\s*payment|eft|ach)\b/i;
 
   /* cookie/consent widgets contribute nothing but noise */
   function inConsentUi(element) {
@@ -302,7 +302,9 @@
     return fields.filter((field) =>
       field.label && field.value && field.value.length <= 300 &&
       !/are you sure|delete this/i.test(field.label) &&
-      !/^[•*xX.•-]{4,}$/.test(field.value));
+      /* card references inside VALUES ("VISA Credit Card- Sales ending in 6060") */
+      !(/(visa|mastercard|amex|american express|discover|credit card|debit card)/i.test(field.value) && /d{4}/.test(field.value)) &&
+      !/^[•*xX.-]{4,}$/.test(field.value));
   }
 
   /* invoked per frame by the worker via chrome.scripting.executeScript func —

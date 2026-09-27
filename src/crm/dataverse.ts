@@ -198,6 +198,29 @@ export async function createPolicy(env: CrmEnvironment, f: NewPolicyFields): Pro
   return { policyId: r["iacrm_policyid"]! };
 }
 
+/** One evergreen note per subject per account: found by subject -> PATCH,
+ * else POST bound to the account. Returns "created" | "updated". */
+export async function upsertAccountNote(env: CrmEnvironment, accountId: string, subject: string, text: string): Promise<"created" | "updated"> {
+  const { value } = await dvJson<{ value: Record<string, string>[] }>(
+    env,
+    `annotations?$select=annotationid&$filter=_objectid_value eq ${accountId} and subject eq '${subject.replace(/'/g, "''")}'&$top=1`
+  );
+  if (value[0]) {
+    await dv(env, `annotations(${value[0]["annotationid"]})`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notetext: text })
+    });
+    return "updated";
+  }
+  await dvPost(env, "annotations?$select=annotationid", {
+    subject,
+    notetext: text,
+    "objectid_account@odata.bind": `/accounts(${accountId})`
+  });
+  return "created";
+}
+
 export interface ExistingMatch {
   kind: "account" | "lead";
   id: string;

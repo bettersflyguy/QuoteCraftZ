@@ -198,6 +198,42 @@ describe("splitUsAddress via identityFromCapture", () => {
   });
 });
 
+describe("buildSupplementalNote", () => {
+  it("collects only unmapped fields, grouped by section, with a stable subject", async () => {
+    const { buildSupplementalNote } = await import("@/crm/appCommit");
+    const app = capture({
+      normalized: {},
+      fields: [
+        { label: "Email Address", value: "dt@example.com", section: "Policyholder", group: "", source: "control" },
+        { label: "Address", value: "203 Wall St", section: "Policyholder", group: "", source: "control" },
+        { label: "Employment Status", value: "Employed", section: "Policyholder", group: "", source: "control" },
+        { label: "Payment Plan", value: "6 Pay TMPP", section: "Payment", group: "", source: "review-row" },
+        { label: "Bodily Injury Liability (BI)", value: "$30,000/$60,000", section: "Coverages", group: "", source: "review-row" }
+      ]
+    });
+    const note = buildSupplementalNote(app)!;
+    // mapped identity fields stay OUT of the note
+    expect(note.body).not.toContain("dt@example.com");
+    expect(note.body).not.toContain("203 Wall St");
+    // supplemental facts are in, grouped
+    expect(note.count).toBe(3);
+    expect(note.body).toContain("Payment");
+    expect(note.body).toContain("  Payment Plan: 6 Pay TMPP");
+    expect(note.body).toContain("  Employment Status: Employed");
+    expect(note.body).toContain("  Bodily Injury Liability (BI): $30,000/$60,000");
+    expect(note.subject).toBe("Quote Connector — captured application data (sales.geico.com)");
+  });
+
+  it("returns null when everything mapped", async () => {
+    const { buildSupplementalNote } = await import("@/crm/appCommit");
+    const app = capture({
+      normalized: {},
+      fields: [{ label: "Email Address", value: "dt@example.com", section: "P", group: "", source: "control" }]
+    });
+    expect(buildSupplementalNote(app)).toBeNull();
+  });
+});
+
 describe("carrierGuess", () => {
   it("maps known portal hosts to carrier names", () => {
     expect(carrierGuess(capture())).toBe("GEICO");

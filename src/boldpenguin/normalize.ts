@@ -101,6 +101,26 @@ export interface NormalizableField {
   section?: string;
 }
 
+/** Which field indices the rules under the given path prefixes would claim —
+ * used to decide what is "structurally mapped" (written to CRM columns)
+ * versus supplemental data that belongs in an activity note. */
+export function claimedIndices(fields: NormalizableField[], pathPrefixes: string[]): Set<number> {
+  const claimed = new Set<number>();
+  for (const [path, aliases] of rules) {
+    if (!pathPrefixes.some(p => path.startsWith(p))) continue;
+    let best: { index: number; score: number } | null = null;
+    fields.forEach((field, index) => {
+      if (claimed.has(index) || !clean(field.value)) return;
+      const label = canonical([field.label, field.name, field.section].filter(Boolean).join(" "));
+      if (excludes[path]?.test(label)) return;
+      const fieldScore = Math.max(...aliases.map(alias => score(label, canonical(alias))));
+      if (fieldScore > 0 && (!best || fieldScore > best.score)) best = { index, score: fieldScore };
+    });
+    if (best !== null) claimed.add((best as { index: number }).index);
+  }
+  return claimed;
+}
+
 export function normalize(fields: NormalizableField[]): NormalizedApplication {
   const result: NormalizedApplication = {};
   const claimed = new Set<number>();

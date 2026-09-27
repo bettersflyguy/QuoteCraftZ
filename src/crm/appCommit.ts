@@ -2,7 +2,7 @@
  * the non-EZLynx twin of the quote commit: insured enrichment from the
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
-import { canonical, clean } from "@/boldpenguin/normalize";
+import { canonical, claimedIndices, clean } from "@/boldpenguin/normalize";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CapturedApplicant } from "@/types";
 import type { KnowledgeApi, KnowledgeWriteResult } from "./knowledge";
@@ -202,6 +202,42 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
     effectiveDate,
     expirationDate,
     carrierName: carrierGuess(app)
+  };
+}
+
+/** Rule paths whose fields are written to real CRM columns by the load —
+ * everything else is supplemental and goes into the activity note. */
+const STRUCTURED_PATHS = ["contact.", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate"];
+
+export interface SupplementalNote {
+  subject: string;
+  body: string;
+  count: number;
+}
+
+/** Fields with no CRM column mapping (employment, payment plan, coverage
+ * elections, building details…) grouped by section into one readable note
+ * for the account timeline. Stable subject per source, so a re-load updates
+ * the same note instead of stacking duplicates. */
+export function buildSupplementalNote(app: CapturedApplication): SupplementalNote | null {
+  const claimed = claimedIndices(app.fields, STRUCTURED_PATHS);
+  const extra = app.fields.filter((_, i) => !claimed.has(i));
+  if (!extra.length) return null;
+  const bySection = new Map<string, string[]>();
+  for (const f of extra) {
+    const section = f.section || "Details";
+    const line = `  ${f.group ? `${f.group} — ` : ""}${f.label}: ${f.value}`;
+    (bySection.get(section) ?? bySection.set(section, []).get(section)!).push(line);
+  }
+  const body = [
+    `Captured ${new Date(app.capturedAt).toLocaleString()} from ${app.source.system}`,
+    "",
+    ...[...bySection.entries()].flatMap(([section, lines]) => [section, ...lines, ""])
+  ].join("\n").slice(0, 90000);
+  return {
+    subject: `Quote Connector — captured application data (${app.source.system})`,
+    body,
+    count: extra.length
   };
 }
 
