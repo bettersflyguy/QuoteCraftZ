@@ -34,6 +34,17 @@ describe("buildCrmCaptureFields", () => {
     expect(fields.find(f => f.section === "Risk data")?.value).toBe("Rent");
   });
 
+  it("repairs dirty records holding the full name in the name columns", () => {
+    const fields = buildCrmCaptureFields({
+      account: null,
+      contact: { firstname: "Edward Parkin", lastname: "Edward Parkin" },
+      riskAnswers: []
+    });
+    const n = normalize(fields);
+    expect(n["contact"]?.["firstName"]).toBe("Edward");
+    expect(n["contact"]?.["lastName"]).toBe("Parkin");
+  });
+
   it("marks commercial accounts with the business name", () => {
     const fields = buildCrmCaptureFields({
       account: { accountid: "a2", name: "Northwind Bakery LLC", iacrm_insuredtype: 2 },

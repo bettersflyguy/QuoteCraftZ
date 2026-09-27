@@ -115,9 +115,21 @@
     return 0;
   }
 
+  /* a candidate must never land in a field that structurally contradicts it:
+   * street line 1 has no business in "Mailing Address Line 2" / Apt / Suite,
+   * and a full name never fills First/Last/Middle (the split candidates do). */
+  const PATH_FIELD_EXCLUDE = {
+    "address.street1": /line\s*2|address\s*2\b|suite|\bapt\b|apartment|\bunit\b/,
+    "address.street2": /line\s*1|address\s*1\b/,
+    "contact.fullName": /\bfirst\b|\blast\b|\bmiddle\b/
+  };
+
   function matchField(fieldName, candidates) {
+    const fieldCanon = canonical(fieldName);
     let best = null;
     candidates.forEach((candidate) => {
+      const exclude = PATH_FIELD_EXCLUDE[candidate.path];
+      if (exclude && exclude.test(fieldCanon)) return;
       const score = Math.max(...candidate.aliases.map((alias) => aliasScore(fieldName, alias))) + (candidate.source === "normalized" ? 3 : 0);
       if (score >= 72 && (!best || score > best.score)) best = { ...candidate, score };
     });

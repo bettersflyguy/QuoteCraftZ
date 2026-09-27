@@ -30,8 +30,19 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
     if (value) fields.push({ label, value, section, group: "", source: "review-row" });
   };
 
-  const firstName = s(contact, "firstname") || s(account, "iacrm_insuredfirstname");
-  const lastName = s(contact, "lastname") || s(account, "iacrm_insuredlastname");
+  let firstName = s(contact, "firstname") || s(account, "iacrm_insuredfirstname");
+  let lastName = s(contact, "lastname") || s(account, "iacrm_insuredlastname");
+  // dirty records (early imports) sometimes hold the FULL name in one or both
+  // name columns — repair rather than propagate
+  if (firstName.includes(" ") && (firstName === lastName || !lastName)) {
+    const parts = firstName.split(/\s+/);
+    firstName = parts[0]!;
+    lastName = parts[parts.length - 1]!;
+  } else if (!firstName && lastName.includes(" ")) {
+    const parts = lastName.split(/\s+/);
+    firstName = parts[0]!;
+    lastName = parts[parts.length - 1]!;
+  }
   push("First Name", firstName);
   push("Last Name", lastName);
   const accountName = s(account, "name");
