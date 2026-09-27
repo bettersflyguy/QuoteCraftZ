@@ -32,7 +32,14 @@ const useStyles = makeStyles({
   },
   matchText: { minWidth: 0, overflowWrap: "anywhere" },
   result: { fontSize: "12px" },
-  resultErr: { fontSize: "12px", color: tokens.colorStatusDangerForeground1 }
+  resultErr: { fontSize: "12px", color: tokens.colorStatusDangerForeground1 },
+  warn: {
+    fontSize: "12px",
+    color: tokens.colorStatusWarningForeground1,
+    backgroundColor: tokens.colorStatusWarningBackground1,
+    borderRadius: "4px",
+    padding: "8px"
+  }
 });
 
 interface OppState { create: boolean; lobId: string | null; name: string; nameEdited: boolean }
@@ -276,10 +283,23 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
   }
 
   if (step === "review") {
+    const identityEmpty = !personName && !identity.businessName;
+    const missing: string[] = [];
+    if (!recordName) missing.push("the insured's name (or business name)");
+    if (opp.create && target === "insured" && !opp.lobId) missing.push("a line of business for the opportunity");
+    if (policy.create && target === "insured" && !policy.number.trim()) missing.push("the policy number (or uncheck Create policy)");
     return (
       <div className={styles.root}>
         <div className={styles.title}>Review before loading — edit anything that's wrong</div>
         {error && <ErrorBar error={error} />}
+        {identityEmpty && (
+          <div className={styles.warn}>
+            This capture has no insured identity yet — it only holds page details.
+            Open the Policyholder / Named Insured section (or the purchase
+            confirmation) and hit <b>Ingest this page</b> there too; captures for
+            the same client merge into one application.
+          </div>
+        )}
         {busy === "dupes" && <Spinner size="tiny" label="Checking CRM for this person…" />}
         {dupes && dupes.length > 0 && (
           <>
@@ -401,12 +421,11 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
             Switch "Create as" to Insured to write the policy.
           </div>
         )}
+        {missing.length > 0 && (
+          <div className={styles.hint}>To continue, provide {missing.join("; ")}.</div>
+        )}
         <div className={styles.row}>
-          <Button
-            appearance="primary"
-            disabled={!recordName || (opp.create && target === "insured" && !opp.lobId) || (policy.create && target === "insured" && !policy.number.trim())}
-            onClick={toTarget}
-          >
+          <Button appearance="primary" disabled={missing.length > 0} onClick={toTarget}>
             Continue
           </Button>
           <Button onClick={() => setStep("closed")}>Cancel</Button>
