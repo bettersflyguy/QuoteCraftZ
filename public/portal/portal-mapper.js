@@ -11,6 +11,7 @@
     ["business.entityType", ["legal entity type", "entity type", "organization type", "business type"]],
     ["business.fein", ["fein", "ein", "federal tax id", "tax identification number", "employer identification number"]],
     ["business.industry", ["industry", "business description", "business activity", "type of work", "operations"]],
+    ["business.description", ["describe your business", "what does your business do", "description of operations", "nature of business", "what kind of work do you do"]],
     ["business.foundingYear", ["founding year", "year established", "year business started", "business start year"]],
     ["business.annualRevenue", ["annual revenue", "gross revenue", "annual sales", "gross sales", "estimated sales"]],
     ["contact.firstName", ["first name", "given name", "contact first name", "policyholder first name", "given-name"]],

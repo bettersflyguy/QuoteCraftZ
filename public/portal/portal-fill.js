@@ -32,13 +32,26 @@
    * fallback so those fields are matchable too. */
   function containerLabel(control) {
     let node = control;
-    for (let hops = 0; hops < 4 && node.parentElement; hops += 1) {
+    for (let hops = 0; hops < 5 && node.parentElement; hops += 1) {
       node = node.parentElement;
-      const cloned = node.cloneNode(true);
-      cloned.querySelectorAll("select, input, textarea, option, button, [role='listbox']").forEach((x) => x.remove());
-      const t = clean(cloned.innerText);
-      if (t && t.length >= 3 && t.length <= 180) return t;
-      if (t.length > 180) break;
+      if (node.matches("form, main, body, section")) break;
+      /* prefer an explicit, VISIBLE heading/label in this ancestor */
+      for (const h of node.querySelectorAll("legend, label, h1, h2, h3, h4, h5, h6")) {
+        if (h.contains(control) || !visible(h) || !h.getClientRects().length) continue;
+        const t = clean(h.innerText);
+        if (t.length >= 3 && t.length <= 140) return t;
+      }
+      /* else: the first visible short text that PRECEDES the control (SPA
+       * design systems render the question as a plain span/div above the
+       * input). Live nodes only - cloned/detached innerText degrades to
+       * textContent and picks up hidden svg titles ("Search icon"). */
+      for (const el of node.querySelectorAll("span, p, div")) {
+        if (el === control || el.contains(control) || !visible(el) || !el.getClientRects().length) continue;
+        if (el.closest("button, a, svg")) continue;
+        if (!(control.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) continue;
+        const own = clean(Array.from(el.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" "));
+        if (own.length >= 3 && own.length <= 140) return own;
+      }
     }
     return "";
   }
