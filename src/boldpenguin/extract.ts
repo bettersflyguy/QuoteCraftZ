@@ -335,7 +335,13 @@ async function capture(): Promise<CapturedApplication> {
   return payload;
 }
 
-chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
+// the worker re-injects this script to revive orphaned tabs after an
+// extension update — never register the listener twice in one world
+const bpGuard = globalThis as { __bettersBpLoaded?: boolean };
+const bpAlreadyLoaded = bpGuard.__bettersBpLoaded === true;
+bpGuard.__bettersBpLoaded = true;
+
+if (!bpAlreadyLoaded) chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
   if (message?.type === "bp/getContext") {
     sendResponse({ ok: true, data: { onApplication: Boolean(questionNavigation()), url: location.href } });
     return false;

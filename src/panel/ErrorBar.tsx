@@ -13,7 +13,7 @@ export function ErrorBar({ error, onRetry }: { error: PanelError; onRetry?: () =
     return (
       <MessageBar intent="warning">
         <MessageBarBody>
-          <MessageBarTitle>EZLynx session</MessageBarTitle>
+          <MessageBarTitle>Site session</MessageBarTitle>
           {error.message}
         </MessageBarBody>
       </MessageBar>

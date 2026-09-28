@@ -2,7 +2,13 @@ import { fetchRunList, fetchCapturedRun, applicantIdFromUrl, EzlynxSessionError 
 import { NormalizeError } from "./normalize";
 import type { ApplicantChangedBroadcast, BridgeRequest, Res } from "@/messages";
 
-chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse: (r: Res<unknown>) => void) => {
+// the worker re-injects this script to revive orphaned tabs after an
+// extension update — never register the listener or poll twice in one world
+const ezGuard = globalThis as { __bettersEzLoaded?: boolean };
+const ezAlreadyLoaded = ezGuard.__bettersEzLoaded === true;
+ezGuard.__bettersEzLoaded = true;
+
+if (!ezAlreadyLoaded) chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse: (r: Res<unknown>) => void) => {
   (async () => {
     try {
       switch (msg.type) {
@@ -33,7 +39,7 @@ chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse:
 // capture otherwise lets an agent pin one customer's opportunity against
 // another customer's quotes.
 let lastApplicantId = applicantIdFromUrl(location.href);
-setInterval(() => {
+if (!ezAlreadyLoaded) setInterval(() => {
   const current = applicantIdFromUrl(location.href);
   if (current !== lastApplicantId) {
     lastApplicantId = current;

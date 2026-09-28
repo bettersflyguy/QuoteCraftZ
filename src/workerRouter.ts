@@ -451,26 +451,42 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
   }
 }
 
+function raceTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+}
+
+/** An extension update orphans content scripts in already-open tabs (their
+ * listeners go inert). Probe cheaply; when dead, re-inject the DECLARED
+ * script for that host from the manifest instead of telling the user to
+ * reload the tab. The scripts guard against double registration. */
+async function ensureContentScriptAlive(tabId: number, probeType: string, hostFrag: string): Promise<void> {
+  try {
+    await raceTimeout(chrome.tabs.sendMessage(tabId, { type: probeType }), 3_000);
+    return;
+  } catch { /* dead or missing — revive below */ }
+  const entry = (chrome.runtime.getManifest().content_scripts ?? [])
+    .find(c => (c.matches ?? []).some(m => m.includes(hostFrag)));
+  if (entry?.js?.length) {
+    await chrome.scripting.executeScript({ target: { tabId }, files: entry.js });
+    await new Promise(r => setTimeout(r, 300));
+  }
+}
+
 async function sendToEzlynxTab<T>(req: BridgeRequest): Promise<Res<T>> {
   const tabs = await chrome.tabs.query({ url: "https://app.ezlynx.com/*" });
   const tab = tabs[0];
   if (!tab?.id) {
     return { ok: false, error: "Open an EZLynx applicant page in another tab, then retry.", kind: "session" };
   }
-  // An orphaned content script (tab loaded before the extension was updated) can
-  // accept the message and never respond - race a timeout so the panel gets an
-  // actionable error instead of an infinite spinner.
   try {
-    const reply = await Promise.race([
-      chrome.tabs.sendMessage(tab.id, req) as Promise<Res<T>>,
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 15_000))
-    ]);
+    await ensureContentScriptAlive(tab.id, "ezlynx/getContext", "ezlynx.com");
+    const reply = await raceTimeout(chrome.tabs.sendMessage(tab.id, req) as Promise<Res<T>>, 15_000);
     if (!reply) throw new Error("empty reply");
     return reply;
   } catch {
     return {
       ok: false,
-      error: "Couldn't reach the EZLynx tab — reload that tab (the extension was updated since it loaded), then retry.",
+      error: "Couldn't reach the EZLynx tab — reload that tab, then retry.",
       kind: "session"
     };
   }
@@ -483,18 +499,16 @@ async function sendToBoldPenguinTab<T>(req: { type: string }): Promise<Res<T>> {
     return { ok: false, error: "Open the completed Bold Penguin application in another tab, then retry.", kind: "session" };
   }
   try {
+    await ensureContentScriptAlive(tab.id, "bp/getContext", "boldpenguin.com");
     // The capture walks every question set (including vehicle editors), so allow
-    // minutes — but still bound it so an orphaned content script can't hang the panel.
-    const reply = await Promise.race([
-      chrome.tabs.sendMessage(tab.id, req) as Promise<Res<T>>,
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 180_000))
-    ]);
+    // minutes — but still bound it so a hung page can't spin the panel forever.
+    const reply = await raceTimeout(chrome.tabs.sendMessage(tab.id, req) as Promise<Res<T>>, 180_000);
     if (!reply) throw new Error("empty reply");
     return reply;
   } catch {
     return {
       ok: false,
-      error: "Couldn't reach the Bold Penguin tab — reload that tab (the extension was updated since it loaded), then retry.",
+      error: "Couldn't reach the Bold Penguin tab — reload that tab, then retry.",
       kind: "session"
     };
   }
