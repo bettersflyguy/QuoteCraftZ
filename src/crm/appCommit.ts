@@ -84,15 +84,23 @@ export function splitUsAddress(line: string): { street: string; city: string; st
 }
 
 export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
+  const businessName = str(app, "business", "legalName") ?? "";
+  const bizCanon = canonical(businessName);
   let firstName = str(app, "contact", "firstName") ?? "";
   let lastName = str(app, "contact", "lastName") ?? "";
   if (!firstName && !lastName) {
     // an exactly-labeled "Name" fact row (GEICO Edge's Personal Information
     // tab) beats rail headings that glue the middle name in ("Edward
     // La-Valle Parkin"); middle tokens are middle names — last word is the
-    // surname, editable in review for multi-word surnames
-    const exact = app.fields.find(f => /^(name|full name|policyholder name|insured name)$/i.test(clean(f.label)) && f.value);
-    const parts = clean(exact?.value ?? str(app, "contact", "fullName") ?? "").split(" ").filter(Boolean);
+    // surname, editable in review for multi-word surnames. A value equal to
+    // the BUSINESS name is never a person ("B H Towing Service" must not
+    // become first "B", last "Service").
+    const candidates = [
+      ...app.fields.filter(f => /^(name|full name|policyholder name|insured name)$/i.test(clean(f.label))).map(f => f.value),
+      str(app, "contact", "fullName") ?? ""
+    ];
+    const person = candidates.map(clean).find(v => v && (!bizCanon || canonical(v) !== bizCanon));
+    const parts = (person ?? "").split(" ").filter(Boolean);
     firstName = parts[0] ?? "";
     lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
   }
@@ -115,7 +123,7 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   return {
     firstName,
     lastName,
-    businessName: str(app, "business", "legalName") ?? "",
+    businessName,
     street,
     city,
     state,

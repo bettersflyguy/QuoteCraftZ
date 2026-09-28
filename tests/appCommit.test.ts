@@ -38,6 +38,24 @@ describe("applicantFromCapture", () => {
     expect(a.isCommercial).toBe(false);
   });
 
+  it("never splits the business name into a person (Tivly 'B Service' regression)", async () => {
+    const { identityFromCapture } = await import("@/crm/appCommit");
+    // only a business-named "Name" row: no person name at all
+    const bizOnly = identityFromCapture(capture({
+      normalized: { business: { legalName: "B H Towing Service" } },
+      fields: [{ label: "Name", value: "B H Towing Service", section: "Leads", group: "", source: "review-row" }]
+    }));
+    expect(bizOnly.firstName).toBe("");
+    expect(bizOnly.lastName).toBe("");
+    // with the real contact present, the person wins past the business row
+    const withPerson = identityFromCapture(capture({
+      normalized: { business: { legalName: "B H Towing Service" }, contact: { fullName: "Bruce Hadams" } },
+      fields: [{ label: "Name", value: "B H Towing Service", section: "Leads", group: "", source: "review-row" }]
+    }));
+    expect(withPerson.firstName).toBe("Bruce");
+    expect(withPerson.lastName).toBe("Hadams");
+  });
+
   it("drops middle names and prefers the exact Name fact row (live GEICO Edge shape)", async () => {
     const { identityFromCapture } = await import("@/crm/appCommit");
     // rail heading glued the middle name in; the Personal Information tab's
