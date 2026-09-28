@@ -38,7 +38,7 @@ function lookup(app: CapturedApplication, path: string): string {
 /** Commercial-lines mode: the active tab is a Bold Penguin application.
  * Capture walks every question set read-only, then holds the application in
  * session storage so any carrier portal tab can be filled from it. */
-export function CommercialCapture({ onChanged }: { onChanged: () => void }) {
+export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () => void; onFlowActive?: (active: boolean) => void }) {
   const styles = useStyles();
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,7 +109,7 @@ export function CommercialCapture({ onChanged }: { onChanged: () => void }) {
             Captured {new Date(app.capturedAt).toLocaleString()}. Switch to a carrier
             portal tab — this panel offers "Fill this page" there.
           </div>
-          <LoadToCrm key={app.capturedAt} app={app} />
+          <LoadToCrm key={app.capturedAt} app={app} onFlowActive={onFlowActive} />
           <div className={styles.buttons}>
             <Button disabled={busy} onClick={capture}>{busy ? <Spinner size="tiny" /> : "Re-capture"}</Button>
             <Button onClick={() => exportCaptureToExcel(app)}>Export to Excel</Button>

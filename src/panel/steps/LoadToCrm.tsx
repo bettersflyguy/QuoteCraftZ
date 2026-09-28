@@ -52,7 +52,7 @@ interface PolicyState { create: boolean; number: string; premium: string; effect
  * the carrier opportunity. Worker runs enrichment + risk-data logging. */
 const MATCH_LABEL = { email: "email match", phone: "phone match", name: "name match" } as const;
 
-export function LoadToCrm({ app }: { app: CapturedApplication }) {
+export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onFlowActive?: (active: boolean) => void }) {
   const styles = useStyles();
   const [step, setStep] = useState<"closed" | "review" | "target">("closed");
   const [identity, setIdentity] = useState<CaptureIdentity>(() => identityFromCapture(app));
@@ -88,6 +88,15 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
   const openReview = () => { setStep("review"); setError(null); };
 
   useEffect(() => { getActiveEnvironment().then(setEnv).catch(() => {}); }, []);
+
+  // pin the panel's mode while this flow is open or a write is in flight —
+  // the sign-in popup stealing focus must not unmount an in-progress load
+  const flowActive = step !== "closed" || busy !== null;
+  useEffect(() => {
+    onFlowActive?.(flowActive);
+    return () => onFlowActive?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowActive]);
 
   /** The duplicate gate. Existing accounts and open leads are matched by email,
    * then phone, then name. */
@@ -270,6 +279,9 @@ export function LoadToCrm({ app }: { app: CapturedApplication }) {
             {r.error ? `${r.key}: ${r.error}` : r.key}
           </div>
         ))}
+        <div className={styles.row}>
+          <Button onClick={() => { setResults(null); setStep("closed"); }}>Done</Button>
+        </div>
       </div>
     );
   }

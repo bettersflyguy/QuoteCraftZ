@@ -25,8 +25,14 @@ const BP_CAPTURE_TIMEOUT_MS = 240_000;
  * holding the port open) surfaces as a diagnosable error instead of an
  * infinite spinner. */
 export async function send<T>(msg: PanelRequest): Promise<T> {
+  // any first CRM call of a browser session can trigger the INTERACTIVE
+  // sign-in inside the worker — those must wait on a human, not 25s
+  const CRM_WRITE_TYPES = new Set([
+    "auth/signIn", "panel/appCommit", "panel/createLead", "panel/createPolicy",
+    "panel/crmPull", "panel/findMatches", "panel/createAccount", "panel/createOpportunity"
+  ]);
   const timeoutMs =
-    msg.type === "auth/signIn" ? AUTH_TIMEOUT_MS :
+    CRM_WRITE_TYPES.has(msg.type) ? AUTH_TIMEOUT_MS :
     msg.type === "panel/bpCapture" ? BP_CAPTURE_TIMEOUT_MS :
     TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;

@@ -75,7 +75,7 @@ async function grantActiveTab(): Promise<{ id: number; url: string }> {
 /** Carrier-portal mode: the active tab is neither EZLynx, Bold Penguin, nor the
  * CRM. Ingest reads the visible insured data on this page into the held
  * application; Fill writes the held application into this page's form. */
-export function PortalFill({ onChanged }: { onChanged: () => void }) {
+export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void; onFlowActive?: (active: boolean) => void }) {
   const styles = useStyles();
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [overwrite, setOverwrite] = useState(false);
@@ -90,6 +90,14 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
   const [crmQuery, setCrmQuery] = useState("");
   const [crmRows, setCrmRows] = useState<InsuredSearchRow[] | null>(null);
   const [crmNote, setCrmNote] = useState<string | null>(null);
+  const [loadFlow, setLoadFlow] = useState(false);
+
+  // combined pin signal: our own in-flight ops + the LoadToCrm flow
+  useEffect(() => {
+    onFlowActive?.(loadFlow || busy !== null || crmOpen);
+    return () => onFlowActive?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadFlow, busy, crmOpen]);
 
   const refresh = useCallback(() => {
     send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(setApp).catch(() => {});
@@ -293,7 +301,7 @@ export function PortalFill({ onChanged }: { onChanged: () => void }) {
           {fillResult.filledCount ? " Review the highlighted values before moving on." : " Move to the portal page that shows the application form and retry."}
         </div>
       )}
-      {app && <LoadToCrm key={app.capturedAt} app={app} />}
+      {app && <LoadToCrm key={app.capturedAt} app={app} onFlowActive={setLoadFlow} />}
       {app && (
         <div className={styles.buttons}>
           <Button onClick={() => exportCaptureToExcel(app)}>Export to Excel</Button>

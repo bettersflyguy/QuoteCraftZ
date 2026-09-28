@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { makeStyles, tokens } from "@fluentui/react-components";
 import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
@@ -78,10 +78,19 @@ export function App() {
   // wizard is idle — glancing at another tab mid-import must not hide the
   // in-progress wizard. CRM and sign-in tabs never present as portals.
   const wizardIdle = state.step === "run" && !state.captured;
-  const mode: "commercial" | "portal" | "personal" =
+  const rawMode: "commercial" | "portal" | "personal" =
     page?.kind === "boldpenguin" ? "commercial" :
     page?.kind === "other" && wizardIdle ? "portal" :
     "personal";
+
+  // While a CRM load / fill flow is active, the mode is PINNED: the
+  // interactive sign-in popup (login.microsoftonline.com) briefly becomes the
+  // active tab, and following it would unmount the in-flight flow and dump
+  // the user into the EZLynx wizard mid-commit.
+  const [flowActive, setFlowActive] = useState(false);
+  const lastModeRef = useRef(rawMode);
+  const mode = flowActive ? lastModeRef.current : rawMode;
+  lastModeRef.current = mode;
 
   // The EZLynx content script broadcasts SPA navigations to a different
   // applicant; restart the wizard against them (stale captures cross-wire
@@ -108,8 +117,8 @@ export function App() {
         <EnvBadge dispatch={dispatch} />
       </div>
       <div className={styles.body}>
-        {mode === "commercial" && <CommercialCapture onChanged={refreshPage} />}
-        {mode === "portal" && <PortalFill onChanged={refreshPage} />}
+        {mode === "commercial" && <CommercialCapture onChanged={refreshPage} onFlowActive={setFlowActive} />}
+        {mode === "portal" && <PortalFill onChanged={refreshPage} onFlowActive={setFlowActive} />}
         {mode === "personal" && <>
         {state.step === "run" && (
           <RunPicker key={state.ezlynxApplicantId ?? "none"} state={state} dispatch={dispatch} />
