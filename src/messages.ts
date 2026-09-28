@@ -59,6 +59,7 @@ export type PanelRequest =
   | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }
   | { type: "panel/autoCapture"; tabId: number; enable: boolean }
   | { type: "panel/crmSearch"; query: string }
+  | { type: "panel/createQuote"; fields: import("@/crm/dataverse").NewQuoteFields }
   | { type: "panel/crmPull"; kind: "account" | "contact"; id: string; name: string }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }

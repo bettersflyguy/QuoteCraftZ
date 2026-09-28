@@ -36,7 +36,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { buildSupplementalNote, writeApplicationKnowledge } from "@/crm/appCommit";
-import { createLead, createPolicy, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
 
 export interface Deps {
@@ -70,6 +70,7 @@ export interface Deps {
   createLead: typeof createLead;
   findInsuredMatches: typeof findInsuredMatches;
   createPolicy: typeof createPolicy;
+  createQuote: typeof createQuote;
   upsertAccountNote: typeof upsertAccountNote;
   searchInsureds: typeof searchInsureds;
   getInsuredSourceRecords: typeof getInsuredSourceRecords;
@@ -427,6 +428,12 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: await deps.createPolicy(env, msg.fields) };
       }
 
+      case "panel/createQuote": {
+        const env = await deps.getActiveEnvironment();
+        await deps.createQuote(env, msg.fields);
+        return { ok: true, data: null };
+      }
+
       case "auth/signIn": {
         const env = await deps.getActiveEnvironment();
         // force a fresh interactive sign-in: the cached token may be VALID but
@@ -667,6 +674,7 @@ export const realDeps: Deps = {
   createLead,
   findInsuredMatches,
   createPolicy,
+  createQuote,
   upsertAccountNote,
   searchInsureds,
   getInsuredSourceRecords,

@@ -268,7 +268,45 @@ export function carrierGuess(app: CapturedApplication): string {
   if (s.includes("travelers")) return "Travelers";
   if (s.includes("libertymutual")) return "Liberty Mutual";
   if (s.includes("boldpenguin")) return "Bold Penguin";
+  if (s.includes("bhhc") || s.includes("berkshire")) return "Berkshire Hathaway Homestate";
+  if (s.includes("biberk")) return "biBerk";
+  if (s.includes("chubb")) return "Chubb";
+  if (s.includes("nationwide")) return "Nationwide";
+  if (s.includes("thehartford") || s.includes("hartford")) return "The Hartford";
+  if (s.includes("hiscox")) return "Hiscox";
+  if (s.includes("nextinsurance") || s.includes("next-insurance")) return "NEXT";
+  if (s.includes("pieinsurance") || s.includes("pie.")) return "Pie";
+  if (s.includes("attune")) return "Attune";
+  if (s.includes("coterie")) return "Coterie";
+  if (s.includes("employers")) return "EMPLOYERS";
   return app.source.system;
+}
+
+/** What a rating portal's coverage/summary screen yields toward an
+ * iacrm_quote: a quoted premium WITHOUT a policy number (a number means it
+ * sold — that's the policy flow instead). */
+export interface QuoteDraft {
+  hasQuote: boolean;
+  premiumText: string;
+  carrierName: string;
+  coverageSummary: string;
+  effectiveDate: string;
+}
+
+export function quoteFromCapture(app: CapturedApplication): QuoteDraft {
+  const policy = policyFromCapture(app);
+  const premium = str(app, "policy", "premium") ||
+    fieldValue(app, /total\s+(annual\s+)?premium|^premium$/i);
+  const lines = app.fields
+    .filter(f => /\$\s*[\d,]/.test(f.value) || /coverage|liabilit|deductible|csl|\bum\b|uim|pip|medical|physical damage|comprehensive|collision|limit/i.test(f.label))
+    .map(f => `${f.label}: ${f.value}`);
+  return {
+    hasQuote: Boolean(parseMoney(premium)) && !policy.hasPolicy,
+    premiumText: premium,
+    carrierName: carrierGuess(app),
+    coverageSummary: [...new Set(lines)].join("\n").slice(0, 3900),
+    effectiveDate: policy.effectiveDate
+  };
 }
 
 /** The account name a new record should get: business name for commercial,

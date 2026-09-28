@@ -198,6 +198,51 @@ export async function createPolicy(env: CrmEnvironment, f: NewPolicyFields): Pro
   return { policyId: r["iacrm_policyid"]! };
 }
 
+export interface NewQuoteFields {
+  accountId: string;
+  opportunityId: string;
+  carrierId: string | null;
+  lobId: string | null;
+  name: string;
+  premium: number | null;
+  coverageSummary: string;
+  /** ISO date or null. */
+  effectiveDate: string | null;
+  /** The portal page the quote came from (iacrm_quotelink + alt-key host). */
+  sourceUrl: string;
+}
+
+/** Upserts a portal-captured quote onto the opportunity — provider "Portal",
+ * alt-keyed per host+opportunity so a re-capture updates instead of
+ * duplicating. Same column conventions as the EZLynx writer; premium status
+ * is always Estimated (standing rule), source type left unset (carrier
+ * direct, not comparative rater). */
+export async function createQuote(env: CrmEnvironment, f: NewQuoteFields): Promise<void> {
+  const host = new URL(f.sourceUrl).hostname;
+  const ext = `${host}:${f.opportunityId}`.replace(/'/g, "''");
+  const body: Record<string, unknown> = {
+    iacrm_quote_name: f.name,
+    iacrm_provider: "Portal",
+    iacrm_amsexternalid: `${host}:${f.opportunityId}`,
+    iacrm_status: 738590002,          // Quote Received
+    iacrm_premium_status: 738590000,  // Estimated
+    iacrm_coveragelimitsummary: f.coverageSummary.slice(0, 4000),
+    iacrm_quotelink: f.sourceUrl.slice(0, 500),
+    "iacrm_AccountId@odata.bind": `/accounts(${f.accountId})`,
+    "iacrm_OpportunityId@odata.bind": `/opportunities(${f.opportunityId})`
+  };
+  if (f.premium != null) body["iacrm_premium"] = f.premium;
+  if (f.effectiveDate) body["iacrm_effectivedate"] = f.effectiveDate;
+  if (f.carrierId) body["iacrm_CarrierId@odata.bind"] = `/iacrm_carriers(${f.carrierId})`;
+  if (f.lobId) body["iacrm_LineOfBusinessId@odata.bind"] = `/iacrm_lineofbusinesses(${f.lobId})`;
+  const r = await dv(env, `iacrm_quotes(iacrm_provider='Portal',iacrm_amsexternalid='${ext}')`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(`quote upsert failed (${r.status}): ${(await r.text()).slice(0, 300)}`);
+}
+
 export interface InsuredSearchRow {
   kind: "account" | "contact";
   id: string;

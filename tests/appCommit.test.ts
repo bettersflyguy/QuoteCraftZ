@@ -252,6 +252,36 @@ describe("buildSupplementalNote", () => {
   });
 });
 
+describe("quoteFromCapture (rating portal, live Breeze shape)", () => {
+  it("flags a quote when a premium exists without a policy number, with coverage summary", async () => {
+    const { quoteFromCapture } = await import("@/crm/appCommit");
+    const app = capture({
+      source: { system: "breeze.bhhc.com", url: "https://breeze.bhhc.com/quotes/x/forms/coverages", title: "Breeze" },
+      normalized: {},
+      fields: [
+        { label: "CSL", value: "$300,000", section: "Coverage", group: "", source: "review-row" },
+        { label: "Medical Payments", value: "$5,000", section: "Coverage", group: "", source: "review-row" },
+        { label: "Physical Damage", value: "$2,731", section: "Coverage", group: "", source: "money-line" },
+        { label: "Total Annual Premium", value: "$35,516", section: "Coverage", group: "", source: "money-line" }
+      ]
+    });
+    const d = quoteFromCapture(app);
+    expect(d.hasQuote).toBe(true);
+    expect(d.premiumText).toBe("$35,516");
+    expect(d.carrierName).toBe("Berkshire Hathaway Homestate");
+    expect(d.coverageSummary).toContain("CSL: $300,000");
+    expect(d.coverageSummary).toContain("Physical Damage: $2,731");
+  });
+
+  it("does not flag a quote once a policy number exists (that's the policy flow)", async () => {
+    const { quoteFromCapture } = await import("@/crm/appCommit");
+    const sold = capture({
+      normalized: { policy: { number: "6277201270", premium: "$922.00" } }
+    });
+    expect(quoteFromCapture(sold).hasQuote).toBe(false);
+  });
+});
+
 describe("carrierGuess", () => {
   it("maps known portal hosts to carrier names", () => {
     expect(carrierGuess(capture())).toBe("GEICO");
