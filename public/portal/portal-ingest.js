@@ -135,14 +135,30 @@
     return Boolean(element.closest("[id*='onetrust'], [class*='onetrust'], [id*='cookie'], [class*='cookie-banner'], [id*='consent'], [aria-label*='consent' i]"));
   }
 
-  function pageSection() {
-    const heading = document.querySelector("main h1, main h2, h1, h2");
+  /* an OPEN MODAL owns the page: reading (or filling) behind it mixes OTHER
+   * records - e.g. Tivly's whole lead list behind its Lead Details dialog */
+  function activeModal() {
+    const candidates = Array.from(document.querySelectorAll("[role='dialog'], [aria-modal='true'], [class*='modal']"))
+      .filter((el) => isVisible(el) && el.getClientRects().length && !/backdrop|overlay/i.test(String(el.className)));
+    for (let i = candidates.length - 1; i >= 0; i -= 1) {
+      const r = candidates[i].getBoundingClientRect();
+      if (r.width >= 240 && r.height >= 120 && r.width * r.height >= innerWidth * innerHeight * 0.06) {
+        return candidates[i];
+      }
+    }
+    return null;
+  }
+
+  function pageSection(scope) {
+    const heading = (scope || document).querySelector("h1, h2, h3, [class*='title']") ||
+      document.querySelector("main h1, main h2, h1, h2");
     return text(heading) || location.hostname;
   }
 
   function collect() {
-    const section = pageSection();
-    const root = document.querySelector("main") || document;
+    const modal = activeModal();
+    const section = pageSection(modal);
+    const root = modal || document.querySelector("main") || document;
     const fields = [];
 
     Array.from(root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']"))
@@ -247,7 +263,7 @@
     /* sale/confirmation facts are usually PROSE, not form fields ("GEICO Auto
      * Policy Number: 6277201270", "Your coverage is effective 9/27/2026",
      * "Your 6 Month Auto Premium is $922.00") — pattern-match the page text */
-    const bodyText = clean((document.body.innerText || "").slice(0, 150000));
+    const bodyText = clean(((modal || document.body).innerText || "").slice(0, 150000));
     const saleSeen = new Set();
     const salePush = (label, value) => {
       if (value && !saleSeen.has(label)) { saleSeen.add(label); fields.push({ label, value: clean(value), section, group: "", source: "sale" }); }
@@ -316,7 +332,7 @@
       field.label && field.value && field.value.length <= 300 &&
       !/are you sure|delete this/i.test(field.label) &&
       /* card references inside VALUES ("VISA Credit Card- Sales ending in 6060") */
-      !(/(visa|mastercard|amex|american express|discover|credit card|debit card)/i.test(field.value) && /d{4}/.test(field.value)) &&
+      !(/\b(visa|mastercard|amex|american express|discover|credit card|debit card)\b/i.test(field.value) && /\d{4}/.test(field.value)) &&
       !/^[•*xX.-]{4,}$/.test(field.value));
   }
 

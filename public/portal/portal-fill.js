@@ -176,9 +176,24 @@
     return { status: "filled" };
   }
 
+  /* an OPEN MODAL owns the page: reading (or filling) behind it mixes OTHER
+   * records - e.g. Tivly's whole lead list behind its Lead Details dialog */
+  function activeModal() {
+    const candidates = Array.from(document.querySelectorAll("[role='dialog'], [aria-modal='true'], [class*='modal']"))
+      .filter((el) => visible(el) && el.getClientRects().length && !/backdrop|overlay/i.test(String(el.className)));
+    for (let i = candidates.length - 1; i >= 0; i -= 1) {
+      const r = candidates[i].getBoundingClientRect();
+      if (r.width >= 240 && r.height >= 120 && r.width * r.height >= innerWidth * innerHeight * 0.06) {
+        return candidates[i];
+      }
+    }
+    return null;
+  }
+
   function fill(payload, overwrite) {
     const candidates = mapper.buildCandidates(payload);
-    const controls = Array.from(document.querySelectorAll("input, select, textarea"))
+    const fillRoot = activeModal() || document;
+    const controls = Array.from(fillRoot.querySelectorAll("input, select, textarea"))
       .filter(visible)
       .filter((element) => !element.disabled && !element.readOnly)
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
