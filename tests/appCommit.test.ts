@@ -165,6 +165,22 @@ describe("policyFromCapture (sale screen)", () => {
   });
 });
 
+describe("guessInsuredType", () => {
+  it("a stray business-ish field never flips a personal-lines insured to Commercial", async () => {
+    const { guessInsuredType } = await import("@/crm/appCommit");
+    const personal = capture({
+      normalized: { contact: { fullName: "Antoinette Harper" }, business: { legalName: "Lighting Resources USA Inc" } },
+      fields: [{ label: "Employer", value: "Lighting Resources USA Inc", section: "Q", group: "", source: "control" }]
+    });
+    expect(guessInsuredType(personal)).toBe(1);
+    const commercial = capture({
+      normalized: { contact: { fullName: "Bruce Hadams" }, business: { legalName: "B H Towing Service" } },
+      fields: [{ label: "NAIC Code", value: "488410", section: "Business", group: "", source: "review-row" }]
+    });
+    expect(guessInsuredType(commercial)).toBe(2);
+  });
+});
+
 describe("splitUsAddress via identityFromCapture", () => {
   it("splits a one-line carrier mailing address into parts (live GEICO shape)", async () => {
     const { identityFromCapture, splitUsAddress } = await import("@/crm/appCommit");
@@ -293,26 +309,38 @@ describe("writeApplicationKnowledge", () => {
   it("skips with a notice when the tables are absent", async () => {
     const res = await writeApplicationKnowledge(env, capture(), "acc-1", {
       getKnowledgeNavProps: async () => null,
-      executeBatch: async () => { throw new Error("must not be called"); }
+      executeBatch: async () => { throw new Error("must not be called"); },
+      query: async () => ({ value: [] }) as never
     });
     expect(res.skipped).toBe("no-tables");
   });
 
-  it("upserts one question + one answer per canonical label, deduped, bound to the account", async () => {
-    let captured: { key: string; method: string; url: string; body?: unknown }[] = [];
+  it("read-then-writes per canonical label, POSTing new rows without amsexternalid", async () => {
+    const batches: { key: string; method: string; url: string; body?: unknown }[][] = [];
     const res = await writeApplicationKnowledge(env, capture(), "acc-1", {
       getKnowledgeNavProps: async () => ({ accountNav: "iacrm_accountid", questionNav: "iacrm_questionid" }),
-      executeBatch: async (_env, ops) => { captured = ops; return ops.map(o => ({ key: o.key, status: 204, error: null, entityId: null })); }
+      executeBatch: async (_env, ops) => {
+        batches.push(ops);
+        return ops.map((o, i) => ({ key: o.key, status: 204, error: null, entityId: o.method === "POST" && o.url === "iacrm_carrierquestions" ? `qg-${i}` : null }));
+      },
+      query: async () => ({ value: [] }) as never
     });
     // 3 fields, 2 unique labels -> 2 questions + 2 answers
     expect(res).toEqual({ questionsUpserted: 2, answersUpserted: 2, skipped: null });
-    expect(captured).toHaveLength(4);
-    const answer = captured.find(o => o.url.startsWith("iacrm_riskanswers") && String(o.url).includes("bodily"))!;
-    expect(answer.url).toContain("capture:acc-1:bodily injury liability bi");
+    const [qOps, aOps] = batches as [typeof batches[0], typeof batches[0]];
+    expect(qOps).toHaveLength(2);
+    for (const o of qOps) {
+      expect(o.method).toBe("POST");
+      const b = o.body as Record<string, unknown>;
+      expect(b["iacrm_amsexternalid"]).toBeUndefined();
+      expect(String(b["iacrm_questionid"])).toMatch(/^capture:/);
+    }
+    const answer = aOps.find(o => String((o.body as Record<string, unknown>)["iacrm_riskanswer_name"]).includes("Bodily"))!;
     const body = answer.body as Record<string, unknown>;
     expect(body["iacrm_value"]).toBe("$25,000/$50,000");
     expect(body["iacrm_source"]).toBe("sales.geico.com");
     expect(body["iacrm_accountid@odata.bind"]).toBe("/accounts(acc-1)");
-    expect(body["iacrm_questionid@odata.bind"]).toContain("capture:bodily injury liability bi");
+    expect(String(body["iacrm_questionid@odata.bind"])).toMatch(/^\/iacrm_carrierquestions\(qg-\d+\)$/);
+    expect(body["iacrm_amsexternalid"]).toBeUndefined();
   });
 });

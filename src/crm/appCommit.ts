@@ -5,7 +5,7 @@
 import { canonical, claimedIndices, clean } from "@/boldpenguin/normalize";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CapturedApplicant } from "@/types";
-import type { KnowledgeApi, KnowledgeWriteResult } from "./knowledge";
+import { upsertKnowledge, type AnswerSpec, type KnowledgeApi, type KnowledgeWriteResult, type QuestionSpec } from "./knowledge";
 import type { CrmEnvironment } from "./environments";
 
 const esc = (v: string) => v.replace(/'/g, "''");
@@ -249,6 +249,21 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
   };
 }
 
+/** Default for the Insured type radio. Commercial only when the capture
+ * carries real commercial markers (NAIC/SIC/FEIN, revenue/payroll, business
+ * insurance lines) or a business with no person — a stray company-ish field
+ * on a personal-lines quote must not flip the default. */
+export function guessInsuredType(app: CapturedApplication): 1 | 2 {
+  const id = identityFromCapture(app);
+  if (!id.businessName) return 1;
+  const person = `${id.firstName} ${id.lastName}`.trim();
+  if (!person) return 2;
+  const markers = app.fields.some(f =>
+    /\bnaic\b|\bsic\b|\bfein\b|\bein\b|annual revenue|annual payroll|subcontractor|number of employees|workers[' ]?comp|general liability|professional liability|commercial auto|\bbop\b/i
+      .test(`${f.label} ${f.value}`));
+  return markers ? 2 : 1;
+}
+
 /** Intake source for lead attribution (iacrm_leadsource), from the capture's
  * origin. Lead marketplaces get their proper name; anything else records the
  * host so the source is never lost. */
@@ -316,66 +331,51 @@ export function accountNameFromCapture(app: CapturedApplication): string {
     clean(`${str(app, "contact", "firstName") ?? ""} ${str(app, "contact", "lastName") ?? ""}`);
 }
 
-/** Upserts every captured field into the knowledge tables: one dictionary row
- * per canonical label (`capture:{label}`), one answer row per account+label
- * (`capture:{accountId}:{label}` — a re-load updates instead of duplicating).
- * Dormant with a notice until the CRM tables deploy, like the EZLynx writer. */
+/** Upserts every captured field into the knowledge tables via the shared
+ * READ-then-write core (`upsertKnowledge`): dictionary keyed by
+ * `capture:{canonical label}` in iacrm_questionid, one answer per
+ * account+question (re-loads update). Never touches iacrm_amsexternalid —
+ * that column is reserved for the AMS sync. */
 export async function writeApplicationKnowledge(
   env: CrmEnvironment,
   app: CapturedApplication,
   accountId: string,
   api: KnowledgeApi
 ): Promise<KnowledgeWriteResult> {
-  const navs = await api.getKnowledgeNavProps(env);
-  if (!navs) return { questionsUpserted: 0, answersUpserted: 0, skipped: "no-tables" };
-
   const now = new Date().toISOString();
-  const sourceApp = str(app, "application", "id") ?? app.source.system;
-  const ops: { key: string; method: "PATCH"; url: string; body?: unknown }[] = [];
+  const sourceApp = (str(app, "application", "id") ?? app.source.system).slice(0, 100);
+  const questions: QuestionSpec[] = [];
+  const answers: AnswerSpec[] = [];
   const seen = new Set<string>();
 
   for (const field of app.fields) {
     const label = clean(field.label);
     const value = clean(field.value);
-    const canon = canonical(label).slice(0, 180);
-    if (!canon || !value || seen.has(canon)) continue;
-    seen.add(canon);
-    const qExtId = `capture:${canon}`;
-    ops.push({
-      key: `q:${qExtId}`,
-      method: "PATCH",
-      url: `iacrm_carrierquestions(iacrm_amsexternalid='${esc(qExtId)}')`,
+    const key = `capture:${canonical(label)}`.slice(0, 100);
+    if (key === "capture:" || !value || seen.has(key)) continue;
+    seen.add(key);
+    questions.push({
+      key,
       body: {
         iacrm_carrierquestion_name: label.slice(0, 300),
-        iacrm_questionid: canon.slice(0, 100),
         iacrm_source: app.source.system.slice(0, 100),
         iacrm_answertype: field.source.slice(0, 50),
-        iacrm_amsexternalid: qExtId,
         iacrm_lastseen: now
       }
     });
-    const aExtId = `capture:${accountId}:${canon}`;
-    ops.push({
-      key: `a:${aExtId}`,
-      method: "PATCH",
-      url: `iacrm_riskanswers(iacrm_amsexternalid='${esc(aExtId)}')`,
+    answers.push({
+      questionKey: key,
+      sourceApplicationId: null,
       body: {
         iacrm_riskanswer_name: label.slice(0, 300),
         iacrm_value: value.slice(0, 500),
         iacrm_source: app.source.system.slice(0, 100),
         iacrm_capturedon: app.capturedAt,
-        iacrm_sourceapplicationid: sourceApp.slice(0, 100),
-        iacrm_amsexternalid: aExtId,
-        [`${navs.accountNav}@odata.bind`]: `/accounts(${accountId})`,
-        [`${navs.questionNav}@odata.bind`]: `/iacrm_carrierquestions(iacrm_amsexternalid='${esc(qExtId)}')`
+        iacrm_sourceapplicationid: sourceApp
       }
     });
   }
 
-  if (ops.length) {
-    const results = await api.executeBatch(env, ops);
-    const failed = results.filter(r => r.error != null);
-    if (failed.length) throw new Error(`${failed.length} knowledge op(s) failed: ${failed[0]!.error}`);
-  }
-  return { questionsUpserted: seen.size, answersUpserted: seen.size, skipped: null };
+  return upsertKnowledge(env, accountId, questions, answers, api);
 }
+

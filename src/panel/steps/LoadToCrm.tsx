@@ -5,7 +5,7 @@ import { ErrorBar } from "../ErrorBar";
 import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages } from "@/crm/dataverse";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, carrierGuess, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { applicantFromIdentity, carrierGuess, guessInsuredType, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -59,7 +59,7 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
   const [step, setStep] = useState<"closed" | "review" | "target">("closed");
   const [identity, setIdentity] = useState<CaptureIdentity>(() => identityFromCapture(app));
   const [target, setTarget] = useState<"insured" | "lead">("insured");
-  const [insuredType, setInsuredType] = useState<1 | 2>(() => identityFromCapture(app).businessName ? 2 : 1);
+  const [insuredType, setInsuredType] = useState<1 | 2>(() => guessInsuredType(app));
   const [opp, setOpp] = useState<OppState>({ create: false, lobId: null, name: "", nameEdited: false });
   // A captured policy number means the ingest happened on a SALE screen —
   // policy creation offers itself pre-checked with the captured terms.

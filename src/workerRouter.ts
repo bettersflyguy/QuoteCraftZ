@@ -36,7 +36,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { buildSupplementalNote, writeApplicationKnowledge } from "@/crm/appCommit";
-import { createLead, createPolicy, createQuote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, dvJson, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
 
 export interface Deps {
@@ -71,6 +71,7 @@ export interface Deps {
   findInsuredMatches: typeof findInsuredMatches;
   createPolicy: typeof createPolicy;
   createQuote: typeof createQuote;
+  dvQuery: typeof dvJson;
   upsertAccountNote: typeof upsertAccountNote;
   searchInsureds: typeof searchInsureds;
   getInsuredSourceRecords: typeof getInsuredSourceRecords;
@@ -274,7 +275,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         try {
           const know = await writeQuestionKnowledge(env, payload.run, payload.accountId, {
             getKnowledgeNavProps: deps.getKnowledgeNavProps,
-            executeBatch: deps.executeBatch
+            executeBatch: deps.executeBatch,
+            query: deps.dvQuery
           });
           if (know.skipped === "no-tables") {
             results.push({ key: "Question knowledge — waiting on CRM tables (iacrm_carrierquestion); Q&A kept in rawpayload meanwhile", status: 204, error: null, entityId: null });
@@ -389,7 +391,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         try {
           const know = await writeApplicationKnowledge(env, app, msg.accountId, {
             getKnowledgeNavProps: deps.getKnowledgeNavProps,
-            executeBatch: deps.executeBatch
+            executeBatch: deps.executeBatch,
+            query: deps.dvQuery
           });
           if (know.skipped === "no-tables") {
             results.push({ key: "Application data — waiting on CRM tables (iacrm_carrierquestion); nothing logged", status: 204, error: null, entityId: null });
@@ -675,6 +678,7 @@ export const realDeps: Deps = {
   findInsuredMatches,
   createPolicy,
   createQuote,
+  dvQuery: dvJson,
   upsertAccountNote,
   searchInsureds,
   getInsuredSourceRecords,

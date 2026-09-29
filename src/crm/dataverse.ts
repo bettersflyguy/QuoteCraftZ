@@ -49,7 +49,7 @@ async function dv(env: CrmEnvironment, path: string, init: RequestInit = {}): Pr
   return res;
 }
 
-async function dvJson<T>(env: CrmEnvironment, path: string): Promise<T> {
+export async function dvJson<T>(env: CrmEnvironment, path: string): Promise<T> {
   const res = await dv(env, path);
   if (!res.ok) throw new Error(`Dataverse ${res.status} for ${path}`);
   return res.json() as Promise<T>;
