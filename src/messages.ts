@@ -57,7 +57,7 @@ export type PanelRequest =
   | { type: "panel/bpCapture" }
   | { type: "panel/bpGetCaptured" }
   | { type: "panel/bpClear" }
-  | { type: "panel/portalFill"; tabId: number; overwrite: boolean }
+  | { type: "panel/portalFill"; tabId: number; overwrite: boolean; autoAdvance: boolean }
   | { type: "panel/portalIngest"; tabId: number }
   /** applicant is the agent-REVIEWED identity from the panel, not the raw
    * capture; insuredType is iacrm_insuredtype (1 Personal, 2 Commercial). */

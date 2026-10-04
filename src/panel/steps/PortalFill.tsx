@@ -80,6 +80,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
   const styles = useStyles();
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [overwrite, setOverwrite] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<PanelError | null>(null);
   const [fillResult, setFillResult] = useState<PortalFillResult | null>(null);
@@ -96,6 +97,18 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
   const [loadFlow, setLoadFlow] = useState(false);
 
   useEffect(() => { getActiveEnvironment().then(setEnv).catch(() => {}); }, []);
+
+  useEffect(() => {
+    chrome.storage.local.get("portal/autoAdvance").then(s => {
+      const v = s["portal/autoAdvance"];
+      if (typeof v === "boolean") setAutoAdvance(v);
+    }).catch(() => {});
+  }, []);
+
+  const toggleAdvance = (v: boolean) => {
+    setAutoAdvance(v);
+    void chrome.storage.local.set({ "portal/autoAdvance": v }).catch(() => {});
+  };
 
   // combined pin signal: our own in-flight ops + the LoadToCrm flow
   useEffect(() => {
@@ -149,7 +162,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
     try {
       const tab = await grantActiveTab();
       if (kind === "fill") {
-        setFillResult(await send<PortalFillResult>({ type: "panel/portalFill", tabId: tab.id, overwrite }));
+        setFillResult(await send<PortalFillResult>({ type: "panel/portalFill", tabId: tab.id, overwrite, autoAdvance }));
       } else {
         const outcome = await send<IngestOutcome>({ type: "panel/portalIngest", tabId: tab.id });
         setIngestResult(outcome);
@@ -298,6 +311,13 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
           label="Fill: overwrite fields that already have values"
         />
       )}
+      {app && (
+        <Checkbox
+          checked={autoAdvance}
+          onChange={(_, d) => toggleAdvance(Boolean(d.checked))}
+          label="Auto-advance after fill (Next/Continue only — never submit, bind, or pay)"
+        />
+      )}
       {ingestResult && (
         <div className={styles.result}>
           {ingestResult.replaced && (
@@ -315,7 +335,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
           {fillResult.filledCount ? " Review the highlighted values before moving on." : " Move to the portal page that shows the application form and retry."}
         </div>
       )}
-      {app && <LoadToCrm key={app.capturedAt} app={app} onFlowActive={setLoadFlow} />}
+      {app && <LoadToCrm key={app.capturedAt} app={app} onFlowActive={setLoadFlow} onLoaded={refresh} />}
       {app && (
         <div className={styles.buttons}>
           <Button onClick={() => exportCaptureToExcel(app)}>Export to Excel</Button>

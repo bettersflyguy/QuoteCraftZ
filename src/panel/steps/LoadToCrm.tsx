@@ -54,7 +54,7 @@ interface PendingOpp { accountId: string; accountName: string; opps: OppSummary[
  * the carrier opportunity. Worker runs enrichment + risk-data logging. */
 const MATCH_LABEL = { email: "email match", phone: "phone match", name: "name match" } as const;
 
-export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onFlowActive?: (active: boolean) => void }) {
+export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplication; onFlowActive?: (active: boolean) => void; onLoaded?: () => void }) {
   const styles = useStyles();
   const [step, setStep] = useState<"closed" | "review" | "target">("closed");
   const [identity, setIdentity] = useState<CaptureIdentity>(() => identityFromCapture(app));
@@ -277,6 +277,7 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
       setLoadedInto(accountName);
       setLoadedRecord({ etn: "account", id: accountId });
       setPendingOpp(null);
+      onLoaded?.();
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
   };
 

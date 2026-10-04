@@ -99,7 +99,8 @@
       source: "standing",
       value: "Yes",
       aliases: [
-        "customerconsenttimestamp",
+        "customer consent timestamp",
+        "consent timestamp",
         "i've read this disclosure to my client",
         "read this disclosure to my client",
         "was the above disclosure read or provided",

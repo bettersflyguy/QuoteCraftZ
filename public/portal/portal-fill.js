@@ -65,7 +65,9 @@
     /* one PRIMARY label, in priority order; container text only as a fallback
      * for label-less SPA fields. Concatenating container text onto real labels
      * let payment-widget verbiage ("bank name and address") hijack matches. */
+    const wrappingLabel = element.closest("label");
     const primary = clean(element.getAttribute("aria-label")) || labelledText(element) || explicitLabel(element) ||
+      clean(wrappingLabel && (wrappingLabel.innerText || wrappingLabel.textContent)) ||
       clean(legend && (legend.innerText || legend.textContent)) || containerLabel(element);
     const parts = [
       primary, element.getAttribute("placeholder"), element.getAttribute("autocomplete"),
@@ -265,7 +267,7 @@
     return null;
   }
 
-  async function fill(payload, overwrite) {
+  async function fill(payload, overwrite, autoAdvance) {
     const candidates = mapper.buildCandidates(payload);
     const fillRoot = activeModal() || document;
     const controls = Array.from(fillRoot.querySelectorAll("input, select, textarea"))
@@ -332,6 +334,31 @@
       }
     } catch (_e) { /* no dialog - nothing to confirm */ }
 
+    /* SUPERVISED ADVANCE (opt-in): when no visible required field is left
+     * blank, click the page's plain continue button. Allowlist verbs only -
+     * never submit/purchase/bind/pay/rate; the agent watches the tab. */
+    if (autoAdvance) {
+      try {
+        await new Promise((r) => setTimeout(r, 400));
+        const requiredBlank = Array.from(fillRoot.querySelectorAll("input, select, textarea"))
+          .filter((el) => visible(el) && !el.disabled && (el.required || el.getAttribute("aria-required") === "true"))
+          .some((el) => blank(el));
+        if (!requiredBlank) {
+          const STOP = /submit|purchase|bind|pay|checkout|finalize|order|agree|buy|rate/i;
+          const target = Array.from(fillRoot.querySelectorAll("button, [role='button'], input[type='submit']"))
+            .filter((b) => b.getClientRects().length && !b.disabled)
+            .find((b) => {
+              const t = clean(b.innerText || b.value || "");
+              return /^(next|continue|start quote|save and continue|save & continue)$/i.test(t) && !STOP.test(t);
+            });
+          if (target) {
+            target.click();
+            results.push({ label: "Advanced: " + clean(target.innerText || target.value || "button"), path: "advance", status: "filled" });
+          }
+        }
+      } catch (_e) { /* best effort */ }
+    }
+
     const filled = results.filter((result) => result.status === "filled");
     return {
       filledCount: filled.length,
@@ -345,5 +372,5 @@
   /* invoked per frame by the worker via chrome.scripting.executeScript func —
    * each frame (agent portals often put the form in an iframe) fills its own
    * fields and returns its own counts for the worker to aggregate */
-  globalThis.__bettersPortalFill = (payload, overwrite) => fill(payload, Boolean(overwrite));
+  globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance) => fill(payload, Boolean(overwrite), Boolean(autoAdvance));
 })();

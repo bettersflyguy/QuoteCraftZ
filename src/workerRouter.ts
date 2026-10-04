@@ -92,7 +92,8 @@ export interface Deps {
   fillPortalTab: (
     tabId: number,
     payload: import("@/boldpenguin/types").CapturedApplication,
-    overwrite: boolean
+    overwrite: boolean,
+    autoAdvance: boolean
   ) => Promise<import("@/boldpenguin/types").PortalFillResult>;
   /** Injects the page harvester into the tab and returns its visible fields. */
   ingestPortalTab: (tabId: number) => Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }>;
@@ -347,7 +348,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         if (!app) {
           return { ok: false, error: "The captured application is no longer available. Capture it again in Bold Penguin.", kind: "session" };
         }
-        return { ok: true, data: await deps.fillPortalTab(msg.tabId, app, msg.overwrite) };
+        return { ok: true, data: await deps.fillPortalTab(msg.tabId, app, msg.overwrite, msg.autoAdvance) };
       }
 
       case "panel/portalIngest": {
@@ -410,6 +411,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         } catch (e) {
           results.push({ key: "Application data", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
+        await chrome.storage.session.set({ "bp/crmLink": { kind: "account", id: msg.accountId, name: "" } });
         // supplemental data with no CRM column (employment, payment plan,
         // coverage elections…) -> one evergreen timeline note per source
         try {
@@ -552,7 +554,8 @@ async function setCapturedApplication(app: import("@/boldpenguin/types").Capture
 async function fillPortalTab(
   tabId: number,
   payload: import("@/boldpenguin/types").CapturedApplication,
-  overwrite: boolean
+  overwrite: boolean,
+  autoAdvance: boolean
 ): Promise<import("@/boldpenguin/types").PortalFillResult> {
   // On-demand injection: the filler ships as plain scripts (public/portal/) so it
   // can run on ANY carrier portal the user granted, without a declared match.
@@ -561,9 +564,9 @@ async function fillPortalTab(
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: (p: unknown, o: boolean) =>
-      (globalThis as { __bettersPortalFill?: (p: unknown, o: boolean) => unknown }).__bettersPortalFill?.(p, o) ?? null,
-    args: [payload, overwrite]
+    func: (p: unknown, o: boolean, a: boolean) =>
+      (globalThis as { __bettersPortalFill?: (p: unknown, o: boolean, a: boolean) => unknown }).__bettersPortalFill?.(p, o, a) ?? null,
+    args: [payload, overwrite, autoAdvance]
   });
   const results = frames
     .map(f => f.result as import("@/boldpenguin/types").PortalFillResult | null)
