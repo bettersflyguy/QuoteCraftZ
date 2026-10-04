@@ -138,13 +138,20 @@
   /* an OPEN MODAL owns the page: reading (or filling) behind it mixes OTHER
    * records - e.g. Tivly's whole lead list behind its Lead Details dialog */
   function activeModal() {
+    const junk = /qsi|qualtrics|intercom|drift|zendesk|launcher|chat|feedback|survey|beacon|usabilla|hotjar|walkme|pendo/i;
     const candidates = Array.from(document.querySelectorAll("[role='dialog'], [aria-modal='true'], [class*='modal']"))
-      .filter((el) => isVisible(el) && el.getClientRects().length && !/backdrop|overlay/i.test(String(el.className)));
+      .filter((el) => isVisible(el) && el.getClientRects().length &&
+        !/backdrop|overlay/i.test(String(el.className)) &&
+        !junk.test(String(el.className) + " " + String(el.id)));
     for (let i = candidates.length - 1; i >= 0; i -= 1) {
-      const r = candidates[i].getBoundingClientRect();
-      if (r.width >= 240 && r.height >= 120 && r.width * r.height >= innerWidth * innerHeight * 0.06) {
-        return candidates[i];
-      }
+      const el = candidates[i];
+      const r = el.getBoundingClientRect();
+      if (r.width < 240 || r.height < 120 || r.width * r.height < innerWidth * innerHeight * 0.06) continue;
+      /* a dialog only OWNS the page when it has real content: a survey/chat
+       * widget passing the size bar must not hijack capture or fill */
+      const hasControls = el.querySelector("input, select, textarea");
+      const textLength = String(el.innerText || "").replace(/\s+/g, " ").trim().length;
+      if (hasControls || textLength >= 120) return el;
     }
     return null;
   }
