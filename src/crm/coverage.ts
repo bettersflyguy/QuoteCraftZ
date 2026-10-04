@@ -26,12 +26,13 @@ export function buildCoverageRowBodies(
   quoteNavProp: string
 ): Record<string, unknown>[] {
   return quote.coverageLines.map((line, i) => {
+    // no iacrm_amsexternalid: that column is AMS-reserved; idempotency here
+    // comes from the delete-then-create write
     const body: Record<string, unknown> = {
       iacrm_quotecoverage_name: line.label.slice(0, 300),
       iacrm_coveragecode: line.code.slice(0, 50),
       iacrm_limittext: line.limitText.slice(0, 100),
       iacrm_displayorder: i,
-      iacrm_amsexternalid: `${quote.key}:cov:${i}`,
       [`${quoteNavProp}@odata.bind`]: `/iacrm_quotes(${quoteId})`
     };
     const v = parseLimitValue(line.limitText);
@@ -61,7 +62,7 @@ export async function writeCoverageLines(
     const existing = await api.getCoverageRowIds(env, quoteId);
     for (const id of existing) ops.push({ key: `del:${id}`, method: "DELETE", url: `iacrm_quotecoverages(${id})` });
     for (const body of buildCoverageRowBodies(quote, quoteId, nav)) {
-      ops.push({ key: `cov:${body["iacrm_amsexternalid"]}`, method: "POST", url: "iacrm_quotecoverages", body });
+      ops.push({ key: `cov:${quoteId}:${body["iacrm_displayorder"]}`, method: "POST", url: "iacrm_quotecoverages", body });
       linesWritten++;
     }
   }

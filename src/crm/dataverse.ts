@@ -210,6 +210,7 @@ export interface NewQuoteFields {
   effectiveDate: string | null;
   /** The portal page the quote came from (iacrm_quotelink + alt-key host). */
   sourceUrl: string;
+  quotingMethodId: string | null;
 }
 
 /** Upserts a portal-captured quote onto the opportunity — provider "Portal",
@@ -217,7 +218,7 @@ export interface NewQuoteFields {
  * duplicating. Same column conventions as the EZLynx writer; premium status
  * is always Estimated (standing rule), source type left unset (carrier
  * direct, not comparative rater). */
-export async function createQuote(env: CrmEnvironment, f: NewQuoteFields): Promise<void> {
+export async function createQuote(env: CrmEnvironment, f: NewQuoteFields): Promise<{ quoteId: string }> {
   const host = new URL(f.sourceUrl).hostname;
   const ext = `${host}:${f.opportunityId}`.replace(/'/g, "''");
   const body: Record<string, unknown> = {
@@ -235,12 +236,15 @@ export async function createQuote(env: CrmEnvironment, f: NewQuoteFields): Promi
   if (f.effectiveDate) body["iacrm_effectivedate"] = f.effectiveDate;
   if (f.carrierId) body["iacrm_CarrierId@odata.bind"] = `/iacrm_carriers(${f.carrierId})`;
   if (f.lobId) body["iacrm_LineOfBusinessId@odata.bind"] = `/iacrm_lineofbusinesses(${f.lobId})`;
+  if (f.quotingMethodId) body["iacrm_QuotingMethodId@odata.bind"] = `/iacrm_quotingmethods(${f.quotingMethodId})`;
   const r = await dv(env, `iacrm_quotes(iacrm_provider='Portal',iacrm_amsexternalid='${ext}')`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Prefer: "return=representation" },
     body: JSON.stringify(body)
   });
   if (!r.ok) throw new Error(`quote upsert failed (${r.status}): ${(await r.text()).slice(0, 300)}`);
+  const rec = (await r.json()) as Record<string, string>;
+  return { quoteId: rec["iacrm_quoteid"]! };
 }
 
 export interface InsuredSearchRow {

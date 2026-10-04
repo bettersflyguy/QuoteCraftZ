@@ -264,6 +264,21 @@ export function guessInsuredType(app: CapturedApplication): 1 | 2 {
   return markers ? 2 : 1;
 }
 
+/** Structured coverage lines for iacrm_quotecoverage, from the capture's
+ * coverage-ish fields. Code comes from a parenthesized abbreviation in the
+ * label ("Bodily Injury Liability (BI)" -> BI), else initials. Values stay
+ * verbatim in limitText. */
+export function coverageLinesFromCapture(app: CapturedApplication): { code: string; label: string; limitText: string }[] {
+  return app.fields
+    .filter(f => /\$\s*[\d,]/.test(f.value) || /coverage|liabilit|deductible|csl|\bum\b|uim|pip|medical|physical damage|comprehensive|collision|limit/i.test(f.label))
+    .filter(f => !/total.*premium|due today|policy term/i.test(f.label))
+    .map(f => {
+      const paren = f.label.match(/\(([A-Z/&]{2,8})\)/);
+      const code = paren ? paren[1]! : f.label.split(/\s+/).map(w => w[0] ?? "").join("").toUpperCase().slice(0, 6);
+      return { code, label: f.label, limitText: f.value.slice(0, 100) };
+    });
+}
+
 /** Intake source for lead attribution (iacrm_leadsource), from the capture's
  * origin. Lead marketplaces get their proper name; anything else records the
  * host so the source is never lost. */

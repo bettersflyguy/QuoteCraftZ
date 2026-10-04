@@ -35,7 +35,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { buildSupplementalNote, writeApplicationKnowledge } from "@/crm/appCommit";
+import { buildSupplementalNote, coverageLinesFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { createLead, createPolicy, createQuote, dvJson, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
 
@@ -443,8 +443,32 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/createQuote": {
         const env = await deps.getActiveEnvironment();
-        await deps.createQuote(env, msg.fields);
-        return { ok: true, data: null };
+        // quoting method: resolve-or-create "Carrier Direct" (portal quotes are
+        // carrier-direct; the carrier lookup says WHICH carrier)
+        let quotingMethodId = await deps.getQuotingMethodId(env, "Carrier Direct");
+        if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "Carrier Direct");
+        const { quoteId } = await deps.createQuote(env, { ...msg.fields, quotingMethodId });
+        // structured coverage rows from the held capture (best-effort,
+        // schema-aware like the EZLynx path)
+        let linesWritten = 0;
+        try {
+          const app = await deps.getCapturedApplication();
+          if (app) {
+            const lines = coverageLinesFromCapture(app);
+            if (lines.length) {
+              const cov = await writeCoverageLines(env, [{
+                quote: { coverageLines: lines } as import("@/types").CapturedQuote,
+                quoteId
+              }], {
+                getCoverageQuoteNavProp: deps.getCoverageQuoteNavProp,
+                getCoverageRowIds: deps.getCoverageRowIds,
+                executeBatch: deps.executeBatch
+              });
+              linesWritten = cov.skipped ? 0 : cov.linesWritten;
+            }
+          }
+        } catch { /* coverage depth is best-effort; the quote row stands */ }
+        return { ok: true, data: { quoteId, linesWritten } };
       }
 
       case "auth/signIn": {

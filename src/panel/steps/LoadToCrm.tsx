@@ -254,7 +254,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         try {
           const draft = quoteFromCapture(app);
           const carrierName = carriers?.find(c => c.carrierId === quote.carrierId)?.name ?? carrierGuess(app);
-          await send({
+          const q = await send<{ quoteId: string; linesWritten: number }>({
             type: "panel/createQuote",
             fields: {
               accountId,
@@ -265,10 +265,11 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
               premium: parseMoney(quote.premium),
               coverageSummary: draft.coverageSummary,
               effectiveDate: toIsoDate(draft.effectiveDate.trim() || null),
-              sourceUrl: app.source.url
+              sourceUrl: app.source.url,
+              quotingMethodId: null
             }
           });
-          rows.push({ key: `Quote — ${carrierName} ${quote.premium || ""} on the opportunity (re-captures update it)`, status: 204, error: null, entityId: null });
+          rows.push({ key: `Quote — ${carrierName} ${quote.premium || ""} on the opportunity${q.linesWritten ? ` with ${q.linesWritten} coverage lines` : ""} (re-captures update it)`, status: 204, error: null, entityId: null });
         } catch (e) {
           rows.push({ key: "Quote", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }

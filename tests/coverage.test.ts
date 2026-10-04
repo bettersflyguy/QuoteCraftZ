@@ -50,7 +50,6 @@ describe("buildCoverageRowBodies", () => {
       iacrm_limittext: "$606,900",
       iacrm_limitvalue: 606900,
       iacrm_displayorder: 0,
-      iacrm_amsexternalid: "ezlynx:1:req:cov:0",
       "iacrm_QuoteId@odata.bind": "/iacrm_quotes(Q-1)"
     });
     expect(rows[1]!["iacrm_limitvalue"]).toBeUndefined(); // "500 CSL" stays text-only
