@@ -151,7 +151,7 @@
     await new Promise((r) => setTimeout(r, 900));
     const items = Array.from(document.querySelectorAll(SUGGESTION_SELECTOR)).filter((o) => o.getClientRects().length);
     if (!items.length) return false;
-    const streetNum = (String(value).match(/^d+/) || [""])[0];
+    const streetNum = (String(value).match(/^\d+/) || [""])[0];
     const cityCanon = mapper.canonical(addrCtx.city || "");
     const zip = clean(addrCtx.zip || "");
     const lineCanon = mapper.canonical(value);
@@ -320,7 +320,7 @@
           const t = clean(node.innerText);
           if (t.length > 30) { ctx = t; break; }
         }
-        const streetNum = (String(addrCtx.street).match(/^d+/) || [""])[0];
+        const streetNum = (String(addrCtx.street).match(/^\d+/) || [""])[0];
         const ctxCanon = mapper.canonical(ctx);
         const cityCanon = mapper.canonical(addrCtx.city);
         const corroborated = Boolean(streetNum) && ctx.includes(streetNum) &&

@@ -140,8 +140,8 @@
     const s1 = candidates.find((c) => c.path === "address.street1");
     const hasS2 = candidates.some((c) => c.path === "address.street2");
     if (s1 && !hasS2) {
-      const split = String(s1.value).match(/^(.*?S)[,;]s*((?:apt|unit|ste|suite|no|#)?.?s*[w-]{1,10})$/i);
-      if (split && /d/.test(split[2])) {
+      const split = String(s1.value).match(/^(.*?\S)[,;]\s*((?:apt|unit|ste|suite|no|#)?\.?\s*[\w-]{1,10})$/i);
+      if (split && /\d/.test(split[2])) {
         s1.value = clean(split[1]);
         candidates.push({ path: "address.street2", aliases: rules.find((r) => r[0] === "address.street2")[1], value: clean(split[2]), source: "normalized" });
       }
