@@ -141,7 +141,34 @@
     return /^(yes|true|1|checked|selected)$/i.test(clean(value));
   }
 
-  function fillControl(element, candidate, overwrite) {
+  /* MUI-style autocompletes (input[role=combobox]) DISCARD synthetic text but
+   * open their listbox: type to trigger it, then CLICK the matching option -
+   * the same semantics as native select matching. */
+  async function fillListCombobox(element, candidate) {
+    const value = candidate.value;
+    setNativeValue(element, value);
+    dispatch(element, value);
+    await new Promise((r) => setTimeout(r, 500));
+    const options = Array.from(document.querySelectorAll("[role='listbox'] [role='option']"))
+      .filter((o) => o.getClientRects().length);
+    if (!options.length) return { status: "filled" }; // typed text stays; agent confirms
+    const variants = mapper.valueVariants(value).map((v) => mapper.canonical(v));
+    const byTier = (tier) => options.find((o) => {
+      const label = mapper.canonical(o.innerText);
+      return variants.some((w) => tier === 0 ? label === w : tier === 1 ? label.startsWith(w) : label.includes(w));
+    });
+    const target = byTier(0) || byTier(1) || byTier(2);
+    if (!target) return { status: "option-mismatch" };
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    target.click();
+    element.dataset.bettersFilled = "true";
+    element.style.outline = "2px solid #1c8a72";
+    setTimeout(() => { element.style.outline = ""; }, 5000);
+    return { status: "filled" };
+  }
+
+  async function fillControl(element, candidate, overwrite) {
     const tag = element.tagName;
     const type = (element.type || "").toLowerCase();
     if (!overwrite && !blank(element)) return { status: "existing" };
@@ -159,16 +186,19 @@
       return { status: "filled" };
     }
     if (tag === "SELECT") {
-      const wanted = mapper.canonical(candidate.value);
+      const variants = mapper.valueVariants(candidate.value).map((v) => mapper.canonical(v));
       const option = Array.from(element.options).find((item) => {
         const label = mapper.canonical(item.textContent);
         const value = mapper.canonical(item.value);
-        return label === wanted || value === wanted || label.includes(wanted) || wanted.includes(label);
+        return variants.some((wanted) => label === wanted || value === wanted || label.includes(wanted) || wanted.includes(label));
       });
       if (!option) return { status: "option-mismatch" };
       element.value = option.value;
       dispatch(element);
       return { status: "filled" };
+    }
+    if (element.getAttribute("role") === "combobox" || element.getAttribute("aria-autocomplete") === "list") {
+      return fillListCombobox(element, candidate);
     }
     const value = type === "date" ? dateValue(candidate.value) : candidate.value;
     setNativeValue(element, value);
@@ -197,7 +227,7 @@
     return null;
   }
 
-  function fill(payload, overwrite) {
+  async function fill(payload, overwrite) {
     const candidates = mapper.buildCandidates(payload);
     const fillRoot = activeModal() || document;
     const controls = Array.from(fillRoot.querySelectorAll("input, select, textarea"))
@@ -207,27 +237,28 @@
     const results = [];
     const handledRadioGroups = new Set();
 
-    controls.forEach((element) => {
+    for (const element of controls) {
       const name = fieldName(element);
-      if (!name || PAYMENT_FIELD.test(name)) return;
+      if (!name || PAYMENT_FIELD.test(name)) continue;
       if (element.type === "radio") {
         const fieldset = element.closest("fieldset");
         const groupKey = element.name ? `name:${element.name}` : fieldset || element;
-        if (handledRadioGroups.has(groupKey)) return;
+        if (handledRadioGroups.has(groupKey)) continue;
         handledRadioGroups.add(groupKey);
         const candidate = mapper.matchField(name, candidates);
-        if (!candidate) return;
+        if (!candidate) continue;
         const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
-        if (!target) return results.push({ label: name, status: "option-mismatch" });
-        const outcome = fillControl(target, candidate, overwrite);
-        return results.push({ label: name, path: candidate.path, status: outcome.status });
+        if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
+        const outcome = await fillControl(target, candidate, overwrite);
+        results.push({ label: name, path: candidate.path, status: outcome.status });
+        continue;
       }
       const candidate = mapper.matchField(name, candidates);
-      if (!candidate) return;
-      const outcome = fillControl(element, candidate, overwrite);
+      if (!candidate) continue;
+      const outcome = await fillControl(element, candidate, overwrite);
       results.push({ label: name, path: candidate.path, status: outcome.status });
-    });
+    }
 
     const filled = results.filter((result) => result.status === "filled");
     return {

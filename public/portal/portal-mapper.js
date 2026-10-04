@@ -70,6 +70,45 @@
    * alias sets) covers these; the raw duplicates are dropped. */
   const GENERIC_LABELS = new Set(["name", "full name", "address", "mailing address", "city", "state", "zip", "zip code", "phone", "phone number", "email", "email address"]);
 
+
+  /* value variants: state abbreviations <-> full names, for option matching */
+  const US_STATES = { AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California", CO:"Colorado", CT:"Connecticut", DE:"Delaware", FL:"Florida", GA:"Georgia", HI:"Hawaii", ID:"Idaho", IL:"Illinois", IN:"Indiana", IA:"Iowa", KS:"Kansas", KY:"Kentucky", LA:"Louisiana", ME:"Maine", MD:"Maryland", MA:"Massachusetts", MI:"Michigan", MN:"Minnesota", MS:"Mississippi", MO:"Missouri", MT:"Montana", NE:"Nebraska", NV:"Nevada", NH:"New Hampshire", NJ:"New Jersey", NM:"New Mexico", NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio", OK:"Oklahoma", OR:"Oregon", PA:"Pennsylvania", RI:"Rhode Island", SC:"South Carolina", SD:"South Dakota", TN:"Tennessee", TX:"Texas", UT:"Utah", VT:"Vermont", VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming", DC:"District of Columbia" };
+  function valueVariants(value) {
+    const v = clean(value);
+    const out = [v];
+    const up = v.toUpperCase();
+    if (US_STATES[up]) out.push(US_STATES[up]);
+    const abbr = Object.keys(US_STATES).find((k) => US_STATES[k].toLowerCase() === v.toLowerCase());
+    if (abbr) out.push(abbr);
+    return out;
+  }
+
+  /* a candidate must make sense for the field: a phone field never takes a
+   * value without digits ("Cell" is a phone TYPE) */
+  const FIELD_VALIDATORS = [
+    { field: /phone|telephone|mobile|cellphone|cell number/, ok: (v) => String(v).replace(/[^0-9]/g, "").length >= 7 }
+  ];
+
+  /* standing answers (agency policy, Nathan 2026-10-04): the consumer-report /
+   * third-party data disclosure is read on EVERY opening call script, so the
+   * "I've read this disclosure to my client" acknowledgment always fills Yes.
+   * The agent still reviews and advances the page. */
+  const STANDING_CANDIDATES = [
+    {
+      path: "standing.disclosureRead",
+      source: "standing",
+      value: "Yes",
+      aliases: [
+        "customerconsenttimestamp",
+        "i've read this disclosure to my client",
+        "read this disclosure to my client",
+        "was the above disclosure read or provided",
+        "disclosure read to client",
+        "consent to consumer reports"
+      ]
+    }
+  ];
+
   function buildCandidates(payload) {
     const candidates = [];
     const normalized = (payload && payload.normalized) || {};
@@ -96,6 +135,7 @@
       if (field.section) aliases.push(`${field.section} ${field.label}`);
       candidates.push({ path: `fields.${index}`, aliases, value: clean(field.value), source: "captured" });
     });
+    STANDING_CANDIDATES.forEach((sc) => candidates.push(sc));
     return candidates;
   }
 
@@ -131,11 +171,14 @@
     candidates.forEach((candidate) => {
       const exclude = PATH_FIELD_EXCLUDE[candidate.path];
       if (exclude && exclude.test(fieldCanon)) return;
+      for (const v of FIELD_VALIDATORS) {
+        if (v.field.test(fieldCanon) && !v.ok(candidate.value)) return;
+      }
       const score = Math.max(...candidate.aliases.map((alias) => aliasScore(fieldName, alias))) + (candidate.source === "normalized" ? 3 : 0);
       if (score >= 72 && (!best || score > best.score)) best = { ...candidate, score };
     });
     return best;
   }
 
-  return { buildCandidates, canonical, matchField };
+  return { buildCandidates, canonical, matchField, valueVariants };
 });
