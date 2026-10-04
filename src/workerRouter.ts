@@ -318,6 +318,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           system: `CRM (${env.name})`, url: env.orgUrl, title: msg.name
         });
         await deps.setCapturedApplication(outcome.app);
+        await chrome.storage.session.set({ "bp/crmLink": { kind: msg.kind, id: msg.id, name: msg.name } });
         return { ok: true, data: outcome };
       }
 
@@ -333,7 +334,13 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/bpClear":
         await deps.setCapturedApplication(null);
+        await chrome.storage.session.remove("bp/crmLink");
         return { ok: true, data: null };
+
+      case "panel/getCrmLink": {
+        const stored = await chrome.storage.session.get("bp/crmLink");
+        return { ok: true, data: (stored["bp/crmLink"] as import("@/messages").CrmLink | undefined) ?? null };
+      }
 
       case "panel/portalFill": {
         const app = await deps.getCapturedApplication();
@@ -352,6 +359,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           title: harvested.title
         });
         await deps.setCapturedApplication(outcome.app);
+        if (outcome.replaced) await chrome.storage.session.remove("bp/crmLink");
         return { ok: true, data: outcome };
       }
 
@@ -628,6 +636,7 @@ export async function handleAutoCaptured(
   // only persist + announce when something actually changed
   if (!outcome.replaced && existing !== null && outcome.added === 0) return;
   await setCapturedApplication(outcome.app);
+  if (outcome.replaced) await chrome.storage.session.remove("bp/crmLink");
   chrome.runtime.sendMessage({
     type: "portal/captureUpdated", added: outcome.added, total: outcome.total, replaced: outcome.replaced
   } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});

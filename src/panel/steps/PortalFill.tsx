@@ -5,7 +5,8 @@ import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
-import type { CaptureUpdatedBroadcast, CapturedApplication, PageContext, PortalFillResult } from "@/messages";
+import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
+import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -90,7 +91,11 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
   const [crmQuery, setCrmQuery] = useState("");
   const [crmRows, setCrmRows] = useState<InsuredSearchRow[] | null>(null);
   const [crmNote, setCrmNote] = useState<string | null>(null);
+  const [crmLink, setCrmLink] = useState<CrmLink | null>(null);
+  const [env, setEnv] = useState<CrmEnvironment | null>(null);
   const [loadFlow, setLoadFlow] = useState(false);
+
+  useEffect(() => { getActiveEnvironment().then(setEnv).catch(() => {}); }, []);
 
   // combined pin signal: our own in-flight ops + the LoadToCrm flow
   useEffect(() => {
@@ -101,6 +106,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
 
   const refresh = useCallback(() => {
     send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(setApp).catch(() => {});
+    send<CrmLink | null>({ type: "panel/getCrmLink" }).then(setCrmLink).catch(() => {});
   }, []);
   useEffect(refresh, [refresh]);
 
@@ -202,7 +208,15 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
     <div className={styles.root}>
       <div className={styles.title}>Carrier portal</div>
       {app
-        ? <div className={styles.ready}>{name ?? "Application ready"} — {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held</div>
+        ? <div className={styles.ready}>
+            {name ?? "Application ready"} — {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held
+            {crmLink && env && (
+              <>
+                {" · "}
+                <a href={crmRecordUrl(env, crmLink.kind, crmLink.id)} target="_blank" rel="noreferrer">Open in CRM</a>
+              </>
+            )}
+          </div>
         : <div className={styles.hint}>
             Nothing captured yet. Ingest this page to pull the insured data shown
             here, or capture a completed application in Bold Penguin.

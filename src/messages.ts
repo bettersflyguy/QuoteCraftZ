@@ -19,6 +19,14 @@ export interface PageContext {
 
 /** Worker -> panel broadcast after an auto-capture merge, so the held-field
  * count updates live while the agent works the carrier site. */
+/** The CRM record the held application is associated with (set by Fill from
+ * CRM), for the panel's quick "Open in CRM" link. */
+export interface CrmLink {
+  kind: "account" | "contact";
+  id: string;
+  name: string;
+}
+
 export interface CaptureUpdatedBroadcast {
   type: "portal/captureUpdated";
   added: number;
@@ -61,6 +69,7 @@ export type PanelRequest =
   | { type: "panel/crmSearch"; query: string }
   | { type: "panel/createQuote"; fields: import("@/crm/dataverse").NewQuoteFields }
   | { type: "panel/crmPull"; kind: "account" | "contact"; id: string; name: string }
+  | { type: "panel/getCrmLink" }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
   | { type: "auth/signIn" };
