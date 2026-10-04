@@ -84,6 +84,7 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
   const [error, setError] = useState<PanelError | null>(null);
   const [results, setResults] = useState<BatchItemResult[] | null>(null);
   const [loadedInto, setLoadedInto] = useState<string | null>(null);
+  const [loadedRecord, setLoadedRecord] = useState<{ etn: string; id: string } | null>(null);
 
   const asPanelError = (e: unknown) =>
     e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e));
@@ -274,6 +275,7 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
       }
       setResults(rows);
       setLoadedInto(accountName);
+      setLoadedRecord({ etn: "account", id: accountId });
       setPendingOpp(null);
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
   };
@@ -329,6 +331,7 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
       setResults([{ key: `Lead created — ${created.name} (source: ${leadSourceGuess(app)})`, status: 204, error: null, entityId: null },
         { key: "Risk-data logging requires an insured Account — convert the lead to load it", status: 204, error: null, entityId: null }]);
       setLoadedInto(created.name);
+      setLoadedRecord({ etn: "lead", id: created.leadId });
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
   };
 
@@ -342,6 +345,11 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
           </div>
         ))}
         <div className={styles.row}>
+          {loadedRecord && env && (
+            <Button as="a" href={crmRecordUrl(env, loadedRecord.etn, loadedRecord.id)} target="_blank" appearance="primary">
+              Open in CRM
+            </Button>
+          )}
           <Button onClick={() => { setResults(null); setStep("closed"); }}>Done</Button>
         </div>
       </div>
@@ -389,9 +397,12 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
                   {d.city ? `, ${d.city}` : ""}{d.postalCode ? ` ${d.postalCode}` : ""} ({MATCH_LABEL[d.matchedBy]})
                 </span>
                 {d.kind === "account" ? (
-                  <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
-                    {busy === d.id ? <Spinner size="tiny" /> : "Load"}
-                  </Button>
+                  <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                    {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", d.id)} target="_blank">Open</Button>}
+                    <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
+                      {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                    </Button>
+                  </span>
                 ) : (
                   env && <Button size="small" as="a" href={crmRecordUrl(env, "lead", d.id)} target="_blank">Open</Button>
                 )}
@@ -587,9 +598,12 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
                 {d.city ? `, ${d.city}` : ""}{d.postalCode ? ` ${d.postalCode}` : ""} ({MATCH_LABEL[d.matchedBy]})
               </span>
               {d.kind === "account" ? (
-                <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
-                  {busy === d.id ? <Spinner size="tiny" /> : "Load"}
-                </Button>
+                <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                  {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", d.id)} target="_blank">Open</Button>}
+                  <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
+                    {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                  </Button>
+                </span>
               ) : (
                 env && <Button size="small" as="a" href={crmRecordUrl(env, "lead", d.id)} target="_blank">Open</Button>
               )}
@@ -619,9 +633,12 @@ export function LoadToCrm({ app, onFlowActive }: { app: CapturedApplication; onF
               <span className={styles.matchText}>
                 {m.name}{m.city ? ` — ${m.city}` : ""}{m.postalCode ? ` ${m.postalCode}` : ""}
               </span>
-              <Button size="small" disabled={busy !== null} onClick={() => loadAccount(m.accountId, m.name)}>
-                {busy === m.accountId ? <Spinner size="tiny" /> : "Load"}
-              </Button>
+              <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", m.accountId)} target="_blank">Open</Button>}
+                <Button size="small" disabled={busy !== null} onClick={() => loadAccount(m.accountId, m.name)}>
+                  {busy === m.accountId ? <Spinner size="tiny" /> : "Load"}
+                </Button>
+              </span>
             </div>
           ))}
           {matches && matches.length === 0 && <div className={styles.hint}>No matching accounts.</div>}
