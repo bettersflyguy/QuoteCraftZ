@@ -194,6 +194,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
     try {
       const outcome = await send<IngestOutcome>({ type: "panel/crmPull", kind: row.kind, id: row.id, name: row.name });
       setApp(outcome.app);
+      setCrmLink({ kind: row.kind, id: row.id, name: row.name });
       setCrmNote(
         `${outcome.replaced ? "Started a fresh application from" : "Merged"} ${row.name}: ` +
         `${outcome.added} field${outcome.added === 1 ? "" : "s"} from the CRM (${outcome.total} held). Ready to fill this quote sheet.`
@@ -293,7 +294,20 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
         <div className={styles.fieldList}>
           {[...new Set(app.fields.map(f => f.section))].map(section => (
             <div key={section}>
-              <div className={styles.fieldSection}>{section}</div>
+              {section === "Insured profile" && crmLink && env ? (
+                <a
+                  className={styles.fieldSection}
+                  style={{ display: "block", textDecoration: "underline", cursor: "pointer" }}
+                  href={crmRecordUrl(env, crmLink.kind, crmLink.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open this insured's CRM record in a new tab"
+                >
+                  {section} — open in CRM ↗
+                </a>
+              ) : (
+                <div className={styles.fieldSection}>{section}</div>
+              )}
               {app.fields.filter(f => f.section === section).map((f, i) => (
                 <div key={`${f.label}:${i}`} className={styles.fieldRow}>
                   <span className={styles.fieldLabel}>{f.group ? `${f.group} — ` : ""}{f.label}</span>
