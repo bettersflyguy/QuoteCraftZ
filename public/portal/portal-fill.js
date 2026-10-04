@@ -272,7 +272,8 @@
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
     const addrCtx = {
       city: (candidates.find((c) => c.path === "address.city") || {}).value || "",
-      zip: (candidates.find((c) => c.path === "address.postalCode") || {}).value || ""
+      zip: (candidates.find((c) => c.path === "address.postalCode") || {}).value || "",
+      street: (candidates.find((c) => c.path === "address.street1") || {}).value || ""
     };
     const results = [];
     const handledRadioGroups = new Set();
@@ -299,6 +300,35 @@
       const outcome = await fillControl(element, candidate, overwrite, addrCtx);
       results.push({ label: name, path: candidate.path, status: outcome.status });
     }
+
+    /* address-verification dialogs ("We found an alternate address ... Select
+     * address"): confirm ONLY when the dialog's suggested address carries the
+     * captured street number AND the captured ZIP or city — a value
+     * confirmation, not blind navigation. */
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      const confirmBtn = Array.from(document.querySelectorAll("button, [role='button']")).find((b) => {
+        if (!b.getClientRects().length) return false;
+        return /^(select|use|confirm)( this| suggested| verified)? address$/.test(mapper.canonical(b.innerText));
+      });
+      if (confirmBtn) {
+        let node = confirmBtn, ctx = "";
+        for (let i = 0; i < 6 && node.parentElement; i += 1) {
+          node = node.parentElement;
+          const t = clean(node.innerText);
+          if (t.length > 30) { ctx = t; break; }
+        }
+        const streetNum = (String(addrCtx.street).match(/^d+/) || [""])[0];
+        const ctxCanon = mapper.canonical(ctx);
+        const cityCanon = mapper.canonical(addrCtx.city);
+        const corroborated = Boolean(streetNum) && ctx.includes(streetNum) &&
+          ((addrCtx.zip && ctx.includes(addrCtx.zip)) || (cityCanon && ctxCanon.includes(cityCanon)));
+        if (corroborated) {
+          confirmBtn.click();
+          results.push({ label: "Address confirmation (" + clean(confirmBtn.innerText) + ")", path: "address.street1", status: "filled" });
+        }
+      }
+    } catch (_e) { /* no dialog - nothing to confirm */ }
 
     const filled = results.filter((result) => result.status === "filled");
     return {
