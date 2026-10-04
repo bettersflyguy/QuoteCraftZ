@@ -195,10 +195,12 @@
     return { status: "filled" };
   }
 
-  async function fillControl(element, candidate, overwrite, addrCtx) {
+  async function fillControl(element, candidate, overwrite, addrCtx, fieldNameHint) {
     const tag = element.tagName;
     const type = (element.type || "").toLowerCase();
-    if (!overwrite && !blank(element)) return { status: "existing" };
+    /* an existing value that is INVALID for this field (a phone holding the
+     * TYPE like "Cell") does not count as filled — replace it */
+    if (!overwrite && !blank(element) && mapper.validForField(fieldNameHint || "", element.value)) return { status: "existing" };
 
     if (type === "radio") {
       if (mapper.canonical(optionName(element)) !== mapper.canonical(candidate.value)) return { status: "option-mismatch" };
@@ -291,13 +293,13 @@
         const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
-        const outcome = await fillControl(target, candidate, overwrite, addrCtx);
+        const outcome = await fillControl(target, candidate, overwrite, addrCtx, name);
         results.push({ label: name, path: candidate.path, status: outcome.status });
         continue;
       }
       const candidate = mapper.matchField(name, candidates);
       if (!candidate) continue;
-      const outcome = await fillControl(element, candidate, overwrite, addrCtx);
+      const outcome = await fillControl(element, candidate, overwrite, addrCtx, name);
       results.push({ label: name, path: candidate.path, status: outcome.status });
     }
 

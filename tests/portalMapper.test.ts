@@ -54,6 +54,15 @@ describe("portal mapper", () => {
     expect(matchField("Last Name NamedInsured.LastName", candidates)?.value).toBe("Parkin");
   });
 
+  it("splits a combined street line into street1 + street2 (live Root shape)", () => {
+    const candidates = buildCandidates({
+      normalized: { address: { street1: "4054 W 115Th St, 409", city: "Chicago", postalCode: "60655" } },
+      fields: []
+    });
+    expect(matchField("Address 1 quote::profile/0/address1", candidates)?.value).toBe("4054 W 115Th St");
+    expect(matchField("Address 2 quote::profile/0/address2", candidates)?.value).toBe("409");
+  });
+
   it("matches compact portal VIN field names to the captured vehicle VIN", () => {
     const candidates = buildCandidates({
       normalized: {},

@@ -51,7 +51,8 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
     push("Legal Business Name", accountName);
   }
   const addr = account ?? contact;
-  push("Address", [s(addr, "address1_line1"), s(addr, "address1_line2")].filter(Boolean).join(", "));
+  push("Address", s(addr, "address1_line1"));
+  push("Address Line 2", s(addr, "address1_line2"));
   push("City", s(addr, "address1_city"));
   push("State", s(addr, "address1_stateorprovince"));
   push("ZIP Code", s(addr, "address1_postalcode"));

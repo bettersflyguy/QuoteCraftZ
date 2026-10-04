@@ -135,6 +135,17 @@
       if (field.section) aliases.push(`${field.section} ${field.label}`);
       candidates.push({ path: `fields.${index}`, aliases, value: clean(field.value), source: "captured" });
     });
+    /* a combined street line ("4054 W 115Th St, 409") splits into
+     * street1 + street2 when nothing else provides line 2 */
+    const s1 = candidates.find((c) => c.path === "address.street1");
+    const hasS2 = candidates.some((c) => c.path === "address.street2");
+    if (s1 && !hasS2) {
+      const split = String(s1.value).match(/^(.*?S)[,;]s*((?:apt|unit|ste|suite|no|#)?.?s*[w-]{1,10})$/i);
+      if (split && /d/.test(split[2])) {
+        s1.value = clean(split[1]);
+        candidates.push({ path: "address.street2", aliases: rules.find((r) => r[0] === "address.street2")[1], value: clean(split[2]), source: "normalized" });
+      }
+    }
     STANDING_CANDIDATES.forEach((sc) => candidates.push(sc));
     return candidates;
   }
@@ -180,5 +191,13 @@
     return best;
   }
 
-  return { buildCandidates, canonical, matchField, valueVariants };
+  function validForField(fieldName, value) {
+    const fieldCanon = canonical(fieldName);
+    for (const v of FIELD_VALIDATORS) {
+      if (v.field.test(fieldCanon) && !v.ok(value)) return false;
+    }
+    return true;
+  }
+
+  return { buildCandidates, canonical, matchField, valueVariants, validForField };
 });
