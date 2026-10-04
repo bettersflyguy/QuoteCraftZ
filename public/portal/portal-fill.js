@@ -141,6 +141,33 @@
     return /^(yes|true|1|checked|selected)$/i.test(clean(value));
   }
 
+  const SUGGESTION_SELECTOR = "[role='listbox'] [role='option'], .pac-container .pac-item, [class*='autocomplete'] [role='option'], [class*='autocomplete'] li, [class*='suggestion'] li, [class*='suggestion'] [role='option']";
+
+  /* auto-pick an ADDRESS suggestion only when it corroborates the captured
+   * data: it must carry the street number AND the captured ZIP or city (or
+   * start with the full typed line). Anything weaker stays focused for the
+   * agent to confirm. */
+  async function pickAddressSuggestion(element, value, addrCtx) {
+    await new Promise((r) => setTimeout(r, 900));
+    const items = Array.from(document.querySelectorAll(SUGGESTION_SELECTOR)).filter((o) => o.getClientRects().length);
+    if (!items.length) return false;
+    const streetNum = (String(value).match(/^d+/) || [""])[0];
+    const cityCanon = mapper.canonical(addrCtx.city || "");
+    const zip = clean(addrCtx.zip || "");
+    const lineCanon = mapper.canonical(value);
+    const target = items.find((o) => {
+      const txt = clean(o.innerText);
+      const txtCanon = mapper.canonical(txt);
+      if (streetNum && !txt.includes(streetNum)) return false;
+      return (zip && txt.includes(zip)) || (cityCanon && txtCanon.includes(cityCanon)) || txtCanon.startsWith(lineCanon);
+    });
+    if (!target) return false;
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    target.click();
+    return true;
+  }
+
   /* MUI-style autocompletes (input[role=combobox]) DISCARD synthetic text but
    * open their listbox: type to trigger it, then CLICK the matching option -
    * the same semantics as native select matching. */
@@ -168,7 +195,7 @@
     return { status: "filled" };
   }
 
-  async function fillControl(element, candidate, overwrite) {
+  async function fillControl(element, candidate, overwrite, addrCtx) {
     const tag = element.tagName;
     const type = (element.type || "").toLowerCase();
     if (!overwrite && !blank(element)) return { status: "existing" };
@@ -198,11 +225,20 @@
       return { status: "filled" };
     }
     if (element.getAttribute("role") === "combobox" || element.getAttribute("aria-autocomplete") === "list") {
+      if (candidate.path === "address.street1" || candidate.path === "address.street2") {
+        setNativeValue(element, candidate.value);
+        dispatch(element, candidate.value);
+        await pickAddressSuggestion(element, candidate.value, addrCtx || {});
+        return { status: "filled" };
+      }
       return fillListCombobox(element, candidate);
     }
     const value = type === "date" ? dateValue(candidate.value) : candidate.value;
     setNativeValue(element, value);
     dispatch(element, value);
+    if (isSuggestive(element) && (candidate.path === "address.street1" || candidate.path === "address.street2")) {
+      await pickAddressSuggestion(element, value, addrCtx || {});
+    }
     return { status: "filled" };
   }
 
@@ -234,6 +270,10 @@
       .filter(visible)
       .filter((element) => !element.disabled && !element.readOnly)
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
+    const addrCtx = {
+      city: (candidates.find((c) => c.path === "address.city") || {}).value || "",
+      zip: (candidates.find((c) => c.path === "address.postalCode") || {}).value || ""
+    };
     const results = [];
     const handledRadioGroups = new Set();
 
@@ -250,13 +290,13 @@
         const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
-        const outcome = await fillControl(target, candidate, overwrite);
+        const outcome = await fillControl(target, candidate, overwrite, addrCtx);
         results.push({ label: name, path: candidate.path, status: outcome.status });
         continue;
       }
       const candidate = mapper.matchField(name, candidates);
       if (!candidate) continue;
-      const outcome = await fillControl(element, candidate, overwrite);
+      const outcome = await fillControl(element, candidate, overwrite, addrCtx);
       results.push({ label: name, path: candidate.path, status: outcome.status });
     }
 
