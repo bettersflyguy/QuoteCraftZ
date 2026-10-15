@@ -157,6 +157,20 @@ describe("policyFromCapture (sale screen)", () => {
     expect(d.expirationDate).toBe("3/27/2027");
   });
 
+  it("finds the term when it lives in a field VALUE ('Policy Term: 6 Month')", async () => {
+    const { policyFromCapture } = await import("@/crm/appCommit");
+    const sold = capture({
+      normalized: { policy: { number: "6280210193" } },
+      fields: [
+        { label: "Effective Date", value: "10/15/2026", section: "Sale", group: "", source: "sale" },
+        { label: "Payment Plan", value: "6 Month Plan", section: "Sale", group: "", source: "review-row" }
+      ]
+    });
+    const d = policyFromCapture(sold);
+    expect(d.effectiveDate).toBe("10/15/2026");
+    expect(d.expirationDate).toBe("4/15/2027");
+  });
+
   it("parses money text into numbers", () => {
     expect(parseMoney("$3,089.50")).toBe(3089.5);
     expect(parseMoney("516")).toBe(516);

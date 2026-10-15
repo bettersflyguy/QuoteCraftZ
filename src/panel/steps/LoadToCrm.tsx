@@ -43,7 +43,8 @@ const useStyles = makeStyles({
 });
 
 interface OppState { create: boolean; lobId: string | null; name: string; nameEdited: boolean }
-interface PolicyState { create: boolean; number: string; premium: string; effective: string; expiration: string; carrierId: string | null; lobId: string | null }
+interface PolicyRow { number: string; premium: string; effective: string; expiration: string; carrierId: string | null; lobId: string | null }
+interface PolicyState { create: boolean; rows: PolicyRow[] }
 interface QuoteState { create: boolean; premium: string; carrierId: string | null; lobId: string | null }
 interface PendingOpp { accountId: string; accountName: string; opps: OppSummary[] }
 
@@ -65,8 +66,11 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   // policy creation offers itself pre-checked with the captured terms.
   const [policy, setPolicy] = useState<PolicyState>(() => {
     const d = policyFromCapture(app);
-    return { create: d.hasPolicy, number: d.number, premium: d.premiumText, effective: d.effectiveDate, expiration: d.expirationDate, carrierId: null, lobId: null };
+    return { create: d.hasPolicy, rows: [{ number: d.number, premium: d.premiumText, effective: d.effectiveDate, expiration: d.expirationDate, carrierId: null, lobId: null }] };
   });
+
+  const setPolicyRow = (i: number, patch: Partial<PolicyRow>) =>
+    setPolicy(p => ({ ...p, rows: p.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
   // A quoted premium with NO policy number = a rating-portal quote — offer
   // writing it as an iacrm_quote on a picked-or-created opportunity.
   const [quote, setQuote] = useState<QuoteState>(() => {
@@ -173,7 +177,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       const guess = carrierGuess(app).toLowerCase();
       const hit = list.find(c => c.name.toLowerCase().includes(guess) || guess.includes(c.name.toLowerCase()));
       if (hit) {
-        setPolicy(p => (p.carrierId ? p : { ...p, carrierId: hit.carrierId }));
+        setPolicy(p => ({ ...p, rows: p.rows.map(r => (r.carrierId ? r : { ...r, carrierId: hit.carrierId })) }));
         setQuote(q => (q.carrierId ? q : { ...q, carrierId: hit.carrierId }));
       }
     } catch { setCarriers([]); }
@@ -227,27 +231,29 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         }
       }
       const quoteOppId = createdOppId ?? opts?.existingOppId ?? null;
-      if (policy.create && policy.number.trim()) {
-        try {
-          const carrierName = carriers?.find(c => c.carrierId === policy.carrierId)?.name ?? carrierGuess(app);
-          const lobName = lobs?.find(l => l.lobId === (policy.lobId ?? opp.lobId))?.name ?? null;
-          await send<{ policyId: string }>({
-            type: "panel/createPolicy",
-            fields: {
-              name: `${carrierName}${lobName ? ` ${lobName}` : ""} — ${policy.number.trim()}`,
-              policyNumber: policy.number.trim(),
-              premium: parseMoney(policy.premium),
-              effectiveDate: toIsoDate(policy.effective.trim() || null),
-              expirationDate: toIsoDate(policy.expiration.trim() || null),
-              accountId,
-              carrierId: policy.carrierId,
-              lobId: policy.lobId ?? opp.lobId,
-              opportunityId: createdOppId
-            }
-          });
-          rows.push({ key: `Policy — created ${policy.number.trim()} (Active)`, status: 204, error: null, entityId: null });
-        } catch (e) {
-          rows.push({ key: "Policy", status: 0, error: String((e as Error).message ?? e), entityId: null });
+      if (policy.create) {
+        for (const pr of policy.rows) {
+          if (!pr.number.trim()) continue;
+          try {
+            await send<{ policyId: string }>({
+              type: "panel/createPolicy",
+              fields: {
+                // policy name convention: the policy NUMBER, nothing else
+                name: pr.number.trim(),
+                policyNumber: pr.number.trim(),
+                premium: parseMoney(pr.premium),
+                effectiveDate: toIsoDate(pr.effective.trim() || null),
+                expirationDate: toIsoDate(pr.expiration.trim() || null),
+                accountId,
+                carrierId: pr.carrierId,
+                lobId: pr.lobId ?? opp.lobId,
+                opportunityId: createdOppId
+              }
+            });
+            rows.push({ key: `Policy — created ${pr.number.trim()} (Active)`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            rows.push({ key: `Policy ${pr.number.trim()}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
         }
       }
       if (quote.create && quoteOppId) {
@@ -371,7 +377,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     const missing: string[] = [];
     if (!recordName) missing.push("the insured's name (or business name)");
     if (opp.create && target === "insured" && !opp.lobId) missing.push("a line of business for the opportunity");
-    if (policy.create && target === "insured" && !policy.number.trim()) missing.push("the policy number (or uncheck Create policy)");
+    if (policy.create && target === "insured" && policy.rows.some(r => !r.number.trim())) missing.push("a policy number on every policy row (or remove the empty row)");
     if (quote.create && target === "insured" && !quote.premium.trim()) missing.push("the quoted premium (or uncheck Create quote)");
     if (quote.create && target === "insured" && !quote.lobId && !opp.lobId) missing.push("a line of business for the quote's opportunity");
     return (
@@ -514,30 +520,52 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         )}
         {target === "insured" && policy.create && (
           <>
-            <div className={styles.row}>
-              <Input className={styles.grow} value={policy.number} onChange={(_, d) => setPolicy(p => ({ ...p, number: d.value }))} placeholder="Policy number" />
-              <Input style={{ width: 110 }} value={policy.premium} onChange={(_, d) => setPolicy(p => ({ ...p, premium: d.value }))} placeholder="Premium $" />
-            </div>
-            <div className={styles.row}>
-              <Input className={styles.grow} value={policy.effective} onChange={(_, d) => setPolicy(p => ({ ...p, effective: d.value }))} placeholder="Effective m/d/yyyy" />
-              <Input className={styles.grow} value={policy.expiration} onChange={(_, d) => setPolicy(p => ({ ...p, expiration: d.value }))} placeholder="Expiration m/d/yyyy" />
-            </div>
-            <Dropdown
-              placeholder="Carrier"
-              value={carriers?.find(c => c.carrierId === policy.carrierId)?.name ?? ""}
-              selectedOptions={policy.carrierId ? [policy.carrierId] : []}
-              onOptionSelect={(_, d) => setPolicy(p => ({ ...p, carrierId: d.optionValue ?? null }))}
+            {policy.rows.map((pr, i) => (
+              <div key={i} style={{ display: "flex", flexDirection: "column", gap: "6px", borderLeft: "2px solid #d0d0d0", paddingLeft: "8px" }}>
+                <div className={styles.row}>
+                  <Input className={styles.grow} value={pr.number} onChange={(_, d) => setPolicyRow(i, { number: d.value })} placeholder="Policy number" />
+                  <Input style={{ width: 100 }} value={pr.premium} onChange={(_, d) => setPolicyRow(i, { premium: d.value })} placeholder="Premium $" />
+                  {policy.rows.length > 1 && (
+                    <Button size="small" onClick={() => setPolicy(p => ({ ...p, rows: p.rows.filter((_, j) => j !== i) }))}>✕</Button>
+                  )}
+                </div>
+                <div className={styles.row}>
+                  <Input className={styles.grow} value={pr.effective} onChange={(_, d) => setPolicyRow(i, { effective: d.value })} placeholder="Effective m/d/yyyy" />
+                  <Input className={styles.grow} value={pr.expiration} onChange={(_, d) => setPolicyRow(i, { expiration: d.value })} placeholder="Expiration m/d/yyyy" />
+                </div>
+                <div className={styles.row}>
+                  <Dropdown
+                    className={styles.grow}
+                    style={{ minWidth: 0 }}
+                    placeholder="Carrier"
+                    value={carriers?.find(c => c.carrierId === pr.carrierId)?.name ?? ""}
+                    selectedOptions={pr.carrierId ? [pr.carrierId] : []}
+                    onOptionSelect={(_, d) => setPolicyRow(i, { carrierId: d.optionValue ?? null })}
+                  >
+                    {(carriers ?? []).map(c => <Option key={c.carrierId} value={c.carrierId}>{c.name}</Option>)}
+                  </Dropdown>
+                  <Dropdown
+                    className={styles.grow}
+                    style={{ minWidth: 0 }}
+                    placeholder="Line of business"
+                    value={lobs?.find(l => l.lobId === pr.lobId)?.name ?? ""}
+                    selectedOptions={pr.lobId ? [pr.lobId] : []}
+                    onOptionSelect={(_, d) => setPolicyRow(i, { lobId: d.optionValue ?? null })}
+                  >
+                    {(lobs ?? []).map(l => <Option key={l.lobId} value={l.lobId}>{l.name}</Option>)}
+                  </Dropdown>
+                </div>
+              </div>
+            ))}
+            <Button
+              size="small"
+              onClick={() => setPolicy(p => {
+                const first = p.rows[0];
+                return { ...p, rows: [...p.rows, { number: "", premium: "", effective: first?.effective ?? "", expiration: first?.expiration ?? "", carrierId: first?.carrierId ?? null, lobId: null }] };
+              })}
             >
-              {(carriers ?? []).map(c => <Option key={c.carrierId} value={c.carrierId}>{c.name}</Option>)}
-            </Dropdown>
-            <Dropdown
-              placeholder={opp.create && opp.lobId ? `Line of business (${lobs?.find(l => l.lobId === opp.lobId)?.name ?? "from opportunity"})` : "Line of business"}
-              value={lobs?.find(l => l.lobId === policy.lobId)?.name ?? ""}
-              selectedOptions={policy.lobId ? [policy.lobId] : []}
-              onOptionSelect={(_, d) => setPolicy(p => ({ ...p, lobId: d.optionValue ?? null }))}
-            >
-              {(lobs ?? []).map(l => <Option key={l.lobId} value={l.lobId}>{l.name}</Option>)}
-            </Dropdown>
+              + Add another policy (another line of business)
+            </Button>
           </>
         )}
         {target === "lead" && policy.create && (

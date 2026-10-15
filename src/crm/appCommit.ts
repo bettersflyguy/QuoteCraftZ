@@ -199,7 +199,8 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
   if (!expirationDate && effectiveDate) {
     // sale screens rarely print the expiration — derive it from the term
     // ("Policy Term: 6 months" / "6 Month Auto Premium")
-    const termText = fieldValue(app, /policy\s*term/i) || app.fields.find(f => /\b(6|12)\s*[- ]?month/i.test(f.label) && /premium/i.test(f.label))?.label || "";
+    const termField = app.fields.find(f => /\b(6|12)\s*[- ]?month/i.test(`${f.label} ${f.value}`));
+    const termText = fieldValue(app, /policy\s*term/i) || (termField ? `${termField.label} ${termField.value}` : "");
     const term = termText.match(/\b(6|12)\b/);
     if (term) expirationDate = addMonthsUs(effectiveDate, Number(term[1]));
   }
