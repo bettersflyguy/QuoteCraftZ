@@ -62,14 +62,37 @@ export interface CaptureIdentity {
   dateOfBirth: string;
 }
 
-/** "7631 ANGELINE DR MINNEAPOLIS, MN 55428" -> parts. Carrier confirmation
- * screens print the whole mailing address on one line. */
+const STATE_ABBR: Record<string, string> = {
+  alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO",
+  connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID",
+  illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA",
+  maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN",
+  mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV",
+  "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+  "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR",
+  pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD",
+  tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA",
+  "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC"
+};
+
+/** "7631 ANGELINE DR MINNEAPOLIS, MN 55428" or "... San Jose, California
+ * 95122" -> parts. Carrier/lead pages print the whole address on one line,
+ * with the state as an abbreviation OR a full name. */
 export function splitUsAddress(line: string): { street: string; city: string; state: string; postalCode: string } | null {
-  const m = clean(line).match(/^(.+?)\s+([A-Za-z][A-Za-z .'-]*?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+  const text = clean(line);
+  const m = text.match(/^(.+?),?\s+([A-Z]{2}|[A-Za-z]+(?: [A-Za-z]+)?),?\s+(\d{5}(?:-\d{4})?)$/) as (RegExpMatchArray & [string, string, string, string]) | null;
   if (!m) return null;
+  let stateToken = m[2]!;
+  if (stateToken.length === 2) {
+    if (!/^[A-Z]{2}$/.test(stateToken) || !Object.values(STATE_ABBR).includes(stateToken)) return null;
+  } else {
+    const abbr = STATE_ABBR[stateToken.toLowerCase()];
+    if (!abbr) return null;
+    stateToken = abbr;
+  }
   // the boundary between street and city is ambiguous without a comma; take the
   // last capitalized word-run before the state as the city
-  const before = `${m[1]} ${m[2]}`.trim().replace(/,$/, "");
+  const before = m[1]!.trim().replace(/,$/, "");
   const words = before.split(/\s+/);
   const cityWords: string[] = [];
   for (let i = words.length - 1; i >= 0 && cityWords.length < 3; i -= 1) {
@@ -80,7 +103,7 @@ export function splitUsAddress(line: string): { street: string; city: string; st
   if (!cityWords.length) return null;
   const city = cityWords.join(" ");
   const street = before.slice(0, before.length - city.length).trim().replace(/,$/, "");
-  return street ? { street, city, state: m[3]!, postalCode: m[4]! } : null;
+  return street ? { street, city, state: stateToken, postalCode: m[3]! } : null;
 }
 
 export function identityFromCapture(app: CapturedApplication): CaptureIdentity {

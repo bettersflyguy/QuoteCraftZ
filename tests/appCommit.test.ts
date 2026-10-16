@@ -238,6 +238,15 @@ describe("splitUsAddress via identityFromCapture", () => {
       .toBe("203 WALL STREET EAST SAINT LOUIS, IL 62206");
   });
 
+  it("splits addresses with FULL state names and multi-parcel streets (live Tivly shape)", async () => {
+    const { splitUsAddress } = await import("@/crm/appCommit");
+    expect(splitUsAddress("1167, 1171, And 1169 South King Road San Jose, California 95122")).toEqual({
+      street: "1167, 1171, And 1169 South King Road", city: "San Jose", state: "CA", postalCode: "95122"
+    });
+    // a trailing lowercase word pair must not pass as a state
+    expect(splitUsAddress("123 Main St Springfield, Anytown 12345")).toBeNull();
+  });
+
   it("leaves an already-split address untouched", async () => {
     const { identityFromCapture } = await import("@/crm/appCommit");
     const id = identityFromCapture(capture());

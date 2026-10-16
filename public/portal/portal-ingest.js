@@ -267,6 +267,19 @@
       });
     });
 
+    /* "Label: value" LINES inside composite cells — Tivly's Lead Details
+     * renders "Contact Name: Katsuyoshi Murano" as plain lines inside a
+     * multi-line value cell, invisible to the row collectors */
+    const lineSource = String((modal || document.body).innerText || "").split(String.fromCharCode(10)).slice(0, 400);
+    for (const rawLine of lineSource) {
+      const line = clean(rawLine);
+      const m = line.match(/^([A-Za-z][A-Za-z /()'&#.-]{1,39}):\s+(.{1,200})$/);
+      if (!m) continue;
+      const label = m[1].trim();
+      if (label.split(" ").length > 5 || PAYMENT_FIELD.test(label)) continue;
+      fields.push({ label, value: m[2].trim(), section, group: "", source: "review-row" });
+    }
+
     /* sale/confirmation facts are usually PROSE, not form fields ("GEICO Auto
      * Policy Number: 6277201270", "Your coverage is effective 9/27/2026",
      * "Your 6 Month Auto Premium is $922.00") — pattern-match the page text */
