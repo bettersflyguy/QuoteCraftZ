@@ -92,16 +92,16 @@ export function OpportunityPin({
       // preselect the best LOB-name match for this block ("Auto" -> "Personal Auto")
       const match = list.find(l => l.name.toLowerCase().includes(lob.toLowerCase()));
       setChosenLobId(match?.lobId ?? null);
-      await loadStages(match?.lobId ?? null);
+      await loadStages(match?.lobId ?? null, match?.name ?? lob);
     } catch (e) {
       setErr(e as PanelError);
       setCreatingLob(null);
     }
   }
 
-  async function loadStages(lobId: string | null) {
+  async function loadStages(lobId: string | null, lobName?: string | null) {
     try {
-      const p = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId });
+      const p = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId, lobName: lobName ?? null });
       setPipeline(p);
       // default: first stage of the LOB's default pipeline
       setChosenStageId(p?.stages[0]?.stageId ?? null);
@@ -193,7 +193,7 @@ export function OpportunityPin({
                       <Dropdown
                         value={lobs.find(l => l.lobId === chosenLobId)?.name ?? ""}
                         selectedOptions={chosenLobId ? [chosenLobId] : []}
-                        onOptionSelect={(_, d) => { setChosenLobId(d.optionValue as string); void loadStages(d.optionValue as string); }}
+                        onOptionSelect={(_, d) => { const id = d.optionValue as string; setChosenLobId(id); void loadStages(id, lobs?.find(l => l.lobId === id)?.name ?? null); }}
                       >
                         {[...lobs]
                           .sort((a, z) => {

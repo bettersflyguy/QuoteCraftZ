@@ -481,9 +481,15 @@ export async function getLinesOfBusiness(env: CrmEnvironment): Promise<LobRow[]>
   return value.map(l => ({ lobId: l["iacrm_lineofbusinessid"]!, name: l["iacrm_lineofbusiness_name"] ?? "" }));
 }
 
-/** Resolves the pipeline for a LOB (iacrm_DefaultForLob match, else first
- * active) and its ordered stages. Null when the org has no active pipelines. */
-export async function getStagesForLob(env: CrmEnvironment, lobId: string | null): Promise<PipelineStages | null> {
+/** Resolves the pipeline for a LOB (iacrm_DefaultForLob match, else a
+ * name-matched active pipeline — "Commercial …" for commercial LOBs/insureds,
+ * "… Personal …" for personal — else first active) and its ordered stages.
+ * Null when the org has no active pipelines. No org currently sets
+ * DefaultForLob, so the name match is the path that actually runs. */
+export async function getStagesForLob(
+  env: CrmEnvironment, lobId: string | null,
+  hint?: { insuredType?: 1 | 2 | null; lobName?: string | null }
+): Promise<PipelineStages | null> {
   let pipeline: Record<string, string> | undefined;
   if (lobId) {
     const { value } = await dvJson<{ value: Record<string, string>[] }>(
@@ -493,9 +499,17 @@ export async function getStagesForLob(env: CrmEnvironment, lobId: string | null)
   }
   if (!pipeline) {
     const { value } = await dvJson<{ value: Record<string, string>[] }>(
-      env, `iacrm_pipelines?$select=iacrm_pipelineid,iacrm_pipeline_name&$filter=statecode eq 0&$top=1`
+      env, `iacrm_pipelines?$select=iacrm_pipelineid,iacrm_pipeline_name&$filter=statecode eq 0&$orderby=iacrm_pipeline_name&$top=50`
     );
-    pipeline = value[0];
+    const lobName = (hint?.lobName ?? "").toLowerCase();
+    const wanted =
+      lobName.includes("commercial") ? "commercial"
+      : lobName.includes("personal") ? "personal"
+      : hint?.insuredType === 2 ? "commercial"
+      : hint?.insuredType === 1 ? "personal"
+      : null;
+    if (wanted) pipeline = value.find(p => (p["iacrm_pipeline_name"] ?? "").toLowerCase().includes(wanted));
+    pipeline ??= value[0];
   }
   if (!pipeline) return null;
   const pipelineId = pipeline["iacrm_pipelineid"]!;
@@ -515,7 +529,7 @@ export async function getStagesForLob(env: CrmEnvironment, lobId: string | null)
 
 export async function createOpportunity(
   env: CrmEnvironment, accountId: string, lobId: string, name: string,
-  pipelineId?: string | null, stageId?: string | null
+  pipelineId?: string | null, stageId?: string | null, leadSource?: string | null
 ): Promise<OppSummary> {
   const body: Record<string, unknown> = {
     name,
@@ -527,6 +541,8 @@ export async function createOpportunity(
   // default pipeline + chosen stage so panel-created opps land on the Kanban
   if (pipelineId) body["iacrm_PipelineId@odata.bind"] = `/iacrm_pipelines(${pipelineId})`;
   if (stageId) body["iacrm_PipelineStageId@odata.bind"] = `/iacrm_pipelinestages(${stageId})`;
+  // intake attribution (Tivly etc.) — account-path loads otherwise lose it
+  if (leadSource) body["iacrm_LeadSourceId@odata.bind"] = `/iacrm_leadsources(${await getLeadSourceId(env, leadSource)})`;
   const r = await dvPost<Record<string, string | null>>(
     env, "opportunities?$select=opportunityid,name,_iacrm_lineofbusinessid_value,iacrm_desiredeffectivedate", body
   );

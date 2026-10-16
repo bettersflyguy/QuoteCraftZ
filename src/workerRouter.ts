@@ -168,12 +168,12 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/createOpportunity": {
         const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name, msg.pipelineId, msg.stageId) };
+        return { ok: true, data: await deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name, msg.pipelineId, msg.stageId, msg.leadSource ?? null) };
       }
 
       case "panel/getStagesForLob": {
         const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.getStagesForLob(env, msg.lobId) };
+        return { ok: true, data: await deps.getStagesForLob(env, msg.lobId, { insuredType: msg.insuredType ?? null, lobName: msg.lobName ?? null }) };
       }
 
       case "panel/saveCarrierAlias": {

@@ -98,6 +98,65 @@ describe("createOpportunity pipeline binds", () => {
     const { createOpportunity } = await import("@/crm/dataverse");
     await createOpportunity(ENV, "ACC-1", "LOB-1", "n", "PIPE-1", "STAGE-1");
   });
+
+  it("resolves and binds the lead source when given (Tivly account-path attribution)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url.includes("iacrm_leadsources")) {
+        expect(decodeURIComponent(url)).toContain("iacrm_leadsource_name eq 'Tivly'");
+        return {
+          ok: true, status: 200, headers: new Headers(),
+          json: async () => ({ value: [{ iacrm_leadsourceid: "SRC-1" }] })
+        } as unknown as Response;
+      }
+      const body = JSON.parse(init.body as string);
+      expect(body["iacrm_LeadSourceId@odata.bind"]).toBe("/iacrm_leadsources(SRC-1)");
+      return {
+        ok: true, status: 201, headers: new Headers(),
+        json: async () => ({ opportunityid: "OPP-1", name: "n", _iacrm_lineofbusinessid_value: "LOB-1" })
+      } as unknown as Response;
+    }));
+    const { createOpportunity } = await import("@/crm/dataverse");
+    await createOpportunity(ENV, "ACC-1", "LOB-1", "n", null, null, "Tivly");
+  });
+});
+
+describe("getStagesForLob pipeline selection", () => {
+  const pipelines = [
+    { iacrm_pipelineid: "P-COM", iacrm_pipeline_name: "Commercial New Business" },
+    { iacrm_pipelineid: "P-PER", iacrm_pipeline_name: "Standard Personal Lines" }
+  ];
+  function stubPipelineFetch() {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("_iacrm_defaultforlob_value")) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ value: [] }) } as unknown as Response;
+      }
+      if (url.includes("iacrm_pipelines")) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ value: pipelines }) } as unknown as Response;
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ value: [] }) } as unknown as Response;
+    }));
+  }
+
+  it("prefers the Commercial pipeline for a commercial LOB (no DefaultForLob set)", async () => {
+    stubPipelineFetch();
+    const { getStagesForLob } = await import("@/crm/dataverse");
+    const r = await getStagesForLob(ENV, "LOB-1", { insuredType: null, lobName: "Commercial Property" });
+    expect(r?.pipelineId).toBe("P-COM");
+  });
+
+  it("prefers the Personal pipeline for a personal insured when the LOB name is neutral", async () => {
+    stubPipelineFetch();
+    const { getStagesForLob } = await import("@/crm/dataverse");
+    const r = await getStagesForLob(ENV, "LOB-1", { insuredType: 1, lobName: "Homeowners" });
+    expect(r?.pipelineId).toBe("P-PER");
+  });
+
+  it("falls back to the first active pipeline without any hint", async () => {
+    stubPipelineFetch();
+    const { getStagesForLob } = await import("@/crm/dataverse");
+    const r = await getStagesForLob(ENV, "LOB-1");
+    expect(r?.pipelineId).toBe("P-COM");
+  });
 });
 
 describe("getExistingQuoteStatuses", () => {

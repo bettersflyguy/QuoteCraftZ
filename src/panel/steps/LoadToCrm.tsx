@@ -217,12 +217,13 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         const lobName = lobs?.find(l => l.lobId === oppLobId)?.name ?? null;
         const name = opp.name.trim() || oppName(lobName);
         try {
-          const stages = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId: oppLobId });
+          const stages = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId: oppLobId, insuredType, lobName });
           const createdOpp = await send<OppSummary>({
             type: "panel/createOpportunity",
             accountId, lobId: oppLobId, name,
             pipelineId: stages?.pipelineId ?? null,
-            stageId: stages?.stages[0]?.stageId ?? null
+            stageId: stages?.stages[0]?.stageId ?? null,
+            leadSource: leadSourceGuess(app)
           });
           createdOppId = createdOpp.opportunityId;
           rows.push({ key: `Opportunity — created "${name}"`, status: 204, error: null, entityId: null });
