@@ -484,11 +484,15 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: false, error: `unknown message type: ${(msg as { type: string }).type}`, kind: "unknown" };
     }
   } catch (e) {
-    const err = e as Error & { orgUrl?: string };
+    const err = e as Error & { orgUrl?: string; status?: number; upn?: string | null };
     if (err.name === "CrmAccessError") {
       let envName = "the active environment";
       try { envName = (await deps.getActiveEnvironment()).name; } catch { /* keep fallback */ }
-      return { ok: false, error: `Your account has no access to ${envName} (${err.orgUrl}). Check the active environment.`, kind: "auth" };
+      const who = err.upn ? `The signed-in account ${err.upn}` : "Your account";
+      const why = err.status === 403
+        ? "The account exists in CRM but is missing a security role for the connector's tables — or the wrong account was picked at sign-in."
+        : "This is usually the wrong account picked at sign-in — use Sign in and choose your work account.";
+      return { ok: false, error: `${who} was rejected by ${envName} (${err.orgUrl}, HTTP ${err.status}). ${why}`, kind: "auth" };
     }
     if (err.name === "AuthRequiredError") return { ok: false, error: "Sign-in required", kind: "auth" };
     return { ok: false, error: String(err.message ?? err), kind: "unknown" };

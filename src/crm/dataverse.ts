@@ -4,11 +4,26 @@ import type { AccountEnrichmentState, ContactRow, NewContact } from "./enrich";
 
 export class CrmAccessError extends Error {
   orgUrl: string;
-  constructor(orgUrl: string, status: number) {
+  status: number;
+  upn: string | null;
+  constructor(orgUrl: string, status: number, upn: string | null = null) {
     super(`No access to ${orgUrl} (HTTP ${status})`);
     this.name = "CrmAccessError";
     this.orgUrl = orgUrl;
+    this.status = status;
+    this.upn = upn;
   }
+}
+
+/** Account the token was issued to, read off the JWT payload — lets the panel
+ * say WHICH account Dataverse rejected (wrong-account-picked vs missing role). */
+export function upnFromToken(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return (json.preferred_username ?? json.upn ?? json.unique_name ?? null) as string | null;
+  } catch { return null; }
 }
 
 export interface AccountMatch { accountId: string; name: string; city: string | null; postalCode: string | null; openOppCount: number }
@@ -45,7 +60,7 @@ async function dv(env: CrmEnvironment, path: string, init: RequestInit = {}): Pr
     await new Promise(r => setTimeout(r, wait * 1000));
     res = await doFetch();
   }
-  if (res.status === 401 || res.status === 403) throw new CrmAccessError(env.orgUrl, res.status);
+  if (res.status === 401 || res.status === 403) throw new CrmAccessError(env.orgUrl, res.status, upnFromToken(token));
   return res;
 }
 
