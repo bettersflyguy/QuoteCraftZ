@@ -56,6 +56,34 @@ describe("applicantFromCapture", () => {
     expect(withPerson.lastName).toBe("Hadams");
   });
 
+  it("strips carrier name decorations like '(PNI)' so the dupe gate and account name stay clean", async () => {
+    const { identityFromCapture } = await import("@/crm/appCommit");
+    // GEICO renders the primary named insured with a suffix; a fullName-only capture
+    const viaFull = identityFromCapture(capture({ normalized: { contact: { fullName: "Richard Lewandowski (PNI)" } } }));
+    expect(viaFull.firstName).toBe("Richard");
+    expect(viaFull.lastName).toBe("Lewandowski");
+    // and when first/last arrive mapped directly
+    const viaParts = identityFromCapture(capture({ normalized: { contact: { firstName: "Richard", lastName: "Lewandowski (PNI)" } } }));
+    expect(viaParts.lastName).toBe("Lewandowski");
+  });
+
+  it("rejects non-address 'email' values and recovers a real one from the fields (GEICO paperless regression)", async () => {
+    const { identityFromCapture, applicantFromIdentity } = await import("@/crm/appCommit");
+    // the Email label paired with preference text must never become emailaddress1
+    const junk = identityFromCapture(capture({
+      normalized: { contact: { fullName: "Richard Lewandowski", email: "paperless document delivery" } },
+      fields: []
+    }));
+    expect(junk.email).toBe("");
+    expect(applicantFromIdentity({ ...junk, email: "paperless document delivery" }, false).emails).toEqual([]);
+    // a real address elsewhere in the capture is recovered
+    const recovered = identityFromCapture(capture({
+      normalized: { contact: { fullName: "Richard Lewandowski", email: "paperless document delivery" } },
+      fields: [{ label: "Email Address", value: "rlewandowski@example.com", section: "Contact", group: "", source: "review-row" }]
+    }));
+    expect(recovered.email).toBe("rlewandowski@example.com");
+  });
+
   it("drops middle names and prefers the exact Name fact row (live GEICO Edge shape)", async () => {
     const { identityFromCapture } = await import("@/crm/appCommit");
     // rail heading glued the middle name in; the Personal Information tab's

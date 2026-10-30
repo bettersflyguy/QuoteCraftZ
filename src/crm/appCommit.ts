@@ -106,11 +106,32 @@ export function splitUsAddress(line: string): { street: string; city: string; st
   return street ? { street, city, state: stateToken, postalCode: m[3]! } : null;
 }
 
+const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** Carrier decorations on person names — GEICO renders the primary named
+ * insured as "Richard Lewandowski (PNI)". Parentheticals are never part of a
+ * person's name; left in place they poison the duplicate gate's name match
+ * AND the created account's name. Business names are never run through this. */
+function stripNameDecorations(v: string): string {
+  return clean(v.replace(/\s*\([^)]*\)/g, " "));
+}
+
+/** The capture's email, only when it LOOKS like an email. Portals pair the
+ * "Email" label with preference text ("paperless document delivery"), which
+ * must not land in emailaddress1; fall back to any email-labeled field whose
+ * value is a real address. */
+function emailFromCapture(app: CapturedApplication): string {
+  const mapped = clean(str(app, "contact", "email") ?? "");
+  if (EMAIL_RX.test(mapped)) return mapped;
+  const row = app.fields.find(f => /e-?mail/i.test(f.label) && EMAIL_RX.test(clean(f.value)));
+  return row ? clean(row.value) : "";
+}
+
 export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   const businessName = str(app, "business", "legalName") ?? "";
   const bizCanon = canonical(businessName);
-  let firstName = str(app, "contact", "firstName") ?? "";
-  let lastName = str(app, "contact", "lastName") ?? "";
+  let firstName = stripNameDecorations(str(app, "contact", "firstName") ?? "");
+  let lastName = stripNameDecorations(str(app, "contact", "lastName") ?? "");
   if (!firstName && !lastName) {
     // an exactly-labeled "Name" fact row (GEICO Edge's Personal Information
     // tab) beats rail headings that glue the middle name in ("Edward
@@ -122,7 +143,7 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
       ...app.fields.filter(f => /^(name|full name|policyholder name|insured name)$/i.test(clean(f.label))).map(f => f.value),
       str(app, "contact", "fullName") ?? ""
     ];
-    const person = candidates.map(clean).find(v => v && (!bizCanon || canonical(v) !== bizCanon));
+    const person = candidates.map(v => stripNameDecorations(clean(v))).find(v => v && (!bizCanon || canonical(v) !== bizCanon));
     const parts = (person ?? "").split(" ").filter(Boolean);
     firstName = parts[0] ?? "";
     lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
@@ -153,7 +174,7 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
     postalCode,
     phone: phone?.number ?? "",
     phoneIsMobile: phone?.isMobile ?? false,
-    email: str(app, "contact", "email") ?? "",
+    email: emailFromCapture(app),
     dateOfBirth: str(app, "contact", "dateOfBirth") ?? ""
   };
 }
@@ -170,7 +191,8 @@ export function applicantFromIdentity(id: CaptureIdentity, isCommercial: boolean
     dlState: null,
     address: hasAddress ? { street: clean(id.street), city: clean(id.city), state: clean(id.state), postalCode: clean(id.postalCode) } : null,
     phones: clean(id.phone) ? [{ type: id.phoneIsMobile ? "Mobile" : null, number: clean(id.phone) }] : [],
-    emails: clean(id.email) ? [clean(id.email)] : [],
+    // agent-reviewed, but never let a non-address reach emailaddress1
+    emails: EMAIL_RX.test(clean(id.email)) ? [clean(id.email)] : [],
     coApplicants: [],
     isCommercial
   };
