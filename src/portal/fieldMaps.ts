@@ -58,6 +58,13 @@ export async function setAllFieldMaps(maps: FieldMaps): Promise<void> {
 
 const EXPORT_TYPE = "iacrm-quote-connector-fieldmaps";
 
+/** Identifier-class captured labels a mapping may never pull: no quoting use.
+ * DOB and driver's-license labels stay fillable — auto quotes require them
+ * (Driver 2 DOB/DL# is the core multi-driver case). Mirrored in
+ * public/portal/portal-fill.js (SENSITIVE_SOURCE), enforced at fill AND here
+ * at import so a tampered share file sheds them before they reach storage. */
+export const SENSITIVE_LABEL = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|tax id(entification)?|taxpayer|tin|itin|ein|fein|passport)\b/i;
+
 export interface FieldMapExport {
   type: typeof EXPORT_TYPE;
   version: 1;
@@ -79,6 +86,8 @@ export interface FieldMapImport {
    * applying: an imported file deciding which captured values land where is
    * the one place a tampered share file could redirect data. */
   labelTargets: string[];
+  /** Per-site review summary: every origin the import would add or replace. */
+  perOrigin: { origin: string; fields: number; labels: string[] }[];
 }
 
 /** Parses and validates a share file. Only https origins, known rule paths
@@ -95,24 +104,28 @@ export function parseFieldMapImport(text: string): FieldMapImport {
   let fields = 0;
   let dropped = 0;
   const labelTargets = new Set<string>();
+  const perOrigin: { origin: string; fields: number; labels: string[] }[] = [];
   for (const [origin, entries] of Object.entries(doc.maps as Record<string, unknown>)) {
     if (!/^https:\/\/[^/\s]+$/.test(origin) || typeof entries !== "object" || entries === null) { dropped += 1; continue; }
     const clean: Record<string, string> = {};
+    const originLabels = new Set<string>();
     for (const [key, path] of Object.entries(entries as Record<string, unknown>)) {
-      const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path);
+      const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path) &&
+        !SENSITIVE_LABEL.test(path.slice(6));
       if (typeof key !== "string" || !key || key.length > 200 ||
           typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path))) {
         dropped += 1;
         continue;
       }
-      if (labelTarget) labelTargets.add(path.slice(6));
+      if (labelTarget) { labelTargets.add(path.slice(6)); originLabels.add(path.slice(6)); }
       clean[key] = path;
     }
     if (Object.keys(clean).length) {
       maps[origin] = clean;
       fields += Object.keys(clean).length;
+      perOrigin.push({ origin, fields: Object.keys(clean).length, labels: [...originLabels].sort() });
     }
   }
   if (!Object.keys(maps).length) throw new Error("The file contained no usable mappings.");
-  return { maps, sites: Object.keys(maps).length, fields, dropped, labelTargets: [...labelTargets].sort() };
+  return { maps, sites: Object.keys(maps).length, fields, dropped, labelTargets: [...labelTargets].sort(), perOrigin };
 }

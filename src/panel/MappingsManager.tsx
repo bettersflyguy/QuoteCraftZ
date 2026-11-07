@@ -116,11 +116,9 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
     setProblem(null);
     setPendingImport(null);
     try {
-      const parsed = parseFieldMapImport(await file.text());
-      // an imported file redirecting CAPTURED values is the one thing worth a
-      // human look before it lands — rule-path-only files apply directly
-      if (parsed.labelTargets.length) setPendingImport(parsed);
-      else await applyImport(parsed);
+      // every import gets a review step: the file decides which sites' fills
+      // change, so the user sees each origin (new vs replaced) before it lands
+      setPendingImport(parseFieldMapImport(await file.text()));
     } catch (e) {
       setProblem(String((e as Error).message ?? e));
     }
@@ -185,13 +183,13 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
       </div>
       {pendingImport && (
         <div className={styles.note}>
-          <div style={{ fontWeight: 600 }}>
-            This file maps fields to CAPTURED data — confirm before applying.
-          </div>
-          <div style={{ margin: "4px 0" }}>
-            {pendingImport.sites} site{pendingImport.sites === 1 ? "" : "s"}, {pendingImport.fields} mappings.
-            Captured-field targets: {pendingImport.labelTargets.join(", ")}
-          </div>
+          <div style={{ fontWeight: 600 }}>Review this import before applying:</div>
+          {pendingImport.perOrigin.map(o => (
+            <div key={o.origin} style={{ margin: "4px 0", overflowWrap: "anywhere" }}>
+              {o.origin} — {o.fields} field{o.fields === 1 ? "" : "s"} ({maps[o.origin] ? "replaces existing" : "new site"})
+              {o.labels.length > 0 && <> · fills from captured: {o.labels.join(", ")}</>}
+            </div>
+          ))}
           <div className={styles.row}>
             <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>
             <Button size="small" onClick={() => setPendingImport(null)}>Cancel</Button>

@@ -289,7 +289,7 @@
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
   }
 
-  const SENSITIVE_SOURCE = /\b(ssn|social security|tax id|itin|passport)\b/i;
+  const SENSITIVE_SOURCE = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|tax id(entification)?|taxpayer|tin|itin|ein|fein|passport)\b/i;
 
   /* the candidate an agent-taught mapping points at: a normalized rule path,
    * or "label:<canonical captured label>" — the label form reaches ANY held

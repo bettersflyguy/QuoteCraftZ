@@ -70,10 +70,9 @@ function FieldMapsSection() {
     setProblem(null);
     setPendingImport(null);
     try {
-      const parsed = parseFieldMapImport(await file.text());
-      // files that redirect CAPTURED values get a human look before applying
-      if (parsed.labelTargets.length) setPendingImport(parsed);
-      else await applyImport(parsed);
+      // every import gets a review step: the file decides which sites' fills
+      // change, so the user sees each origin (new vs replaced) before it lands
+      setPendingImport(parseFieldMapImport(await file.text()));
     } catch (e) {
       setProblem(String((e as Error).message ?? e));
     }
@@ -118,8 +117,12 @@ function FieldMapsSection() {
       {pendingImport && (
         <MessageBar intent="warning" style={{ marginTop: 12 }}>
           <MessageBarBody>
-            This file maps fields to CAPTURED data ({pendingImport.labelTargets.join(", ")}) —
-            review the targets, then{" "}
+            Review before applying:{" "}
+            {pendingImport.perOrigin.map(o =>
+              `${o.origin} — ${o.fields} field${o.fields === 1 ? "" : "s"} (${maps[o.origin] ? "replaces existing" : "new site"})` +
+              (o.labels.length ? ` · fills from captured: ${o.labels.join(", ")}` : "")
+            ).join("; ")}
+            {" "}
             <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>{" "}
             <Button size="small" onClick={() => setPendingImport(null)}>Cancel</Button>
           </MessageBarBody>

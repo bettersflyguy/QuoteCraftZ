@@ -50,6 +50,26 @@ describe("field-map share files", () => {
     expect(parsed.dropped).toBe(1);
     // surfaced for user review before an import applies
     expect(parsed.labelTargets).toEqual(["driver 2 first name", "vin 2"]);
+    expect(parsed.perOrigin).toEqual([
+      { origin: "https://ok.example.com", fields: 2, labels: ["driver 2 first name", "vin 2"] }
+    ]);
+  });
+
+  it("sheds identifier-class label targets at import (SSN/TIN/EIN/passport) while quoting labels survive", () => {
+    const doc = buildFieldMapExport({
+      "https://ok.example.com": {
+        "text:a": "label:ssn",
+        "text:b": "label:social security number",
+        "text:c": "label:fein",
+        "text:d": "label:driver 2 date of birth",
+        "text:e": "label:driver 2 license number"
+      }
+    });
+    const parsed = parseFieldMapImport(JSON.stringify(doc));
+    expect(Object.values(parsed.maps["https://ok.example.com"]!).sort()).toEqual([
+      "label:driver 2 date of birth", "label:driver 2 license number"
+    ]);
+    expect(parsed.dropped).toBe(3);
   });
 
   it("reports no label targets for rule-path-only files (import applies without review)", () => {
