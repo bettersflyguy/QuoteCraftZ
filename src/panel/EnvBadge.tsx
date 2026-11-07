@@ -29,7 +29,7 @@ const FOREGROUND_TOKEN: Record<CrmEnvironment["color"], string> = {
 
 /** Always-visible header pill naming the active environment (spec: Environments -
  * "the panel header shows the active environment name, colour-coded, at all times"). */
-export function EnvBadge({ dispatch }: { dispatch: (a: Action) => void }) {
+export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) => void; onOpenMappings?: () => void }) {
   const [envs, setEnvs] = useState<CrmEnvironment[]>([]);
   const [active, setActive] = useState<CrmEnvironment | null>(null);
 
@@ -89,6 +89,11 @@ export function EnvBadge({ dispatch }: { dispatch: (a: Action) => void }) {
               {e.id === active.id ? " (active)" : ""}
             </MenuItem>
           ))}
+          {onOpenMappings && (
+            <MenuItem onClick={onOpenMappings}>
+              Field mappings…
+            </MenuItem>
+          )}
           <MenuItem onClick={() => chrome.runtime.openOptionsPage()}>
             Manage environments…
           </MenuItem>

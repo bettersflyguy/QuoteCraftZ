@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { makeStyles, tokens } from "@fluentui/react-components";
 import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
+import { MappingsManager } from "./MappingsManager";
 import { RunPicker } from "./steps/RunPicker";
 import { AccountMatch } from "./steps/AccountMatch";
 import { OpportunityPin } from "./steps/OpportunityPin";
@@ -88,6 +89,7 @@ export function App() {
   // active tab, and following it would unmount the in-flight flow and dump
   // the user into the EZLynx wizard mid-commit.
   const [flowActive, setFlowActive] = useState(false);
+  const [showMappings, setShowMappings] = useState(false);
   const lastModeRef = useRef(rawMode);
   const mode = flowActive ? lastModeRef.current : rawMode;
   lastModeRef.current = mode;
@@ -114,9 +116,11 @@ export function App() {
           <img className={styles.logo} src="/icons/32.png" alt="" />
           <span className={styles.title}>D365 Insurance Quote Connector</span>
         </div>
-        <EnvBadge dispatch={dispatch} />
+        <EnvBadge dispatch={dispatch} onOpenMappings={() => setShowMappings(v => !v)} />
       </div>
       <div className={styles.body}>
+        {showMappings && <MappingsManager onClose={() => setShowMappings(false)} />}
+        {!showMappings && <>
         {mode === "commercial" && <CommercialCapture onChanged={refreshPage} onFlowActive={setFlowActive} />}
         {mode === "portal" && <PortalFill onChanged={refreshPage} onFlowActive={setFlowActive} />}
         {mode === "personal" && <>
@@ -129,6 +133,7 @@ export function App() {
         {(state.step === "review" || state.step === "done") && (
           <ReviewCommit state={state} dispatch={dispatch} />
         )}
+        </>}
         </>}
       </div>
     </div>
