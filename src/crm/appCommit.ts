@@ -275,7 +275,8 @@ export interface SupplementalNote {
  * the same note instead of stacking duplicates. */
 export function buildSupplementalNote(app: CapturedApplication): SupplementalNote | null {
   const claimed = claimedIndices(app.fields, STRUCTURED_PATHS);
-  const extra = app.fields.filter((_, i) => !claimed.has(i));
+  // "Related contacts" rows are CRM-sourced display context — never written back
+  const extra = app.fields.filter((f, i) => !claimed.has(i) && f.section !== "Related contacts");
   if (!extra.length) return null;
   const bySection = new Map<string, string[]>();
   for (const f of extra) {
@@ -410,6 +411,7 @@ export async function writeApplicationKnowledge(
   const seen = new Set<string>();
 
   for (const field of app.fields) {
+    if (field.section === "Related contacts") continue; // CRM-sourced context, not risk data
     const label = clean(field.label);
     const value = clean(field.value);
     const key = `capture:${canonical(label)}`.slice(0, 100);

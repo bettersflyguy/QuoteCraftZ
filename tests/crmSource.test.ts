@@ -64,6 +64,25 @@ describe("buildCrmCaptureFields", () => {
     expect(n["contact"]?.["email"]).toBe("tracey.dittrich@comcast.net");
   });
 
+  it("lists every related contact as display-only context rows", () => {
+    const fields = buildCrmCaptureFields({
+      account: { accountid: "a4", name: "Dittrich, Tracey", _primarycontactid_value: "c1", iacrm_insuredfirstname: "Tracey", iacrm_insuredlastname: "Dittrich" },
+      contact: null,
+      riskAnswers: [],
+      relatedContacts: [
+        { contactid: "c1", fullname: "Alaxander Dittrich", emailaddress1: "alexdittrich77@gmail.com", mobilephone: "612-555-0101" },
+        { contactid: "c2", fullname: "Tracey Dittrich", telephone1: "612-986-7235", birthdate: "1979-03-14" }
+      ]
+    });
+    const rows = fields.filter(f => f.section === "Related contacts");
+    expect(rows.map(r => r.label)).toEqual(["Alaxander Dittrich (primary)", "Tracey Dittrich"]);
+    expect(rows[0]!.value).toBe("alexdittrich77@gmail.com · 612-555-0101");
+    expect(rows[1]!.value).toContain("DOB 3/14/1979");
+    // context rows never pollute the normalized identity
+    const n = normalize(fields);
+    expect(n["contact"]?.["firstName"]).toBe("Tracey");
+  });
+
   it("marks commercial accounts with the business name", () => {
     const fields = buildCrmCaptureFields({
       account: { accountid: "a2", name: "Northwind Bakery LLC", iacrm_insuredtype: 2 },

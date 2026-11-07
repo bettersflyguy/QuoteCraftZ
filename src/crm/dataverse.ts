@@ -329,7 +329,19 @@ export async function getInsuredSourceRecords(
     } catch { /* knowledge tables absent in this org */ }
   }
 
-  return { account, contact, riskAnswers };
+  // every contact on the account, so the agent has household/stakeholder
+  // context in the panel (display-only — the mapper never fills from these)
+  let relatedContacts: Record<string, unknown>[] = [];
+  if (accountId) {
+    try {
+      const { value } = await dvJson<{ value: Record<string, unknown>[] }>(
+        env, `contacts?$select=contactid,fullname,emailaddress1,telephone1,mobilephone,birthdate,jobtitle&$filter=_parentcustomerid_value eq ${accountId} and statecode eq 0&$orderby=fullname&$top=25`
+      );
+      relatedContacts = value;
+    } catch { /* non-fatal: panel just shows no contact list */ }
+  }
+
+  return { account, contact, riskAnswers, relatedContacts };
 }
 
 /** One evergreen note per subject per account: found by subject -> PATCH,

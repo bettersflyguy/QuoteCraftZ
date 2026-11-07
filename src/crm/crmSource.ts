@@ -8,6 +8,9 @@ export interface CrmSourceRecords {
   contact: Record<string, unknown> | null;
   /** iacrm_riskanswer rows (label/value), when the knowledge tables exist. */
   riskAnswers: { label: string; value: string }[];
+  /** Every active contact on the account — agent context in the panel;
+   * the portal mapper skips this section so they never fill forms. */
+  relatedContacts?: Record<string, unknown>[];
 }
 
 const GENDER: Record<number, string> = { 1: "Male", 2: "Female" };
@@ -82,6 +85,21 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
 
   for (const r of records.riskAnswers) {
     if (r.label && r.value) fields.push({ label: r.label, value: r.value, section: "Risk data", group: "", source: "review-row" });
+  }
+
+  const primaryId = account?.["_primarycontactid_value"];
+  for (const c of records.relatedContacts ?? []) {
+    const name = s(c, "fullname");
+    if (!name) continue;
+    const dob = s(c, "birthdate");
+    const detail = [
+      s(c, "emailaddress1"),
+      s(c, "mobilephone") || s(c, "telephone1"),
+      dob ? `DOB ${usDate(dob)}` : "",
+      s(c, "jobtitle")
+    ].filter(Boolean).join(" · ");
+    const label = c["contactid"] === primaryId ? `${name} (primary)` : name;
+    fields.push({ label, value: detail || "—", section: "Related contacts", group: "", source: "entity-card" });
   }
   return fields;
 }

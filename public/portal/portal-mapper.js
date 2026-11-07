@@ -130,6 +130,8 @@
     (payload && payload.fields || []).forEach((field, index) => {
       if (!comparable(field.value) || !clean(field.value) || !clean(field.label)) return;
       if (GENERIC_LABELS.has(canonical(field.label))) return;
+      /* agent-context rows (person-name labels, mixed email/phone values) must never fill a form */
+      if (field.section === "Related contacts") return;
       const aliases = [field.label];
       if (/\bvin\b/i.test(field.label)) aliases.push("VIN", "VIN number", "vehicle VIN", "vehicle identification number");
       if (field.group) aliases.push(`${field.group} ${field.label}`);
