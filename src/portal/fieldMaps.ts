@@ -65,6 +65,18 @@ const EXPORT_TYPE = "iacrm-quote-connector-fieldmaps";
  * at import so a tampered share file sheds them before they reach storage. */
 export const SENSITIVE_LABEL = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|tax id(entification)?|taxpayer|tin|itin|ein|fein|passport)\b/i;
 
+/** Compact-form (letters-only) check catches labels whose separators were
+ * stripped during canonicalization ("Tax-ID#" -> "taxid"). Only tokens that
+ * cannot occur as substrings of ordinary labels — bare ssn/tin/ein/fein stay
+ * word-boundary-only because "busineSS Name", "wriTINg" and "liFE INsurance"
+ * contain them compacted. Mirrored in portal-fill.js isSensitiveSource. */
+const SENSITIVE_COMPACT = /(socialsecurity|socsec|ssnum|taxid|taxpayer|passport)/;
+
+export function isSensitiveLabel(label: string): boolean {
+  const spaced = label.toLowerCase();
+  return SENSITIVE_LABEL.test(spaced) || SENSITIVE_COMPACT.test(spaced.replace(/[^a-z]/g, ""));
+}
+
 export interface FieldMapExport {
   type: typeof EXPORT_TYPE;
   version: 1;
@@ -111,7 +123,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
     const originLabels = new Set<string>();
     for (const [key, path] of Object.entries(entries as Record<string, unknown>)) {
       const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path) &&
-        !SENSITIVE_LABEL.test(path.slice(6));
+        !isSensitiveLabel(path.slice(6));
       if (typeof key !== "string" || !key || key.length > 200 ||
           typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path))) {
         dropped += 1;

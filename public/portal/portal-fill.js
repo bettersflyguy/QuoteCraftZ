@@ -290,6 +290,13 @@
   }
 
   const SENSITIVE_SOURCE = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|tax id(entification)?|taxpayer|tin|itin|ein|fein|passport)\b/i;
+  /* compact form catches separator-stripped labels ("Tax-ID#" -> "taxid");
+   * restricted to tokens that can't be substrings of ordinary labels */
+  const SENSITIVE_COMPACT = /(socialsecurity|socsec|ssnum|taxid|taxpayer|passport)/;
+  function isSensitiveSource(label) {
+    const spaced = String(label).toLowerCase();
+    return SENSITIVE_SOURCE.test(spaced) || SENSITIVE_COMPACT.test(spaced.replace(/[^a-z]/g, ""));
+  }
 
   /* the candidate an agent-taught mapping points at: a normalized rule path,
    * or "label:<canonical captured label>" — the label form reaches ANY held
@@ -302,7 +309,7 @@
       const wanted = path.slice(6);
       /* label targets can come from an IMPORTED share file: never let one pull
        * identifiers or payment data out of the capture, whatever the file says */
-      if (SENSITIVE_SOURCE.test(wanted) || PAYMENT_FIELD.test(wanted)) return null;
+      if (isSensitiveSource(wanted) || PAYMENT_FIELD.test(wanted)) return null;
       const field = (payloadFields || []).find((f) => mapper.canonical(f.label) === wanted && clean(f.value));
       return field ? { path, value: clean(field.value) } : null;
     }

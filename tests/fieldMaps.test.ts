@@ -61,15 +61,18 @@ describe("field-map share files", () => {
         "text:a": "label:ssn",
         "text:b": "label:social security number",
         "text:c": "label:fein",
+        "text:c2": "label:taxid number",
+        "text:c3": "label:socsec",
         "text:d": "label:driver 2 date of birth",
-        "text:e": "label:driver 2 license number"
+        "text:e": "label:driver 2 license number",
+        "text:f": "label:business name"
       }
     });
     const parsed = parseFieldMapImport(JSON.stringify(doc));
     expect(Object.values(parsed.maps["https://ok.example.com"]!).sort()).toEqual([
-      "label:driver 2 date of birth", "label:driver 2 license number"
+      "label:business name", "label:driver 2 date of birth", "label:driver 2 license number"
     ]);
-    expect(parsed.dropped).toBe(3);
+    expect(parsed.dropped).toBe(5);
   });
 
   it("reports no label targets for rule-path-only files (import applies without review)", () => {
