@@ -94,8 +94,9 @@ export function parseFieldMapImport(text: string): FieldMapImport {
     if (!/^https:\/\/[^/\s]+$/.test(origin) || typeof entries !== "object" || entries === null) { dropped += 1; continue; }
     const clean: Record<string, string> = {};
     for (const [key, path] of Object.entries(entries as Record<string, unknown>)) {
+      const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path);
       if (typeof key !== "string" || !key || key.length > 200 ||
-          typeof path !== "string" || (path !== "skip" && !PATH_LABEL.has(path))) {
+          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path))) {
         dropped += 1;
         continue;
       }

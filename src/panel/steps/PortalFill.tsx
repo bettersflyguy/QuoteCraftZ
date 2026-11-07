@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Input, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import type { PortalScanResult } from "@/boldpenguin/types";
-import { MAP_PATHS, PATH_LABEL } from "@/portal/fieldMaps";
+import { grantActiveTab } from "../portalAccess";
+import { MapEditor, capturedTargets } from "../MapEditor";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
@@ -60,37 +61,6 @@ function businessName(app: CapturedApplication | null): string | null {
   return typeof name === "string" && name ? name : null;
 }
 
-/** Requests access to the active tab's origin (user gesture required — that's
- * why this lives in the panel) and returns the tab. Portals aren't in the
- * manifest's host list; each site is granted individually at click time. */
-async function grantActiveTab(onAwaitingGrant?: (origin: string | null) => void): Promise<{ id: number; url: string }> {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!tab?.id || !tab.url || !/^https:/i.test(tab.url)) {
-    throw new PanelError("session", "The active tab is not a readable page. Open the carrier portal, then retry.");
-  }
-  const origin = new URL(tab.url).origin;
-  const already = await chrome.permissions.contains({ origins: [`${origin}/*`] }).catch(() => false);
-  if (already) return { id: tab.id, url: tab.url };
-  // first visit to this site: the browser shows a permission prompt (in Edge it
-  // hides under the Extensions puzzle-piece icon) and this promise WAITS on it —
-  // without the hint + timeout the panel looks dead until the prompt is found
-  onAwaitingGrant?.(origin);
-  try {
-    const granted = await Promise.race([
-      chrome.permissions.request({ origins: [`${origin}/*`] }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new PanelError(
-        "session",
-        `The browser is waiting for you to allow access to ${origin}. Find the permission prompt — in Edge it is under the Extensions (puzzle-piece) icon next to the address bar — click Allow, then retry.`
-      )), 25000))
-    ]);
-    if (!granted) {
-      throw new PanelError("session", "Access to this site was declined — nothing was read or filled.");
-    }
-  } finally {
-    onAwaitingGrant?.(null);
-  }
-  return { id: tab.id, url: tab.url };
-}
 
 /** Carrier-portal mode: the active tab is neither EZLynx, Bold Penguin, nor the
  * CRM. Ingest reads the visible insured data on this page into the held
@@ -321,35 +291,15 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
         </Button>
       </div>
       {mapScan && (
-        <div className={styles.result}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>
-            Field mapping for {mapScan.origin} — teach once, used on every fill of this site.
-          </div>
-          {mapScan.rows.map(r => (
-            <div key={r.key} className={styles.fieldRow} style={{ alignItems: "center", marginBottom: 4 }}>
-              <span className={styles.fieldLabel} title={r.key}>{r.label}</span>
-              {r.payment
-                ? <span className={styles.fieldValue}>payment field — never filled</span>
-                : (
-                  <select
-                    className={styles.grow}
-                    value={mapDraft[r.key] ?? ""}
-                    onChange={e => setMapDraft(d => ({ ...d, [r.key]: e.target.value }))}
-                  >
-                    <option value="">{r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)"}</option>
-                    <option value="skip">Never fill</option>
-                    {MAP_PATHS.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
-                  </select>
-                )}
-            </div>
-          ))}
-          <div className={styles.row} style={{ marginTop: 6 }}>
-            <Button appearance="primary" size="small" disabled={busy !== null} onClick={saveMapping}>
-              {busy === "map-save" ? <Spinner size="tiny" /> : "Save mapping"}
-            </Button>
-            <Button size="small" disabled={busy !== null} onClick={() => setMapScan(null)}>Cancel</Button>
-          </div>
-        </div>
+        <MapEditor
+          scan={mapScan}
+          draft={mapDraft}
+          setDraft={u => setMapDraft(u)}
+          captured={capturedTargets(app?.fields)}
+          busy={busy === "map-save"}
+          onSave={saveMapping}
+          onCancel={() => setMapScan(null)}
+        />
       )}
       {mapNote && <div className={styles.result}>{mapNote}</div>}
       {crmOpen && (

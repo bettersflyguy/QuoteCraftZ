@@ -34,6 +34,22 @@ describe("field-map share files", () => {
     expect(parsed.dropped).toBe(4);
   });
 
+  it("accepts captured-label targets (multi-record mappings) and rejects malformed ones", () => {
+    const doc = buildFieldMapExport({
+      "https://ok.example.com": {
+        "text:vin2": "label:vin 2",
+        "text:drv": "label:driver 2 first name",
+        "text:bad": "label:<script>"
+      }
+    });
+    const parsed = parseFieldMapImport(JSON.stringify(doc));
+    expect(parsed.maps["https://ok.example.com"]).toEqual({
+      "text:vin2": "label:vin 2",
+      "text:drv": "label:driver 2 first name"
+    });
+    expect(parsed.dropped).toBe(1);
+  });
+
   it("rejects files that are not ours", () => {
     expect(() => parseFieldMapImport("not json")).toThrow(/valid JSON/);
     expect(() => parseFieldMapImport(JSON.stringify({ type: "other", maps: {} }))).toThrow(/not a Quote Connector/);

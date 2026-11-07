@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Button, Text, makeStyles, tokens } from "@fluentui/react-components";
+import { Button, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular } from "@fluentui/react-icons";
+import type { CapturedApplication, PortalScanResult } from "@/boldpenguin/types";
 import {
   getAllFieldMaps,
   setAllFieldMaps,
@@ -8,6 +9,9 @@ import {
   parseFieldMapImport,
   type FieldMaps
 } from "@/portal/fieldMaps";
+import { grantActiveTab } from "./portalAccess";
+import { MapEditor, capturedTargets } from "./MapEditor";
+import { send } from "./api";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "8px" },
@@ -29,9 +33,57 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
   const [maps, setMaps] = useState<FieldMaps>({});
   const [note, setNote] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [scan, setScan] = useState<PortalScanResult | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [app, setApp] = useState<CapturedApplication | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [awaiting, setAwaiting] = useState<string | null>(null);
 
-  useEffect(() => { void getAllFieldMaps().then(setMaps); }, []);
+  useEffect(() => {
+    void getAllFieldMaps().then(setMaps);
+    void send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(setApp).catch(() => {});
+  }, []);
   const origins = Object.keys(maps).sort();
+
+  // works from ANY tab (EZLynx, CRM, carrier portals alike): scans whatever
+  // page is open and teaches its fields
+  const mapThisPage = async () => {
+    setBusy("scan");
+    setNote(null);
+    setProblem(null);
+    try {
+      const tab = await grantActiveTab(setAwaiting);
+      const s = await send<PortalScanResult>({ type: "panel/portalScan", tabId: tab.id });
+      const d: Record<string, string> = {};
+      for (const r of s.rows) d[r.key] = r.mapped ?? "";
+      setDraft(d);
+      setScan(s);
+    } catch (e) {
+      setProblem(String((e as Error).message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveScan = async () => {
+    if (!scan) return;
+    setBusy("save");
+    try {
+      const map: Record<string, string> = {};
+      for (const [key, v] of Object.entries(draft)) if (v) map[key] = v;
+      await send({ type: "panel/saveFieldMap", origin: scan.origin, map });
+      setMaps(await getAllFieldMaps());
+      const n = Object.keys(map).length;
+      setNote(n
+        ? `Saved ${n} mapping${n === 1 ? "" : "s"} for ${scan.origin}.`
+        : `Cleared the saved mappings for ${scan.origin}.`);
+      setScan(null);
+    } catch (e) {
+      setProblem(String((e as Error).message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const exportMaps = () => {
     const blob = new Blob([JSON.stringify(buildFieldMapExport(maps), null, 2)], { type: "application/json" });
@@ -87,7 +139,27 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
               <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} title="Remove this site's mapping" />
             </div>
           ))}
+      {awaiting && (
+        <Text size={200} weight="semibold">
+          Waiting for browser approval to access {awaiting} — look for the permission prompt
+          (in Edge it is under the Extensions puzzle-piece icon next to the address bar) and click Allow.
+        </Text>
+      )}
+      {scan && (
+        <MapEditor
+          scan={scan}
+          draft={draft}
+          setDraft={u => setDraft(u)}
+          captured={capturedTargets(app?.fields)}
+          busy={busy === "save"}
+          onSave={saveScan}
+          onCancel={() => setScan(null)}
+        />
+      )}
       <div className={styles.row}>
+        <Button size="small" appearance="primary" disabled={busy !== null} onClick={mapThisPage}>
+          {busy === "scan" ? <Spinner size="tiny" /> : "Map this page…"}
+        </Button>
         <Button size="small" onClick={exportMaps} disabled={origins.length === 0}>Export…</Button>
         <Button size="small" onClick={() => {
           const input = document.createElement("input");

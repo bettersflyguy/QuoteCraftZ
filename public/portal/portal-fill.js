@@ -289,11 +289,18 @@
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
   }
 
-  /* the candidate an agent-taught mapping points at: the first candidate on
-   * that normalized path (overrides only ever reference rule paths) */
-  function overrideCandidate(overrides, key, candidates) {
+  /* the candidate an agent-taught mapping points at: a normalized rule path,
+   * or "label:<canonical captured label>" — the label form reaches ANY held
+   * field (2nd driver, vehicle 2 VIN, garaging address...), explicit user
+   * intent bypassing the generic-label drop */
+  function overrideCandidate(overrides, key, candidates, payloadFields) {
     const path = overrides[key];
     if (!path || path === "skip") return null;
+    if (path.indexOf("label:") === 0) {
+      const wanted = path.slice(6);
+      const field = (payloadFields || []).find((f) => mapper.canonical(f.label) === wanted && clean(f.value));
+      return field ? { path, value: clean(field.value) } : null;
+    }
     return candidates.find((c) => c.path === path) || null;
   }
 
@@ -320,7 +327,7 @@
         handledRadioGroups.add(groupKey);
         const mapKey = controlKey(element);
         if (ov[mapKey] === "skip") continue;
-        const candidate = overrideCandidate(ov, mapKey, candidates) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
+        const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
         const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
@@ -331,7 +338,7 @@
       }
       const mapKey = controlKey(element);
       if (ov[mapKey] === "skip") continue;
-      const candidate = overrideCandidate(ov, mapKey, candidates) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
+      const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
       if (!candidate) continue;
       const outcome = await fillControl(element, candidate, overwrite, addrCtx, name);
       results.push({ label: name, path: candidate.path, status: outcome.status });
