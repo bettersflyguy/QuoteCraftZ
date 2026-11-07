@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Input, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import type { PortalScanResult } from "@/boldpenguin/types";
+import { MAP_PATHS, PATH_LABEL } from "@/portal/fieldMaps";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
@@ -53,45 +54,6 @@ const useStyles = makeStyles({
 
 interface IngestOutcome { added: number; total: number; app: CapturedApplication; replaced: boolean }
 
-/** CRM fields the mapping editor can bind a page control to — mirrors the
- * mapper's rule paths (public/portal/portal-mapper.js). */
-const MAP_PATHS: { path: string; label: string }[] = [
-  { path: "contact.firstName", label: "First name" },
-  { path: "contact.lastName", label: "Last name" },
-  { path: "contact.fullName", label: "Full name" },
-  { path: "contact.email", label: "Email" },
-  { path: "contact.phone", label: "Phone" },
-  { path: "contact.dateOfBirth", label: "Date of birth" },
-  { path: "contact.gender", label: "Gender" },
-  { path: "contact.maritalStatus", label: "Marital status" },
-  { path: "address.street1", label: "Street address" },
-  { path: "address.street2", label: "Street line 2 / unit" },
-  { path: "address.city", label: "City" },
-  { path: "address.state", label: "State" },
-  { path: "address.postalCode", label: "ZIP code" },
-  { path: "business.legalName", label: "Business name" },
-  { path: "business.dba", label: "DBA" },
-  { path: "business.entityType", label: "Entity type" },
-  { path: "business.fein", label: "FEIN" },
-  { path: "business.industry", label: "Industry" },
-  { path: "business.description", label: "Business description" },
-  { path: "business.foundingYear", label: "Year established" },
-  { path: "business.annualRevenue", label: "Annual revenue" },
-  { path: "coverage.effectiveDate", label: "Effective date" },
-  { path: "coverage.expirationDate", label: "Expiration date" },
-  { path: "coverage.currentCarrier", label: "Current carrier" },
-  { path: "coverage.currentPremium", label: "Current premium" },
-  { path: "employment.fullTimeEmployees", label: "Full-time employees" },
-  { path: "employment.partTimeEmployees", label: "Part-time employees" },
-  { path: "payroll.owners", label: "Owner payroll" },
-  { path: "payroll.employees", label: "Employee payroll" },
-  { path: "payroll.subcontractors", label: "Subcontractor cost" },
-  { path: "building.floors", label: "Building floors" },
-  { path: "building.totalSquareFeet", label: "Total square feet" },
-  { path: "building.yearBuilt", label: "Year built" },
-  { path: "building.constructionType", label: "Construction type" }
-];
-const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
 
 function businessName(app: CapturedApplication | null): string | null {
   const name = app?.normalized["business"]?.["legalName"] ?? app?.normalized["contact"]?.["fullName"];

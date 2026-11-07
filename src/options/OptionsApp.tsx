@@ -20,6 +20,104 @@ import {
   setActiveEnvironment,
   type CrmEnvironment
 } from "@/crm/environments";
+import {
+  getAllFieldMaps,
+  setAllFieldMaps,
+  buildFieldMapExport,
+  parseFieldMapImport,
+  type FieldMaps
+} from "@/portal/fieldMaps";
+
+/** Carrier field mappings taught in the panel: list, share-file export, import
+ * from a teammate's export, and per-site removal. */
+function FieldMapsSection() {
+  const [maps, setMaps] = useState<FieldMaps>({});
+  const [note, setNote] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const refresh = () => { void getAllFieldMaps().then(setMaps); };
+  useEffect(refresh, []);
+
+  const origins = Object.keys(maps).sort();
+
+  const exportMaps = () => {
+    const blob = new Blob([JSON.stringify(buildFieldMapExport(maps), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quote-connector-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importMaps = async (file: File) => {
+    setNote(null);
+    setProblem(null);
+    try {
+      const parsed = parseFieldMapImport(await file.text());
+      const merged = { ...await getAllFieldMaps() };
+      for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
+      await setAllFieldMaps(merged);
+      setMaps(merged);
+      setNote(
+        `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
+        (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") +
+        ". Imported sites replace any existing mapping for the same site."
+      );
+    } catch (e) {
+      setProblem(String((e as Error).message ?? e));
+    }
+  };
+
+  const removeSite = async (origin: string) => {
+    const next = { ...maps };
+    delete next[origin];
+    await setAllFieldMaps(next);
+    setMaps(next);
+  };
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      <Text as="h2" size={500} weight="semibold" block>Carrier field mappings</Text>
+      <Text block style={{ marginTop: 4 }}>
+        Mappings taught with "Map fields…" in the panel, saved per carrier site. Export them to a
+        file to share with other users; importing a file adds its sites to this extension.
+      </Text>
+      {origins.length === 0
+        ? <Text block style={{ marginTop: 12 }}>No saved mappings yet.</Text>
+        : origins.map(origin => (
+            <div key={origin} style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+              <Text style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                {origin} — {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
+              </Text>
+              <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} title="Remove this site's mapping" />
+            </div>
+          ))}
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+        <Button onClick={exportMaps} disabled={origins.length === 0}>Export mappings…</Button>
+        <Button onClick={() => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = "application/json,.json";
+          input.onchange = () => { const f = input.files?.[0]; if (f) void importMaps(f); };
+          input.click();
+        }}>
+          Import mappings…
+        </Button>
+      </div>
+      {note && (
+        <MessageBar intent="success" style={{ marginTop: 12 }}>
+          <MessageBarBody>{note}</MessageBarBody>
+        </MessageBar>
+      )}
+      {problem && (
+        <MessageBar intent="error" style={{ marginTop: 12 }}>
+          <MessageBarBody>{problem}</MessageBarBody>
+        </MessageBar>
+      )}
+    </div>
+  );
+}
 
 const URL_PATTERN = /^https:\/\/[a-z0-9-]+\.crm\d*\.dynamics\.com$/;
 const COLORS: CrmEnvironment["color"][] = ["green", "blue", "orange", "red"];
@@ -202,6 +300,8 @@ export function OptionsApp() {
       <Text block className={styles.footer}>
         Each environment requires your account to have a Dataverse security role in that org.
       </Text>
+
+      <FieldMapsSection />
     </div>
   );
 }

@@ -20,6 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
+import { getAllFieldMaps, setAllFieldMaps } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -590,21 +591,16 @@ async function setCapturedApplication(app: import("@/boldpenguin/types").Capture
   else await chrome.storage.session.set({ [BP_STORAGE_KEY]: app });
 }
 
-const FIELDMAP_KEY = "portal/fieldMap";
-
 /** Agent-taught per-site mappings: { [origin]: { [controlKey]: path | "skip" } }. */
 async function fieldMapFor(origin: string): Promise<Record<string, string>> {
-  const s = await chrome.storage.local.get(FIELDMAP_KEY);
-  const all = (s[FIELDMAP_KEY] as Record<string, Record<string, string>> | undefined) ?? {};
-  return all[origin] ?? {};
+  return (await getAllFieldMaps())[origin] ?? {};
 }
 
 async function saveFieldMap(origin: string, map: Record<string, string>): Promise<void> {
-  const s = await chrome.storage.local.get(FIELDMAP_KEY);
-  const all = (s[FIELDMAP_KEY] as Record<string, Record<string, string>> | undefined) ?? {};
+  const all = await getAllFieldMaps();
   if (Object.keys(map).length) all[origin] = map;
   else delete all[origin];
-  await chrome.storage.local.set({ [FIELDMAP_KEY]: all });
+  await setAllFieldMaps(all);
 }
 
 async function tabOrigin(tabId: number): Promise<string> {
