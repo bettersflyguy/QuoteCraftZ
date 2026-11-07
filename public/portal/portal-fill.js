@@ -289,7 +289,7 @@
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
   }
 
-  const SENSITIVE_SOURCE = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itin|passport)\b/i;
+  const SENSITIVE_SOURCE = /\b(ssns?|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itins?|passports?)\b/i;
   /* compact form catches separator-stripped labels ("Tax-ID#" -> "taxid");
    * restricted to tokens that can't be substrings of ordinary labels */
   const SENSITIVE_COMPACT = /(socialsecurity|socsec|ssnum|passport)/;
@@ -310,7 +310,7 @@
       /* label targets can come from an IMPORTED share file: never let one pull
        * identifiers or payment data out of the capture, whatever the file says */
       if (isSensitiveSource(wanted) || PAYMENT_FIELD.test(wanted)) return null;
-      const field = (payloadFields || []).find((f) => mapper.canonical(f.label) === wanted && clean(f.value));
+      const field = (payloadFields || []).find((f) => mapper.canonical(f.label) === wanted && clean(f.value) && !isSensitiveSource(f.label));
       return field ? { path, value: clean(field.value) } : null;
     }
     return candidates.find((c) => c.path === path) || null;

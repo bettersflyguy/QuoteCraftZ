@@ -63,8 +63,11 @@ const EXPORT_TYPE = "iacrm-quote-connector-fieldmaps";
  * (Driver 2 DOB/DL# is the core multi-driver case). Mirrored in
  * public/portal/portal-fill.js (SENSITIVE_SOURCE), enforced at fill AND here
  * at import so a tampered share file sheds them before they reach storage. */
-// FEIN/EIN is standard commercial-quoting data (Nathan, 2026-11-07) — not denied
-export const SENSITIVE_LABEL = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itin|passport)\b/i;
+// FEIN/EIN/tax-id is standard commercial-quoting data (Nathan, 2026-11-07) — not
+// denied. This import-side check is hygiene; the AUTHORITATIVE enforcement runs
+// at fill time against each captured field's RAW label (separators intact), so
+// canonicalization differentials ("SSN/TIN" -> "ssntin") cannot slip through.
+export const SENSITIVE_LABEL = /\b(ssns?|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itins?|passports?)\b/i;
 
 /** Compact-form (letters-only) check catches labels whose separators were
  * stripped during canonicalization ("Tax-ID#" -> "taxid"). Only tokens that
