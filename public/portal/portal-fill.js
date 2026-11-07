@@ -56,24 +56,39 @@
     return "";
   }
 
-  function fieldName(element) {
+  /* the one VISIBLE label a human would read for this control */
+  function primaryLabel(element) {
     const fieldset = element.closest("fieldset");
     const legend = fieldset && fieldset.querySelector(":scope > legend");
     if ((element.type || "").toLowerCase() === "radio" && legend) {
       return clean(legend.innerText || legend.textContent);
     }
+    const wrappingLabel = element.closest("label");
+    return clean(element.getAttribute("aria-label")) || labelledText(element) || explicitLabel(element) ||
+      clean(wrappingLabel && (wrappingLabel.innerText || wrappingLabel.textContent)) ||
+      clean(legend && (legend.innerText || legend.textContent)) || containerLabel(element);
+  }
+
+  function fieldName(element) {
     /* one PRIMARY label, in priority order; container text only as a fallback
      * for label-less SPA fields. Concatenating container text onto real labels
      * let payment-widget verbiage ("bank name and address") hijack matches. */
-    const wrappingLabel = element.closest("label");
-    const primary = clean(element.getAttribute("aria-label")) || labelledText(element) || explicitLabel(element) ||
-      clean(wrappingLabel && (wrappingLabel.innerText || wrappingLabel.textContent)) ||
-      clean(legend && (legend.innerText || legend.textContent)) || containerLabel(element);
     const parts = [
-      primary, element.getAttribute("placeholder"), element.getAttribute("autocomplete"),
+      primaryLabel(element), element.getAttribute("placeholder"), element.getAttribute("autocomplete"),
       element.name, element.id
     ].map(clean).filter(Boolean);
     return Array.from(new Set(parts)).join(" ");
+  }
+
+  /* stable identity for a control, shared by the mapping editor's scan and the
+   * fill pass — agent-taught mappings are stored against these keys */
+  function controlKey(element) {
+    if ((element.type || "").toLowerCase() === "radio") {
+      return "radio:" + (clean(element.name) || mapper.canonical(primaryLabel(element)).slice(0, 60));
+    }
+    const tag = element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase();
+    const base = clean(element.name) || clean(element.id) || mapper.canonical(primaryLabel(element) || fieldName(element)).slice(0, 60);
+    return (tag + ":" + base).slice(0, 120);
   }
 
   /* banking, payment and card fields are NEVER auto-filled — an insurance
@@ -267,13 +282,26 @@
     return null;
   }
 
-  async function fill(payload, overwrite, autoAdvance) {
-    const candidates = mapper.buildCandidates(payload);
-    const fillRoot = activeModal() || document;
-    const controls = Array.from(fillRoot.querySelectorAll("input, select, textarea"))
+  function pageControls(fillRoot) {
+    return Array.from(fillRoot.querySelectorAll("input, select, textarea"))
       .filter(visible)
       .filter((element) => !element.disabled && !element.readOnly)
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
+  }
+
+  /* the candidate an agent-taught mapping points at: the first candidate on
+   * that normalized path (overrides only ever reference rule paths) */
+  function overrideCandidate(overrides, key, candidates) {
+    const path = overrides[key];
+    if (!path || path === "skip") return null;
+    return candidates.find((c) => c.path === path) || null;
+  }
+
+  async function fill(payload, overwrite, autoAdvance, overrides) {
+    const ov = overrides || {};
+    const candidates = mapper.buildCandidates(payload);
+    const fillRoot = activeModal() || document;
+    const controls = pageControls(fillRoot);
     const addrCtx = {
       city: (candidates.find((c) => c.path === "address.city") || {}).value || "",
       zip: (candidates.find((c) => c.path === "address.postalCode") || {}).value || "",
@@ -290,7 +318,9 @@
         const groupKey = element.name ? `name:${element.name}` : fieldset || element;
         if (handledRadioGroups.has(groupKey)) continue;
         handledRadioGroups.add(groupKey);
-        const candidate = mapper.matchField(name, candidates);
+        const mapKey = controlKey(element);
+        if (ov[mapKey] === "skip") continue;
+        const candidate = overrideCandidate(ov, mapKey, candidates) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
         const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
@@ -299,7 +329,9 @@
         results.push({ label: name, path: candidate.path, status: outcome.status });
         continue;
       }
-      const candidate = mapper.matchField(name, candidates);
+      const mapKey = controlKey(element);
+      if (ov[mapKey] === "skip") continue;
+      const candidate = overrideCandidate(ov, mapKey, candidates) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
       if (!candidate) continue;
       const outcome = await fillControl(element, candidate, overwrite, addrCtx, name);
       results.push({ label: name, path: candidate.path, status: outcome.status });
@@ -369,8 +401,37 @@
     };
   }
 
+  /* mapping editor's view of this frame: every fillable control with its key,
+   * visible label, what auto-matching would pick, and any saved mapping */
+  function scanControls(payload, overrides) {
+    const ov = overrides || {};
+    const candidates = payload ? mapper.buildCandidates(payload) : [];
+    const rows = [];
+    const seen = new Set();
+    for (const element of pageControls(activeModal() || document)) {
+      const name = fieldName(element);
+      if (!name) continue;
+      const key = controlKey(element);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const payment = PAYMENT_FIELD.test(name);
+      const auto = payment || !candidates.length ? null : mapper.matchField(name, candidates);
+      const autoPath = auto && typeof auto.path === "string" && auto.path.indexOf("fields.") !== 0 ? auto.path : null;
+      rows.push({
+        key,
+        label: primaryLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id) || key,
+        type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
+        payment,
+        autoPath,
+        mapped: typeof ov[key] === "string" ? ov[key] : null
+      });
+    }
+    return rows;
+  }
+
   /* invoked per frame by the worker via chrome.scripting.executeScript func —
    * each frame (agent portals often put the form in an iframe) fills its own
    * fields and returns its own counts for the worker to aggregate */
-  globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance) => fill(payload, Boolean(overwrite), Boolean(autoAdvance));
+  globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
+  globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
 })();

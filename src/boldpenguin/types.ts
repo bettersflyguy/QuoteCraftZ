@@ -34,3 +34,18 @@ export interface PortalFillResult {
   controlCount: number;
   filled: { label: string; path: string }[];
 }
+
+/** One fillable control from the mapping editor's page scan. */
+export interface PortalScanRow {
+  key: string;
+  label: string;
+  type: string;
+  /** Banking/payment field — displayed locked, never mappable or fillable. */
+  payment: boolean;
+  /** What auto-matching would pick for this control right now (rule paths only). */
+  autoPath: string | null;
+  /** The saved per-site mapping: a rule path, "skip", or null (auto). */
+  mapped: string | null;
+}
+
+export interface PortalScanResult { origin: string; rows: PortalScanRow[] }

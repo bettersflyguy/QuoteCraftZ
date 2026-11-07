@@ -97,6 +97,10 @@ export interface Deps {
   ) => Promise<import("@/boldpenguin/types").PortalFillResult>;
   /** Injects the page harvester into the tab and returns its visible fields. */
   ingestPortalTab: (tabId: number) => Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }>;
+  /** Mapping editor: enumerates the page's fillable controls with auto/saved mappings. */
+  scanPortalTab: (tabId: number) => Promise<import("@/boldpenguin/types").PortalScanResult>;
+  /** Persists the agent-taught per-site field map (empty map deletes the site). */
+  saveFieldMap: (origin: string, map: Record<string, string>) => Promise<void>;
   /** Starts/stops passive auto-capture on the tab (observer scripts, no clicks). */
   setAutoCapture: (tabId: number, enable: boolean) => Promise<void>;
   isAutoCapturing: (tabId: number) => Promise<boolean>;
@@ -351,6 +355,13 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: await deps.fillPortalTab(msg.tabId, app, msg.overwrite, msg.autoAdvance) };
       }
 
+      case "panel/portalScan":
+        return { ok: true, data: await deps.scanPortalTab(msg.tabId) };
+
+      case "panel/saveFieldMap":
+        await deps.saveFieldMap(msg.origin, msg.map);
+        return { ok: true, data: null };
+
       case "panel/portalIngest": {
         const harvested = await deps.ingestPortalTab(msg.tabId);
         const existing = await deps.getCapturedApplication();
@@ -579,12 +590,56 @@ async function setCapturedApplication(app: import("@/boldpenguin/types").Capture
   else await chrome.storage.session.set({ [BP_STORAGE_KEY]: app });
 }
 
+const FIELDMAP_KEY = "portal/fieldMap";
+
+/** Agent-taught per-site mappings: { [origin]: { [controlKey]: path | "skip" } }. */
+async function fieldMapFor(origin: string): Promise<Record<string, string>> {
+  const s = await chrome.storage.local.get(FIELDMAP_KEY);
+  const all = (s[FIELDMAP_KEY] as Record<string, Record<string, string>> | undefined) ?? {};
+  return all[origin] ?? {};
+}
+
+async function saveFieldMap(origin: string, map: Record<string, string>): Promise<void> {
+  const s = await chrome.storage.local.get(FIELDMAP_KEY);
+  const all = (s[FIELDMAP_KEY] as Record<string, Record<string, string>> | undefined) ?? {};
+  if (Object.keys(map).length) all[origin] = map;
+  else delete all[origin];
+  await chrome.storage.local.set({ [FIELDMAP_KEY]: all });
+}
+
+async function tabOrigin(tabId: number): Promise<string> {
+  const tab = await chrome.tabs.get(tabId);
+  return tab.url ? new URL(tab.url).origin : "";
+}
+
+async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanResult> {
+  const origin = await tabOrigin(tabId);
+  const overrides = origin ? await fieldMapFor(origin) : {};
+  const app = await getCapturedApplication();
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+  const frames = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: (p: unknown, ov: unknown) =>
+      (globalThis as { __bettersPortalScan?: (p: unknown, ov: unknown) => unknown }).__bettersPortalScan?.(p, ov) ?? null,
+    args: [app, overrides]
+  });
+  const rows = frames
+    .map(f => f.result as import("@/boldpenguin/types").PortalScanRow[] | null)
+    .filter((r): r is import("@/boldpenguin/types").PortalScanRow[] => r !== null)
+    .flat();
+  if (!rows.length) throw new Error("No fillable fields found on this page. Open the quote form, then retry.");
+  const seen = new Set<string>();
+  return { origin, rows: rows.filter(r => !seen.has(r.key) && seen.add(r.key)) };
+}
+
 async function fillPortalTab(
   tabId: number,
   payload: import("@/boldpenguin/types").CapturedApplication,
   overwrite: boolean,
   autoAdvance: boolean
 ): Promise<import("@/boldpenguin/types").PortalFillResult> {
+  const origin = await tabOrigin(tabId);
+  const overrides = origin ? await fieldMapFor(origin) : {};
   // On-demand injection: the filler ships as plain scripts (public/portal/) so it
   // can run on ANY carrier portal the user granted, without a declared match.
   // allFrames: agent portals (Progressive FAO among them) often render the quote
@@ -592,9 +647,9 @@ async function fillPortalTab(
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: (p: unknown, o: boolean, a: boolean) =>
-      (globalThis as { __bettersPortalFill?: (p: unknown, o: boolean, a: boolean) => unknown }).__bettersPortalFill?.(p, o, a) ?? null,
-    args: [payload, overwrite, autoAdvance]
+    func: (p: unknown, o: boolean, a: boolean, ov: unknown) =>
+      (globalThis as { __bettersPortalFill?: (p: unknown, o: boolean, a: boolean, ov: unknown) => unknown }).__bettersPortalFill?.(p, o, a, ov) ?? null,
+    args: [payload, overwrite, autoAdvance, overrides]
   });
   const results = frames
     .map(f => f.result as import("@/boldpenguin/types").PortalFillResult | null)
@@ -733,6 +788,8 @@ export const realDeps: Deps = {
   setCapturedApplication,
   fillPortalTab,
   ingestPortalTab,
+  scanPortalTab,
+  saveFieldMap,
   setAutoCapture,
   isAutoCapturing
 };

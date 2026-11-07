@@ -51,6 +51,8 @@ export type PanelRequest =
   | { type: "panel/getLobs" }
   | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string; pipelineId: string | null; stageId: string | null; leadSource?: string | null }
   | { type: "panel/getStagesForLob"; lobId: string | null; insuredType?: 1 | 2 | null; lobName?: string | null }
+  | { type: "panel/portalScan"; tabId: number }
+  | { type: "panel/saveFieldMap"; origin: string; map: Record<string, string> }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }
   | { type: "panel/getPageContext" }
