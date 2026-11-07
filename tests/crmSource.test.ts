@@ -45,6 +45,25 @@ describe("buildCrmCaptureFields", () => {
     expect(n["contact"]?.["lastName"]).toBe("Parkin");
   });
 
+  it("prefers the account's insured name over a different primary contact and suppresses that contact's personal fields (Tracey/Alexander regression)", () => {
+    const fields = buildCrmCaptureFields({
+      account: {
+        accountid: "a3", name: "Dittrich, Tracey", iacrm_insuredtype: 1,
+        iacrm_insuredfirstname: "Tracey", iacrm_insuredlastname: "Dittrich",
+        telephone1: "612-986-7235", emailaddress1: "tracey.dittrich@comcast.net"
+      },
+      contact: { firstname: "Alaxander", lastname: "Dittrich", birthdate: "1977-05-02", gendercode: 1, emailaddress1: "alexdittrich77@gmail.com" },
+      riskAnswers: []
+    });
+    const n = normalize(fields);
+    expect(n["contact"]?.["firstName"]).toBe("Tracey");
+    expect(n["contact"]?.["lastName"]).toBe("Dittrich");
+    // Alexander's DOB/gender/email never ride onto Tracey's quote
+    expect(n["contact"]?.["dateOfBirth"]).toBeUndefined();
+    expect(n["contact"]?.["gender"]).toBeUndefined();
+    expect(n["contact"]?.["email"]).toBe("tracey.dittrich@comcast.net");
+  });
+
   it("marks commercial accounts with the business name", () => {
     const fields = buildCrmCaptureFields({
       account: { accountid: "a2", name: "Northwind Bakery LLC", iacrm_insuredtype: 2 },

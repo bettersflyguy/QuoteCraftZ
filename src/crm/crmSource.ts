@@ -30,8 +30,19 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
     if (value) fields.push({ label, value, section, group: "", source: "review-row" });
   };
 
-  let firstName = s(contact, "firstname") || s(account, "iacrm_insuredfirstname");
-  let lastName = s(contact, "lastname") || s(account, "iacrm_insuredlastname");
+  // the ACCOUNT's insured name columns are the named insured; the primary
+  // contact can be a spouse/co-insured (Tracey Dittrich's account lists
+  // Alexander as primary contact) — it only speaks for the insured when the
+  // names agree, and person-specific fields (DOB/gender/marital, contact
+  // phone/email fallbacks) are suppressed otherwise
+  const insuredFirst = s(account, "iacrm_insuredfirstname");
+  const insuredLast = s(account, "iacrm_insuredlastname");
+  const contactIsInsured =
+    (!insuredFirst && !insuredLast) ||
+    (s(contact, "firstname").toLowerCase() === insuredFirst.toLowerCase() &&
+      s(contact, "lastname").toLowerCase() === insuredLast.toLowerCase());
+  let firstName = insuredFirst || s(contact, "firstname");
+  let lastName = insuredLast || s(contact, "lastname");
   // dirty records (early imports) sometimes hold the FULL name in one or both
   // name columns — repair rather than propagate
   if (firstName.includes(" ") && (firstName === lastName || !lastName)) {
@@ -56,16 +67,18 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
   push("City", s(addr, "address1_city"));
   push("State", s(addr, "address1_stateorprovince"));
   push("ZIP Code", s(addr, "address1_postalcode"));
-  const mobile = s(account, "iacrm_mobilephone") || s(contact, "mobilephone");
+  const mobile = s(account, "iacrm_mobilephone") || (contactIsInsured ? s(contact, "mobilephone") : "");
   if (mobile) push("Mobile Phone Number", mobile);
-  else push("Phone Number", s(account, "telephone1") || s(contact, "telephone1"));
-  push("Email Address", s(account, "emailaddress1") || s(contact, "emailaddress1"));
-  const dob = s(contact, "birthdate");
-  if (dob) push("Date of Birth", usDate(dob));
-  const gender = GENDER[Number(contact?.["gendercode"])];
-  if (gender) push("Gender", gender);
-  const marital = MARITAL[Number(contact?.["familystatuscode"])];
-  if (marital) push("Marital Status", marital);
+  else push("Phone Number", s(account, "telephone1") || (contactIsInsured ? s(contact, "telephone1") : ""));
+  push("Email Address", s(account, "emailaddress1") || (contactIsInsured ? s(contact, "emailaddress1") : ""));
+  if (contactIsInsured) {
+    const dob = s(contact, "birthdate");
+    if (dob) push("Date of Birth", usDate(dob));
+    const gender = GENDER[Number(contact?.["gendercode"])];
+    if (gender) push("Gender", gender);
+    const marital = MARITAL[Number(contact?.["familystatuscode"])];
+    if (marital) push("Marital Status", marital);
+  }
 
   for (const r of records.riskAnswers) {
     if (r.label && r.value) fields.push({ label: r.label, value: r.value, section: "Risk data", group: "", source: "review-row" });
