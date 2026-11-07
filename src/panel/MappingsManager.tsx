@@ -7,7 +7,8 @@ import {
   setAllFieldMaps,
   buildFieldMapExport,
   parseFieldMapImport,
-  type FieldMaps
+  type FieldMaps,
+  type FieldMapImport
 } from "@/portal/fieldMaps";
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
@@ -38,6 +39,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [awaiting, setAwaiting] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<FieldMapImport | null>(null);
 
   useEffect(() => {
     void getAllFieldMaps().then(setMaps);
@@ -97,19 +99,28 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
     setProblem(null);
   };
 
+  const applyImport = async (parsed: FieldMapImport) => {
+    const merged = { ...await getAllFieldMaps() };
+    for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
+    await setAllFieldMaps(merged);
+    setMaps(merged);
+    setPendingImport(null);
+    setNote(
+      `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
+      (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") + "."
+    );
+  };
+
   const importMaps = async (file: File) => {
     setNote(null);
     setProblem(null);
+    setPendingImport(null);
     try {
       const parsed = parseFieldMapImport(await file.text());
-      const merged = { ...await getAllFieldMaps() };
-      for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
-      await setAllFieldMaps(merged);
-      setMaps(merged);
-      setNote(
-        `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
-        (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") + "."
-      );
+      // an imported file redirecting CAPTURED values is the one thing worth a
+      // human look before it lands — rule-path-only files apply directly
+      if (parsed.labelTargets.length) setPendingImport(parsed);
+      else await applyImport(parsed);
     } catch (e) {
       setProblem(String((e as Error).message ?? e));
     }
@@ -172,6 +183,21 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
         </Button>
         <Button size="small" appearance="primary" onClick={onClose}>Done</Button>
       </div>
+      {pendingImport && (
+        <div className={styles.note}>
+          <div style={{ fontWeight: 600 }}>
+            This file maps fields to CAPTURED data — confirm before applying.
+          </div>
+          <div style={{ margin: "4px 0" }}>
+            {pendingImport.sites} site{pendingImport.sites === 1 ? "" : "s"}, {pendingImport.fields} mappings.
+            Captured-field targets: {pendingImport.labelTargets.join(", ")}
+          </div>
+          <div className={styles.row}>
+            <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>
+            <Button size="small" onClick={() => setPendingImport(null)}>Cancel</Button>
+          </div>
+        </div>
+      )}
       {note && <div className={styles.note}>{note}</div>}
       {problem && <div className={styles.note}>{problem}</div>}
     </div>

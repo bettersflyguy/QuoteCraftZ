@@ -75,6 +75,10 @@ export interface FieldMapImport {
   fields: number;
   /** Entries dropped by validation (unknown paths, malformed origins/keys). */
   dropped: number;
+  /** Captured-field targets ("label:…") in the file, for user review before
+   * applying: an imported file deciding which captured values land where is
+   * the one place a tampered share file could redirect data. */
+  labelTargets: string[];
 }
 
 /** Parses and validates a share file. Only https origins, known rule paths
@@ -90,6 +94,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
   const maps: FieldMaps = {};
   let fields = 0;
   let dropped = 0;
+  const labelTargets = new Set<string>();
   for (const [origin, entries] of Object.entries(doc.maps as Record<string, unknown>)) {
     if (!/^https:\/\/[^/\s]+$/.test(origin) || typeof entries !== "object" || entries === null) { dropped += 1; continue; }
     const clean: Record<string, string> = {};
@@ -100,6 +105,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
         dropped += 1;
         continue;
       }
+      if (labelTarget) labelTargets.add(path.slice(6));
       clean[key] = path;
     }
     if (Object.keys(clean).length) {
@@ -108,5 +114,5 @@ export function parseFieldMapImport(text: string): FieldMapImport {
     }
   }
   if (!Object.keys(maps).length) throw new Error("The file contained no usable mappings.");
-  return { maps, sites: Object.keys(maps).length, fields, dropped };
+  return { maps, sites: Object.keys(maps).length, fields, dropped, labelTargets: [...labelTargets].sort() };
 }

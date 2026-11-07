@@ -289,6 +289,8 @@
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
   }
 
+  const SENSITIVE_SOURCE = /\b(ssn|social security|tax id|itin|passport)\b/i;
+
   /* the candidate an agent-taught mapping points at: a normalized rule path,
    * or "label:<canonical captured label>" — the label form reaches ANY held
    * field (2nd driver, vehicle 2 VIN, garaging address...), explicit user
@@ -298,6 +300,9 @@
     if (!path || path === "skip") return null;
     if (path.indexOf("label:") === 0) {
       const wanted = path.slice(6);
+      /* label targets can come from an IMPORTED share file: never let one pull
+       * identifiers or payment data out of the capture, whatever the file says */
+      if (SENSITIVE_SOURCE.test(wanted) || PAYMENT_FIELD.test(wanted)) return null;
       const field = (payloadFields || []).find((f) => mapper.canonical(f.label) === wanted && clean(f.value));
       return field ? { path, value: clean(field.value) } : null;
     }

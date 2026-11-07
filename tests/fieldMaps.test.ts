@@ -48,6 +48,15 @@ describe("field-map share files", () => {
       "text:drv": "label:driver 2 first name"
     });
     expect(parsed.dropped).toBe(1);
+    // surfaced for user review before an import applies
+    expect(parsed.labelTargets).toEqual(["driver 2 first name", "vin 2"]);
+  });
+
+  it("reports no label targets for rule-path-only files (import applies without review)", () => {
+    const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
+      "https://a.example.com": { "text:fn": "contact.firstName" }
+    })));
+    expect(parsed.labelTargets).toEqual([]);
   });
 
   it("rejects files that are not ours", () => {

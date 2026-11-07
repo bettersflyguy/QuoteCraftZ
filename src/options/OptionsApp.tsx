@@ -25,7 +25,8 @@ import {
   setAllFieldMaps,
   buildFieldMapExport,
   parseFieldMapImport,
-  type FieldMaps
+  type FieldMaps,
+  type FieldMapImport
 } from "@/portal/fieldMaps";
 
 /** Carrier field mappings taught in the panel: list, share-file export, import
@@ -34,6 +35,7 @@ function FieldMapsSection() {
   const [maps, setMaps] = useState<FieldMaps>({});
   const [note, setNote] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<FieldMapImport | null>(null);
 
   const refresh = () => { void getAllFieldMaps().then(setMaps); };
   useEffect(refresh, []);
@@ -50,20 +52,28 @@ function FieldMapsSection() {
     URL.revokeObjectURL(url);
   };
 
+  const applyImport = async (parsed: FieldMapImport) => {
+    const merged = { ...await getAllFieldMaps() };
+    for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
+    await setAllFieldMaps(merged);
+    setMaps(merged);
+    setPendingImport(null);
+    setNote(
+      `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
+      (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") +
+      ". Imported sites replace any existing mapping for the same site."
+    );
+  };
+
   const importMaps = async (file: File) => {
     setNote(null);
     setProblem(null);
+    setPendingImport(null);
     try {
       const parsed = parseFieldMapImport(await file.text());
-      const merged = { ...await getAllFieldMaps() };
-      for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
-      await setAllFieldMaps(merged);
-      setMaps(merged);
-      setNote(
-        `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
-        (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") +
-        ". Imported sites replace any existing mapping for the same site."
-      );
+      // files that redirect CAPTURED values get a human look before applying
+      if (parsed.labelTargets.length) setPendingImport(parsed);
+      else await applyImport(parsed);
     } catch (e) {
       setProblem(String((e as Error).message ?? e));
     }
@@ -105,6 +115,16 @@ function FieldMapsSection() {
           Import mappings…
         </Button>
       </div>
+      {pendingImport && (
+        <MessageBar intent="warning" style={{ marginTop: 12 }}>
+          <MessageBarBody>
+            This file maps fields to CAPTURED data ({pendingImport.labelTargets.join(", ")}) —
+            review the targets, then{" "}
+            <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>{" "}
+            <Button size="small" onClick={() => setPendingImport(null)}>Cancel</Button>
+          </MessageBarBody>
+        </MessageBar>
+      )}
       {note && (
         <MessageBar intent="success" style={{ marginTop: 12 }}>
           <MessageBarBody>{note}</MessageBarBody>
