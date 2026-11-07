@@ -286,7 +286,10 @@ export function ReviewCommit({
         >
           {ownerOptions.map(u => (
             <Option key={u.userId} value={u.userId} text={u.fullName}>
-              {u.fullName}
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span>{u.fullName}</span>
+                {u.email && <span style={{ fontSize: 11, color: "var(--colorNeutralForeground3, #616161)" }}>{u.email}</span>}
+              </div>
             </Option>
           ))}
         </Combobox>

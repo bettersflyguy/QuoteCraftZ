@@ -29,7 +29,7 @@ export function upnFromToken(token: string): string | null {
 export interface AccountMatch { accountId: string; name: string; city: string | null; postalCode: string | null; openOppCount: number }
 export interface OppSummary { opportunityId: string; name: string; lobId: string | null; lobName: string | null; desiredEffectiveDate: string | null }
 export interface CarrierRow { carrierId: string; name: string }
-export interface UserRow { userId: string; fullName: string }
+export interface UserRow { userId: string; fullName: string; email?: string | null }
 export interface LobRow { lobId: string; name: string }
 export interface StageRow { stageId: string; name: string; order: number }
 export interface PipelineStages { pipelineId: string; pipelineName: string; stages: StageRow[] }
@@ -571,9 +571,15 @@ export async function createOpportunity(
 }
 
 export async function searchUsers(env: CrmEnvironment, query: string): Promise<UserRow[]> {
-  const q = `systemusers?$select=systemuserid,fullname&$filter=isdisabled eq false and contains(fullname,'${esc(query)}')&$orderby=fullname&$top=10`;
+  // domainname (the sign-in UPN) disambiguates same-named rows: real agent vs
+  // service/external account is invisible from fullname alone
+  const q = `systemusers?$select=systemuserid,fullname,domainname,internalemailaddress&$filter=isdisabled eq false and contains(fullname,'${esc(query)}')&$orderby=fullname&$top=10`;
   const { value } = await dvJson<{ value: Record<string, string>[] }>(env, q);
-  return value.map(u => ({ userId: u["systemuserid"]!, fullName: u["fullname"] ?? "" }));
+  return value.map(u => ({
+    userId: u["systemuserid"]!,
+    fullName: u["fullname"] ?? "",
+    email: u["domainname"] || u["internalemailaddress"] || null
+  }));
 }
 
 export async function getQuotingMethodId(env: CrmEnvironment, nameContains: string): Promise<string | null> {
