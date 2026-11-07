@@ -69,10 +69,12 @@ describe("field-map share files", () => {
       }
     });
     const parsed = parseFieldMapImport(JSON.stringify(doc));
+    // FEIN/EIN/tax-id are standard commercial-quoting data — fillable by request
     expect(Object.values(parsed.maps["https://ok.example.com"]!).sort()).toEqual([
-      "label:business name", "label:driver 2 date of birth", "label:driver 2 license number"
+      "label:business name", "label:driver 2 date of birth", "label:driver 2 license number",
+      "label:fein", "label:taxid number"
     ]);
-    expect(parsed.dropped).toBe(5);
+    expect(parsed.dropped).toBe(3);
   });
 
   it("reports no label targets for rule-path-only files (import applies without review)", () => {

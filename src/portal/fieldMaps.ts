@@ -63,14 +63,15 @@ const EXPORT_TYPE = "iacrm-quote-connector-fieldmaps";
  * (Driver 2 DOB/DL# is the core multi-driver case). Mirrored in
  * public/portal/portal-fill.js (SENSITIVE_SOURCE), enforced at fill AND here
  * at import so a tampered share file sheds them before they reach storage. */
-export const SENSITIVE_LABEL = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|tax id(entification)?|taxpayer|tin|itin|ein|fein|passport)\b/i;
+// FEIN/EIN is standard commercial-quoting data (Nathan, 2026-11-07) — not denied
+export const SENSITIVE_LABEL = /\b(ssn|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itin|passport)\b/i;
 
 /** Compact-form (letters-only) check catches labels whose separators were
  * stripped during canonicalization ("Tax-ID#" -> "taxid"). Only tokens that
  * cannot occur as substrings of ordinary labels — bare ssn/tin/ein/fein stay
  * word-boundary-only because "busineSS Name", "wriTINg" and "liFE INsurance"
  * contain them compacted. Mirrored in portal-fill.js isSensitiveSource. */
-const SENSITIVE_COMPACT = /(socialsecurity|socsec|ssnum|taxid|taxpayer|passport)/;
+const SENSITIVE_COMPACT = /(socialsecurity|socsec|ssnum|passport)/;
 
 export function isSensitiveLabel(label: string): boolean {
   const spaced = label.toLowerCase();
