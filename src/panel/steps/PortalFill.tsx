@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Checkbox, Input, Spinner, makeStyles, tokens } from "@fluentui/react-components";
+import { Button, Checkbox, Input, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
@@ -60,15 +60,31 @@ function businessName(app: CapturedApplication | null): string | null {
 /** Requests access to the active tab's origin (user gesture required — that's
  * why this lives in the panel) and returns the tab. Portals aren't in the
  * manifest's host list; each site is granted individually at click time. */
-async function grantActiveTab(): Promise<{ id: number; url: string }> {
+async function grantActiveTab(onAwaitingGrant?: (origin: string | null) => void): Promise<{ id: number; url: string }> {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab?.id || !tab.url || !/^https:/i.test(tab.url)) {
     throw new PanelError("session", "The active tab is not a readable page. Open the carrier portal, then retry.");
   }
-  const origin = `${new URL(tab.url).origin}/*`;
-  const granted = await chrome.permissions.request({ origins: [origin] });
-  if (!granted) {
-    throw new PanelError("session", "Access to this site was declined — nothing was read or filled.");
+  const origin = new URL(tab.url).origin;
+  const already = await chrome.permissions.contains({ origins: [`${origin}/*`] }).catch(() => false);
+  if (already) return { id: tab.id, url: tab.url };
+  // first visit to this site: the browser shows a permission prompt (in Edge it
+  // hides under the Extensions puzzle-piece icon) and this promise WAITS on it —
+  // without the hint + timeout the panel looks dead until the prompt is found
+  onAwaitingGrant?.(origin);
+  try {
+    const granted = await Promise.race([
+      chrome.permissions.request({ origins: [`${origin}/*`] }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new PanelError(
+        "session",
+        `The browser is waiting for you to allow access to ${origin}. Find the permission prompt — in Edge it is under the Extensions (puzzle-piece) icon next to the address bar — click Allow, then retry.`
+      )), 25000))
+    ]);
+    if (!granted) {
+      throw new PanelError("session", "Access to this site was declined — nothing was read or filled.");
+    }
+  } finally {
+    onAwaitingGrant?.(null);
   }
   return { id: tab.id, url: tab.url };
 }
@@ -82,6 +98,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
   const [overwrite, setOverwrite] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [awaitingGrant, setAwaitingGrant] = useState<string | null>(null);
   const [error, setError] = useState<PanelError | null>(null);
   const [fillResult, setFillResult] = useState<PortalFillResult | null>(null);
   const [ingestResult, setIngestResult] = useState<IngestOutcome | null>(null);
@@ -143,7 +160,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
     setBusy("autocap");
     setError(null);
     try {
-      const tab = await grantActiveTab();
+      const tab = await grantActiveTab(setAwaitingGrant);
       await send({ type: "panel/autoCapture", tabId: tab.id, enable: !autoCap });
       setAutoCap(!autoCap);
       if (autoCap) setLive(null);
@@ -160,7 +177,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
     setFillResult(null);
     setIngestResult(null);
     try {
-      const tab = await grantActiveTab();
+      const tab = await grantActiveTab(setAwaitingGrant);
       if (kind === "fill") {
         setFillResult(await send<PortalFillResult>({ type: "panel/portalFill", tabId: tab.id, overwrite, autoAdvance }));
       } else {
@@ -235,6 +252,12 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
             Nothing captured yet. Ingest this page to pull the insured data shown
             here, or capture a completed application in Bold Penguin.
           </div>}
+      {awaitingGrant && (
+        <Text size={200} style={{ display: "block", marginTop: 6, fontWeight: 600 }}>
+          Waiting for browser approval to access {awaitingGrant} — look for the permission
+          prompt (in Edge it is under the Extensions puzzle-piece icon next to the address bar) and click Allow.
+        </Text>
+      )}
       {error && <ErrorBar error={error} />}
       <div className={styles.buttons}>
         <Button appearance={autoCap ? "secondary" : "primary"} disabled={busy !== null} onClick={toggleAutoCap}>
