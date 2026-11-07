@@ -67,7 +67,7 @@ const EXPORT_TYPE = "iacrm-quote-connector-fieldmaps";
 // denied. This import-side check is hygiene; the AUTHORITATIVE enforcement runs
 // at fill time against each captured field's RAW label (separators intact), so
 // canonicalization differentials ("SSN/TIN" -> "ssntin") cannot slip through.
-export const SENSITIVE_LABEL = /\b(ssns?|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itins?|passports?)\b/i;
+export const SENSITIVE_LABEL = /(?<![a-z])(ssns?|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itins?|passports?)(?![a-z])/i;
 
 /** Compact-form (letters-only) check catches labels whose separators were
  * stripped during canonicalization ("Tax-ID#" -> "taxid"). Only tokens that

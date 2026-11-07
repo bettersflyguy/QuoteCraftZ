@@ -289,7 +289,7 @@
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
   }
 
-  const SENSITIVE_SOURCE = /\b(ssns?|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itins?|passports?)\b/i;
+  const SENSITIVE_SOURCE = /(?<![a-z])(ssns?|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itins?|passports?)(?![a-z])/i;
   /* compact form catches separator-stripped labels ("Tax-ID#" -> "taxid");
    * restricted to tokens that can't be substrings of ordinary labels */
   const SENSITIVE_COMPACT = /(socialsecurity|socsec|ssnum|passport)/;
