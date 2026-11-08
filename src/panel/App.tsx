@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { makeStyles, tokens } from "@fluentui/react-components";
+import { Button, makeStyles, tokens } from "@fluentui/react-components";
+import { HomeRegular } from "@fluentui/react-icons";
 import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
 import { MappingsManager } from "./MappingsManager";
@@ -115,7 +116,16 @@ export function App() {
           <img className={styles.logo} src="/icons/32.png" alt="" />
           <span className={styles.title}>D365 Insurance Quote Connector</span>
         </div>
-        <EnvBadge dispatch={dispatch} onOpenMappings={() => setShowMappings(v => !v)} />
+        <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+          <Button
+            appearance="subtle"
+            icon={<HomeRegular />}
+            title="Home"
+            aria-label="Home"
+            onClick={() => { setShowMappings(false); refreshPage(); }}
+          />
+          <EnvBadge dispatch={dispatch} onOpenMappings={() => setShowMappings(true)} />
+        </div>
       </div>
       <div className={styles.body}>
         {showMappings && <MappingsManager onClose={() => setShowMappings(false)} />}

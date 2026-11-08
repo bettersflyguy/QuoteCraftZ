@@ -71,19 +71,18 @@ export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) =
   return (
     <Menu onOpenChange={(_, d) => { if (d.open) void refresh(); }}>
       <MenuTrigger disableButtonEnhancement>
+        {/* settings gear, tinted with the active environment's colour (the
+            environment name lives in the tooltip and the menu) */}
         <Button
           appearance="subtle"
           icon={<SettingsRegular />}
-          iconPosition="after"
-          title="Settings: environment, field mappings"
+          title={`Settings (${active.name})`}
+          aria-label={`Settings, environment ${active.name}`}
           style={{
             backgroundColor: BACKGROUND_TOKEN[active.color],
-            color: FOREGROUND_TOKEN[active.color],
-            fontWeight: 600
+            color: FOREGROUND_TOKEN[active.color]
           }}
-        >
-          {active.name}
-        </Button>
+        />
       </MenuTrigger>
       <MenuPopover>
         <MenuList>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowDownloadRegular, DatabaseArrowDownRegular, FormRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
@@ -22,18 +22,28 @@ const useStyles = makeStyles({
     padding: "8px"
   },
   buttons: { display: "flex", gap: "8px", flexWrap: "wrap" },
-  fieldList: {
-    maxHeight: "220px",
-    overflowY: "auto",
-    fontSize: "12px",
-    backgroundColor: tokens.colorNeutralBackground3,
-    borderRadius: "4px",
-    padding: "6px 8px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px"
+  // spreadsheet-style capture grid: sticky header, cell borders, zebra rows
+  grid: {
+    maxHeight: "260px",
+    overflow: "auto",
+    border: `1px solid ${tokens.colorNeutralStroke1}`,
+    borderRadius: "2px"
   },
-  fieldSection: { fontWeight: 600, color: tokens.colorNeutralForeground3, fontSize: "11px", marginTop: "4px" },
+  table: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: "12px" },
+  th: {
+    position: "sticky", top: 0, zIndex: 1, textAlign: "left", fontWeight: 600,
+    padding: "3px 6px", backgroundColor: tokens.colorNeutralBackground4,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`, borderRight: `1px solid ${tokens.colorNeutralStroke2}`
+  },
+  groupCell: {
+    padding: "3px 6px", fontWeight: 600, fontSize: "11px", color: tokens.colorNeutralForeground2,
+    backgroundColor: tokens.colorNeutralBackground3, borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
+  },
+  td: {
+    padding: "2px 6px", verticalAlign: "top", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`, borderRight: `1px solid ${tokens.colorNeutralStroke2}`
+  },
+  zebra: { backgroundColor: tokens.colorNeutralBackground2 },
   match: {
     display: "flex",
     justifyContent: "space-between",
@@ -305,43 +315,44 @@ export function PortalFill({ onChanged, onFlowActive }: {
         </>
       )}
       {crmNote && <div className={styles.result}>{crmNote}</div>}
-      {autoCap && (
-        <div className={styles.result}>
-          Auto-capturing this tab: every page you visit is read and merged
-          automatically (still never clicks or types).
-          {live && (
-            <> {live.replaced
-              ? " New person detected, started a fresh capture."
-              : ` Last page added ${live.added} field${live.added === 1 ? "" : "s"} (${live.total} held).`}</>
-          )}
-        </div>
+      {autoCap && live?.replaced && (
+        <div className={styles.result}>New person detected. Started a fresh capture.</div>
       )}
       {app && (
-        <div className={styles.fieldList}>
-          {[...new Set(app.fields.map(f => f.section))].map(section => (
-            <div key={section}>
-              {section === "Insured profile" && crmLink && env ? (
-                <a
-                  className={styles.fieldSection}
-                  style={{ display: "block", textDecoration: "underline", cursor: "pointer" }}
-                  href={crmRecordUrl(env, crmLink.kind, crmLink.id)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Open this insured's CRM record in a new tab"
-                >
-                  {section}: open in CRM ↗
-                </a>
-              ) : (
-                <div className={styles.fieldSection}>{section}</div>
-              )}
-              {app.fields.filter(f => f.section === section).map((f, i) => (
-                <div key={`${f.label}:${i}`} className={styles.fieldRow}>
-                  <span className={styles.fieldLabel}>{f.group ? `${f.group}: ` : ""}{f.label}</span>
-                  <span className={styles.fieldValue}>{f.value}</span>
-                </div>
+        <div className={styles.grid}>
+          <table className={styles.table}>
+            <colgroup><col style={{ width: "42%" }} /><col /></colgroup>
+            <thead>
+              <tr>
+                <th className={styles.th}>Field</th>
+                <th className={styles.th}>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...new Set(app.fields.map(f => f.section))].map(section => (
+                <Fragment key={section}>
+                  <tr>
+                    <td colSpan={2} className={styles.groupCell}>
+                      {section === "Insured profile" && crmLink && env ? (
+                        <a href={crmRecordUrl(env, crmLink.kind, crmLink.id)} target="_blank" rel="noreferrer"
+                          title="Open this insured's CRM record in a new tab">
+                          {section} ↗
+                        </a>
+                      ) : (section || "Page")}
+                    </td>
+                  </tr>
+                  {app.fields.filter(f => f.section === section).map((f, i) => (
+                    <tr key={`${f.label}:${i}`} className={i % 2 ? styles.zebra : undefined}>
+                      <td className={styles.td} title={f.group ? `${f.group}: ${f.label}` : f.label}>
+                        {f.group ? `${f.group}: ` : ""}{f.label}
+                      </td>
+                      <td className={styles.td} title={f.value}>{f.value}</td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
-            </div>
-          ))}
+            </tbody>
+          </table>
         </div>
       )}
       {app && (
@@ -363,8 +374,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
           {ingestResult.replaced && (
             <>This page belongs to a <b>different person</b> than the previous capture, so a fresh one was started (the old capture was discarded, not mixed in). </>
           )}
-          Ingested {ingestResult.added} new field{ingestResult.added === 1 ? "" : "s"} from this page
-          ({ingestResult.total} held in total). Switch to the next portal or rater and fill from it.
+          Ingested {ingestResult.added} new field{ingestResult.added === 1 ? "" : "s"} ({ingestResult.total} held).
         </div>
       )}
       {fillResult && (
@@ -372,7 +382,6 @@ export function PortalFill({ onChanged, onFlowActive }: {
           Filled {fillResult.filledCount} of {fillResult.controlCount} form fields
           {fillResult.existingCount ? `; ${fillResult.existingCount} kept their existing values` : ""}
           {fillResult.optionMismatchCount ? `; ${fillResult.optionMismatchCount} had no matching option` : ""}.
-          {fillResult.filledCount ? " Review the highlighted values before moving on." : " Move to the portal page that shows the application form and retry."}
         </div>
       )}
       {app && <LoadToCrm key={app.capturedAt} app={app} onFlowActive={setLoadFlow} onLoaded={refresh} />}
