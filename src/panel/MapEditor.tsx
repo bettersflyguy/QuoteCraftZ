@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { MAP_PATH_GROUPS, PATH_LABEL, isArrayPath } from "@/portal/fieldMaps";
@@ -100,8 +101,11 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     }
   };
   useEffect(() => { void loadCatalog(false); }, []);
-  const groups = captureGroups(catalog);
-  const groupValues = new Set(groups.flatMap(g => g.paths.map(p => p.path)));
+  const groups = useMemo(() => captureGroups(catalog), [catalog]);
+  const groupValues = useMemo(() => new Set(groups.flatMap(g => g.paths.map(p => p.path))), [groups]);
+  const fillGroups = useMemo<OptionGroup[]>(() => captured.length
+    ? [...FILL_GROUPS, { group: "Captured fields (drivers, vehicles, extra records…)", paths: captured.map(c => ({ path: c.value, label: c.label })) }]
+    : FILL_GROUPS, [captured]);
 
   useEffect(() => {
     if (!focusKey) return;
@@ -179,43 +183,27 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
               ? <span>payment field — never filled</span>
               : r.key.startsWith("pick:") ? (
                 /* read-only text teaching: capture direction, CRM fields only */
-                <select
-                  className={styles.select}
+                <TargetPicker
                   value={current}
-                  onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [r.key]: v })); }}
-                >
-                  <option value="">Not captured</option>
-                  {current && !groupValues.has(current) && (
-                    <option value={current}>
-                      {PATH_LABEL.get(current) ?? catalogLabel(catalog, current) ?? current} (saved)
-                    </option>
-                  )}
-                  {groups.map(g => (
-                    <optgroup key={g.group} label={`Capture as — ${g.group}`}>
-                      {g.paths.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
+                  onChange={v => setDraft(d => ({ ...d, [r.key]: v }))}
+                  groups={groups}
+                  specials={[{ value: "", label: "Not captured" }]}
+                  currentText={current && !groupValues.has(current)
+                    ? `${PATH_LABEL.get(current) ?? catalogLabel(catalog, current) ?? current} (saved)`
+                    : undefined}
+                  groupPrefix="Capture as — "
+                />
               ) : (
-                <select
-                  className={styles.select}
+                <TargetPicker
                   value={current}
-                  onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [r.key]: v })); }}
-                >
-                  <option value="">{r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)"}</option>
-                  <option value="skip">Never fill</option>
-                  {FILL_GROUPS.map(g => (
-                    <optgroup key={g.group} label={g.group}>
-                      {g.paths.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
-                    </optgroup>
-                  ))}
-                  {captured.length > 0 && (
-                    <optgroup label="Captured fields (drivers, vehicles, extra records…)">
-                      {captured.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                    </optgroup>
-                  )}
-                  {orphanLabel && <option value={current}>{orphanLabel} (saved; not in current capture)</option>}
-                </select>
+                  onChange={v => setDraft(d => ({ ...d, [r.key]: v }))}
+                  groups={fillGroups}
+                  specials={[
+                    { value: "", label: r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)" },
+                    { value: "skip", label: "Never fill" }
+                  ]}
+                  currentText={orphanLabel ? `${orphanLabel} (saved; not in current capture)` : undefined}
+                />
               )}
           </div>
         );
