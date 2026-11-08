@@ -42,6 +42,8 @@ import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecor
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
 import { buildFillValues } from "@/portal/fillValues";
+import { dataServiceScope, getOptionMaps, setOptionMaps } from "@/portal/optionMaps";
+import { translateCapturedChoices, translateFillChoices } from "@/portal/choiceRouting";
 import {
   addPendingSecure, clearPendingSecure, getPendingSecure, maskSecure, readSecureValues,
   resolveSecureRecords, secureRecordOf, slotNamesOf, type SecureValues
@@ -147,6 +149,10 @@ type BatchRow = import("@/crm/dataverse").BatchItemResult;
 /** EZLynx ingest through its data service: the latest rating run (or the
  * applicant alone when none exists), applicant fields routed by the agent's
  * data-service mappings, the run's quotes held for import. */
+async function catalogOrNull(deps: Deps): Promise<FieldCatalog | null> {
+  try { return await deps.getFieldCatalog(await deps.getActiveEnvironment()); } catch { return null; }
+}
+
 async function ingestEzlynx(deps: Deps, url: string): Promise<Res<unknown>> {
   const ctx = await deps.sendToEzlynxTab<{ applicantId: number | null }>({ type: "ezlynx/getContext" });
   if (!ctx.ok) return ctx;
@@ -167,7 +173,9 @@ async function ingestEzlynx(deps: Deps, url: string): Promise<Res<unknown>> {
     applicant = a.data;
   }
   const maps = await getDataServiceMaps();
-  const fields = ezlynxFields(applicant, maps["ezlynx"]);
+  // EZLynx's wording for choices -> the exact CRM choice (Settings mappings)
+  const fields = translateCapturedChoices(ezlynxFields(applicant, maps["ezlynx"]),
+    (await getOptionMaps())[dataServiceScope("ezlynx")], await catalogOrNull(deps));
   const existing = await deps.getCapturedApplication();
   const outcome = mergeIngestedFields(existing, fields, {
     system: "EZLynx",
@@ -678,6 +686,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/saveFieldMap":
         await deps.saveFieldMap(msg.origin, msg.map);
+        if (msg.options) await setOptionMaps(msg.origin, msg.options);
         return { ok: true, data: null };
 
       case "panel/portalIngest": {
@@ -687,6 +696,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         if (tab?.url && /^https:\/\/app\.ezlynx\.com\//i.test(tab.url)) return await ingestEzlynx(deps, tab.url);
         const harvested = await deps.ingestPortalTab(msg.tabId);
         const existing = await deps.getCapturedApplication();
+        // this site's wording for choices -> the exact CRM choice
+        const pageOrigin = (() => { try { return new URL(harvested.url).origin; } catch { return ""; } })();
+        harvested.fields = translateCapturedChoices(harvested.fields, (await getOptionMaps())[pageOrigin], await catalogOrNull(deps));
         const outcome = mergeIngestedFields(existing, harvested.fields, {
           system: new URL(harvested.url).hostname,
           url: harvested.url,
@@ -1194,7 +1206,13 @@ async function fillPortalTab(
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
   // every value any mapping target can name (CRM columns, row slots...);
   // secured values are NOT in here
-  const withValues = { ...payload, values: buildFillValues(payload) };
+  let catalog: FieldCatalog | null = null;
+  try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
+  // CRM choices go in as the form's own wording where the agent mapped it
+  const withValues = {
+    ...payload,
+    values: translateFillChoices(buildFillValues(payload), overrides, origin ? (await getOptionMaps())[origin] : undefined, catalog)
+  };
   type FrameFill = import("@/boldpenguin/types").PortalFillResult & { secure?: { key: string; path: string }[] };
   // pass 1: everything but secured fields, no advance yet
   const frames = await chrome.scripting.executeScript({

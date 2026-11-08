@@ -92,6 +92,8 @@ export interface PortalScanRow {
   autoPath: string | null;
   /** The saved per-site mapping: a rule path, "skip", or null (auto). */
   mapped: string | null;
+  /** A selection control's choices in the page's wording. */
+  options?: string[];
 }
 
 export interface PortalScanResult { origin: string; rows: PortalScanRow[] }

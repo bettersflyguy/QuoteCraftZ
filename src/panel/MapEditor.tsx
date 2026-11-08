@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, NotepadRegular, StopRegular } from "@fluentui/react-icons";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, NotepadRegular, StopRegular, TextBulletListLtrRegular } from "@fluentui/react-icons";
+import { OptionMapEditor } from "./OptionMapEditor";
+import { choiceColumnOf } from "@/portal/choiceRouting";
+import { columnKeyOf, type ColumnOptionMap } from "@/portal/optionMaps";
 import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
@@ -85,8 +88,13 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields }: {
   scan: PortalScanResult;
+  /** This site's one-for-one choice mappings ({table.column: {text: value}}). */
+  choices?: Record<string, ColumnOptionMap>;
+  setChoices?: (updater: (c: Record<string, ColumnOptionMap>) => Record<string, ColumnOptionMap>) => void;
+  /** Held capture fields: their values are known source wordings for a choice. */
+  capturedFields?: { value: string; mapped?: string }[];
   draft: Record<string, string>;
   setDraft: (updater: (d: Record<string, string>) => Record<string, string>) => void;
   captured: CapturedTarget[];
@@ -139,6 +147,12 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     rowRefs.current.get(focusKey)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [focusKey]);
 
+  const [choicesOpen, setChoicesOpen] = useState<Set<string>>(() => new Set());
+  const toggleChoices = (key: string) => setChoicesOpen(s => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
   const stopRequested = useRef(false);
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
   const [showAll, setShowAll] = useState(false);
@@ -264,7 +278,14 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
         const slot = !isPick ? rowTargetOf(current) : null;
         const pickerValue = slot ? slot.arrayPath : current;
         const choose = (v: string) => setTarget(r.key, !isPick && isArrayPath(v) ? (toRowTarget(v, 1) ?? v) : v);
+        // a CRM choice target: each of this field's options binds to one CRM choice
+        const choiceCol = setChoices ? choiceColumnOf(current, catalog) : null;
+        const choiceKey = choiceCol ? columnKeyOf(current) : null;
+        const choiceSources = choiceCol
+          ? [...(r.options ?? []), ...(capturedFields ?? []).filter(f => f.mapped === current).map(f => f.value)]
+          : [];
         return (
+          <Fragment key={r.key}>
           <div
             key={r.key}
             className={focusKey === r.key ? styles.rowFocused : styles.row}
@@ -316,12 +337,32 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                   )}
                 </>
               )}
+            {choiceCol && (
+              <Tooltip content="Map each choice to its CRM choice" relationship="label" withArrow>
+                <Button
+                  size="small"
+                  appearance={choicesOpen.has(r.key) ? "primary" : "subtle"}
+                  icon={<TextBulletListLtrRegular />}
+                  aria-pressed={choicesOpen.has(r.key)}
+                  onClick={() => toggleChoices(r.key)}
+                />
+              </Tooltip>
+            )}
             {!r.payment && current && (
               <Tooltip content="Delete this mapping (saved with Save mapping)" relationship="label" withArrow>
                 <Button size="small" appearance="subtle" icon={<DeleteRegular />} onClick={() => setTarget(r.key, "")} />
               </Tooltip>
             )}
           </div>
+          {choiceCol && choiceKey && choicesOpen.has(r.key) && (
+            <OptionMapEditor
+              column={choiceCol}
+              sources={choiceSources}
+              value={choices?.[choiceKey] ?? {}}
+              onChange={next => setChoices?.(c => ({ ...c, [choiceKey]: next }))}
+            />
+          )}
+          </Fragment>
         );
       })}
       {(hiddenCount > 0 || showAll) && (

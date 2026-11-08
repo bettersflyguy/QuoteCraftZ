@@ -474,6 +474,25 @@
     return { filled, missing };
   }
 
+  /* the choices a selection control offers, in the page's own wording (the
+   * mapping editor binds each one to an exact CRM choice) */
+  const PLACEHOLDER_OPTION = /^(select|choose|please|--|- -|none selected)/i;
+  function choiceOptions(element) {
+    let texts = [];
+    if (element.tagName === "SELECT") {
+      texts = Array.from(element.options).map((o) => clean(o.textContent));
+    } else if ((element.type || "").toLowerCase() === "radio") {
+      const fieldset = element.closest("fieldset");
+      texts = Array.from(document.querySelectorAll("input[type='radio']"))
+        .filter((r) => (element.name ? r.name === element.name : r.closest("fieldset") === fieldset))
+        .map((r) => optionName(r));
+    } else {
+      return undefined;
+    }
+    const out = Array.from(new Set(texts.filter((t) => t && t.length <= 100 && !PLACEHOLDER_OPTION.test(t))));
+    return out.length ? out.slice(0, 100) : undefined;
+  }
+
   /* mapping editor's view of this frame: every fillable control with its key,
    * visible label, what auto-matching would pick, and any saved mapping */
   function scanControls(payload, overrides) {
@@ -496,7 +515,8 @@
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
         autoPath,
-        mapped: typeof ov[key] === "string" ? ov[key] : null
+        mapped: typeof ov[key] === "string" ? ov[key] : null,
+        options: choiceOptions(element)
       });
     }
     /* saved read-only-text teachings ("pick:<selector>" -> CRM field) show as
@@ -713,7 +733,8 @@
             type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
             payment: PAYMENT_FIELD.test(name),
             autoPath: null,
-            mapped: null
+            mapped: null,
+            options: choiceOptions(el)
           });
         } else {
           /* read-only text: key is a re-locatable selector, so the taught

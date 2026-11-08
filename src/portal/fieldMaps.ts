@@ -2,6 +2,8 @@
  * paths, and the share-file (export/import) format used to move mappings
  * between business users' extensions. */
 
+import { COLUMN_KEY, sanitizeColumnMap, type OptionMaps } from "./optionMaps";
+
 export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
 
 /** { [origin]: { [controlKey]: rulePath | "skip" } } */
@@ -223,14 +225,39 @@ export interface FieldMapExport {
   version: 1;
   exportedAt: string;
   maps: FieldMaps;
+  /** One-for-one choice mappings per site ({origin: {table.column: {text: value}}}). */
+  options?: OptionMaps;
 }
 
-export function buildFieldMapExport(maps: FieldMaps): FieldMapExport {
-  return { type: EXPORT_TYPE, version: 1, exportedAt: new Date().toISOString(), maps: withoutSecured(maps) };
+export function buildFieldMapExport(maps: FieldMaps, options?: OptionMaps): FieldMapExport {
+  const opts = options ? Object.fromEntries(Object.entries(options).filter(([o]) => o in maps)) : {};
+  return {
+    type: EXPORT_TYPE, version: 1, exportedAt: new Date().toISOString(), maps: withoutSecured(maps),
+    ...(Object.keys(opts).length ? { options: opts } : {})
+  };
+}
+
+/** Validated choice mappings from a share file, for the origins it maps. */
+function parseOptionMaps(raw: unknown, origins: Set<string>): OptionMaps {
+  const out: OptionMaps = {};
+  if (typeof raw !== "object" || raw === null) return out;
+  for (const [origin, cols] of Object.entries(raw as Record<string, unknown>)) {
+    if (!origins.has(origin) || typeof cols !== "object" || cols === null) continue;
+    const kept: Record<string, Record<string, number>> = {};
+    for (const [col, map] of Object.entries(cols as Record<string, unknown>)) {
+      if (!COLUMN_KEY.test(col)) continue;
+      const clean = sanitizeColumnMap(map);
+      if (Object.keys(clean).length) kept[col] = clean;
+    }
+    if (Object.keys(kept).length) out[origin] = kept;
+  }
+  return out;
 }
 
 export interface FieldMapImport {
   maps: FieldMaps;
+  /** Choice mappings for the imported sites. */
+  options: OptionMaps;
   sites: number;
   fields: number;
   /** Entries dropped by validation (unknown paths, malformed origins/keys). */
@@ -307,7 +334,8 @@ export function parseFieldMapImport(text: string): FieldMapImport {
     }
   }
   if (!Object.keys(maps).length) throw new Error("The file contained no usable mappings.");
-  return { maps, sites: Object.keys(maps).length, fields, dropped, secured, labelTargets: [...labelTargets].sort(), perOrigin };
+  const options = parseOptionMaps((doc as { options?: unknown }).options, new Set(Object.keys(maps)));
+  return { maps, options, sites: Object.keys(maps).length, fields, dropped, secured, labelTargets: [...labelTargets].sort(), perOrigin };
 }
 
 /** A share file never carries secured mappings (see parseFieldMapImport). */

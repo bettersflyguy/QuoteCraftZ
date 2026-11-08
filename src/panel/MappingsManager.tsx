@@ -6,6 +6,7 @@ import { FIELDMAP_STORAGE_KEY, getAllFieldMaps, setAllFieldMaps, type FieldMaps 
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
 import { send } from "./api";
+import { getOptionMaps, type ColumnOptionMap } from "@/portal/optionMaps";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "8px" },
@@ -30,6 +31,8 @@ export function MappingsManager() {
   const [scan, setScan] = useState<PortalScanResult | null>(null);
   const [scanTabId, setScanTabId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // this site's one-for-one choice mappings, saved with the field mapping
+  const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [awaiting, setAwaiting] = useState<string | null>(null);
@@ -82,6 +85,7 @@ export function MappingsManager() {
       // corrects) which CRM field each one feeds, and Save stores them
       for (const r of s.rows) d[r.key] = r.mapped ?? (r.payment ? "" : r.autoPath ?? "");
       setDraft(d);
+      setChoices((await getOptionMaps())[s.origin] ?? {});
       setScan(s);
       setScanTabId(tab.id);
     } catch (e) {
@@ -97,7 +101,7 @@ export function MappingsManager() {
     try {
       const map: Record<string, string> = {};
       for (const [key, v] of Object.entries(draft)) if (v) map[key] = v;
-      await send({ type: "panel/saveFieldMap", origin: scan.origin, map });
+      await send({ type: "panel/saveFieldMap", origin: scan.origin, map, options: choices });
       setMaps(await getAllFieldMaps());
       const n = Object.keys(map).length;
       setNote(n
@@ -159,6 +163,9 @@ export function MappingsManager() {
           draft={draft}
           setDraft={u => setDraft(u)}
           captured={capturedTargets(app?.fields)}
+          choices={choices}
+          setChoices={u => setChoices(u)}
+          capturedFields={app?.fields}
           busy={busy === "save"}
           onSave={saveScan}
           onCancel={() => setScan(null)}

@@ -31,6 +31,7 @@ import {
   type FieldMaps,
   type FieldMapImport
 } from "@/portal/fieldMaps";
+import { getOptionMaps, setOptionMaps } from "@/portal/optionMaps";
 
 /** Carrier field mappings taught in the panel: list, share-file export, import
  * from a teammate's export, and per-site removal. */
@@ -46,9 +47,10 @@ function FieldMapsSection() {
   const origins = Object.keys(maps).sort();
 
   /** Share file for every site, or just one ("www8.nowcerts.com"). */
-  const exportMaps = (only?: string) => {
+  const exportMaps = async (only?: string) => {
     const subset = only ? { [only]: maps[only]! } : maps;
-    const blob = new Blob([JSON.stringify(buildFieldMapExport(subset), null, 2)], { type: "application/json" });
+    // choice mappings travel with their sites
+    const blob = new Blob([JSON.stringify(buildFieldMapExport(subset, await getOptionMaps()), null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -79,6 +81,7 @@ function FieldMapsSection() {
     const merged = { ...await getAllFieldMaps() };
     for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
     await setAllFieldMaps(merged);
+    for (const [origin, cols] of Object.entries(parsed.options)) await setOptionMaps(origin, cols);
     setMaps(merged);
     setPendingImport(null);
     setNote(

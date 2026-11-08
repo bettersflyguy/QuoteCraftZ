@@ -6,6 +6,7 @@
  * value is only ever written to a column present here, coerced to its type. */
 import { canonical, clean } from "@/boldpenguin/normalize";
 import { isSensitiveLabel } from "@/portal/fieldMaps";
+import { autoMatchOption } from "@/portal/optionMaps";
 import type { CrmEnvironment } from "./environments";
 
 export interface CatalogColumn {
@@ -166,8 +167,11 @@ export function coerce(col: CatalogColumn, raw: string): unknown {
       if (/^(no|n|false|unchecked|off|0)$/i.test(v)) return false;
       return undefined;
     case "Picklist": {
+      // the agent's one-for-one choice mapping already turned source text
+      // into the CRM label at capture; this is the safety net (unique guess)
       const want = canonical(v);
-      return col.options?.find(o => canonical(o.label) === want)?.value;
+      const opts = col.options ?? [];
+      return opts.find(o => canonical(o.label) === want)?.value ?? autoMatchOption(v, opts) ?? undefined;
     }
   }
 }

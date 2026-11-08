@@ -73,7 +73,7 @@ export type PanelRequest =
       ownerName: string | null;
       groups: { lob: string; opportunityId: string; lobId: string | null; desiredEffectiveDate: string | null; created: boolean }[];
     }
-  | { type: "panel/saveFieldMap"; origin: string; map: Record<string, string> }
+  | { type: "panel/saveFieldMap"; origin: string; map: Record<string, string>; options?: Record<string, Record<string, number>> }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }
   | { type: "panel/getPageContext" }
