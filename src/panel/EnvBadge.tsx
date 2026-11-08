@@ -12,7 +12,6 @@ import { SettingsRegular } from "@fluentui/react-icons";
 import type { CrmEnvironment } from "@/crm/environments";
 import { getActiveEnvironment } from "@/crm/environments";
 import { send } from "./api";
-import type { Action } from "./state";
 
 const BACKGROUND_TOKEN: Record<CrmEnvironment["color"], string> = {
   green: tokens.colorPaletteGreenBackground2,
@@ -30,7 +29,7 @@ const FOREGROUND_TOKEN: Record<CrmEnvironment["color"], string> = {
 
 /** Always-visible header pill naming the active environment (spec: Environments -
  * "the panel header shows the active environment name, colour-coded, at all times"). */
-export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) => void; onOpenMappings?: () => void }) {
+export function EnvBadge({ onOpenMappings, onEnvChanged }: { onOpenMappings?: () => void; onEnvChanged?: () => void }) {
   const [envs, setEnvs] = useState<CrmEnvironment[]>([]);
   const [active, setActive] = useState<CrmEnvironment | null>(null);
 
@@ -52,7 +51,7 @@ export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) =
       if ("env/list" in changes || "env/active" in changes) void refresh();
       // switching the active org from the Options page invalidates the panel's
       // CRM selections exactly like switching from this menu does
-      if ("env/active" in changes) dispatch({ t: "reset" });
+      if ("env/active" in changes) onEnvChanged?.();
     };
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
@@ -63,7 +62,7 @@ export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) =
     await send({ type: "env/setActive", id });
     await refresh();
     // worker clears stored CRM-side selections; mirror that locally, keep the captured run
-    dispatch({ t: "reset" });
+    onEnvChanged?.();
   }
 
   if (!active) return null;

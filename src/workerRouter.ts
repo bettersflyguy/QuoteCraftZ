@@ -36,7 +36,8 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { ezlynxFields, getDataServiceMaps, mergeHeldQuotes, quotesFromRun } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
@@ -131,6 +132,219 @@ function pageKindOf(url: string): import("@/messages").PageKind {
   return "none";
 }
 
+type HeldQuote = import("@/boldpenguin/types").HeldQuote;
+type BatchRow = import("@/crm/dataverse").BatchItemResult;
+
+/** EZLynx ingest through its data service: the latest rating run (or the
+ * applicant alone when none exists), applicant fields routed by the agent's
+ * data-service mappings, the run's quotes held for import. */
+async function ingestEzlynx(deps: Deps, url: string): Promise<Res<unknown>> {
+  const ctx = await deps.sendToEzlynxTab<{ applicantId: number | null }>({ type: "ezlynx/getContext" });
+  if (!ctx.ok) return ctx;
+  const applicantId = ctx.data.applicantId;
+  if (applicantId == null) return { ok: false, error: "Open an EZLynx applicant, then ingest.", kind: "session" };
+  let run: import("@/types").CapturedRun | null = null;
+  const runs = await deps.sendToEzlynxTab<import("@/types").RunListItem[]>({ type: "ezlynx/listRuns", applicantId });
+  if (runs.ok && runs.data.length) {
+    const latest = [...runs.data].sort((a, b) => b.created.localeCompare(a.created))[0]!;
+    const captured = await deps.sendToEzlynxTab<import("@/types").CapturedRun>({ type: "ezlynx/captureRun", applicantId, run: latest });
+    if (!captured.ok) return captured;
+    run = captured.data;
+  }
+  let applicant = run?.applicant ?? null;
+  if (!applicant) {
+    const a = await deps.sendToEzlynxTab<import("@/types").CapturedApplicant>({ type: "ezlynx/getApplicant", applicantId });
+    if (!a.ok) return a;
+    applicant = a.data;
+  }
+  const maps = await getDataServiceMaps();
+  const fields = ezlynxFields(applicant, maps["ezlynx"]);
+  const existing = await deps.getCapturedApplication();
+  const outcome = mergeIngestedFields(existing, fields, {
+    system: "EZLynx",
+    url,
+    title: `${applicant.firstName} ${applicant.lastName}`.trim()
+  });
+  if (run) {
+    const env = await deps.getActiveEnvironment();
+    const aliases = await deps.getCarrierAliases(env.orgUrl);
+    outcome.app.quotes = mergeHeldQuotes(outcome.app.quotes, quotesFromRun(run, aliases));
+    outcome.app.quoteIssues = run.blocks.flatMap(b => b.errors.map(e => ({ lob: b.lob, carrierName: e.carrierName, message: e.message })));
+    outcome.app.dataService = { kind: "ezlynx", run };
+  }
+  await deps.setCapturedApplication(outcome.app);
+  if (outcome.replaced) await chrome.storage.session.remove("bp/crmLink");
+  return { ok: true, data: outcome };
+}
+
+/** A carrier portal page showing a quoted premium (no policy number) as a
+ * held quote, one per site. */
+function portalHeldQuote(app: import("@/boldpenguin/types").CapturedApplication): HeldQuote | null {
+  const draft = quoteFromCapture(app);
+  if (!draft.hasQuote) return null;
+  const host = (() => { try { return new URL(app.source.url).hostname; } catch { return app.source.system; } })();
+  return {
+    key: `portal:${host}`,
+    provider: "Portal",
+    source: host,
+    lob: "",
+    carrierName: draft.carrierName,
+    carrierRef: null,
+    carrierId: null,
+    kind: "requested",
+    quoteNumber: null,
+    premium: parseMoney(draft.premiumText),
+    termMonths: null,
+    premiumStatus: "estimated",
+    coverageSummary: draft.coverageSummary,
+    coverageLines: coverageLinesFromCapture(app),
+    link: app.source.url,
+    selected: true
+  };
+}
+
+export interface QuoteGroup { lob: string; opportunityId: string; lobId: string | null; desiredEffectiveDate: string | null; created: boolean }
+
+/** Writes the held, selected quotes onto their line-of-business
+ * opportunities - EZLynx quotes exactly as the dedicated importer did (alt
+ * keys, coverage lines, carrier Q&A), portal quotes as carrier-direct
+ * quotes - honoring each quote's Firm/Estimated choice. */
+async function writeHeldQuotes(
+  deps: Deps,
+  env: CrmEnvironment,
+  msg: { accountId: string; recordName: string; accountCreatedByPanel: boolean; ownerId: string | null; ownerName: string | null; groups: QuoteGroup[] }
+): Promise<BatchRow[]> {
+  const app = await deps.getCapturedApplication();
+  const results: BatchRow[] = [];
+  if (!app?.quotes?.length) return results;
+  const groupOf = new Map(msg.groups.map(g => [g.lob, g]));
+  const selected = app.quotes.filter(q => q.selected && groupOf.has(q.lob));
+
+  // EZLynx-sourced: the precise importer path over the held rating run
+  const ez = selected.filter(q => q.provider === "EZLynx");
+  if (ez.length && app.dataService?.kind === "ezlynx") {
+    let quotingMethodId = await deps.getQuotingMethodId(env, "EZLynx");
+    if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "EZLynx");
+    const blockSelections: Record<string, import("@/crm/mapping").BlockSelection> = {};
+    for (const g of msg.groups) blockSelections[g.lob] = { opportunityId: g.opportunityId, lineOfBusinessId: g.lobId, desiredEffectiveDate: g.desiredEffectiveDate };
+    const carrierMap: Record<number, string | null> = {};
+    for (const q of ez) if (q.carrierRef) carrierMap[Number(q.carrierRef)] = q.carrierId;
+    const payload: import("@/crm/mapping").CommitPayload = {
+      run: app.dataService.run,
+      accountId: msg.accountId,
+      quotingMethodId,
+      blockSelections,
+      carrierMap,
+      selectedKeys: ez.map(q => q.key),
+      ownerId: msg.ownerId,
+      ownerName: msg.ownerName,
+      accountCreatedByPanel: msg.accountCreatedByPanel,
+      createdOpportunityIds: msg.groups.filter(g => g.created).map(g => g.opportunityId),
+      premiumStatusByKey: Object.fromEntries(ez.map(q => [q.key, q.premiumStatus]))
+    };
+    const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
+    const quoteResults = await deps.executeBatch(env, deps.buildQuoteOps(payload, existing));
+    results.push(...quoteResults.map(r => {
+      const q = ez.find(x => x.key === r.key);
+      return q ? { ...r, key: `Quote: ${q.carrierName} ${q.lob} ${q.premium != null ? `$${q.premium.toFixed(2)}` : ""} (${q.premiumStatus === "firm" ? "Firm" : "Estimated"})` } : r;
+    }));
+    try {
+      const idByKey = new Map(quoteResults.filter(r => r.entityId).map(r => [r.key, r.entityId!]));
+      const covTargets = [];
+      for (const block of payload.run.blocks) {
+        for (const q of block.quotes) {
+          const quoteId = idByKey.get(q.key);
+          if (quoteId) covTargets.push({ quote: q, quoteId });
+        }
+      }
+      if (covTargets.length) {
+        const cov = await writeCoverageLines(env, covTargets, {
+          getCoverageQuoteNavProp: deps.getCoverageQuoteNavProp,
+          getCoverageRowIds: deps.getCoverageRowIds,
+          executeBatch: deps.executeBatch
+        });
+        if (cov.linesWritten) results.push({ key: `Coverage detail: logged ${cov.linesWritten} lines across ${cov.quotesCovered} quotes`, status: 204, error: null, entityId: null });
+      }
+    } catch (e) {
+      results.push({ key: "Coverage detail", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
+    }
+    try {
+      const know = await writeQuestionKnowledge(env, payload.run, msg.accountId, {
+        getKnowledgeNavProps: deps.getKnowledgeNavProps,
+        executeBatch: deps.executeBatch,
+        query: deps.dvQuery
+      });
+      if (know.questionsUpserted || know.answersUpserted) {
+        results.push({ key: `Question knowledge: ${know.questionsUpserted} questions, ${know.answersUpserted} answers upserted`, status: 204, error: null, entityId: null });
+      }
+    } catch (e) {
+      results.push({ key: "Question knowledge", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
+    }
+  }
+
+  // portal-sourced: carrier-direct quotes, one per site and opportunity
+  for (const q of selected.filter(x => x.provider === "Portal")) {
+    const g = groupOf.get(q.lob)!;
+    try {
+      let quotingMethodId = await deps.getQuotingMethodId(env, "Carrier Direct");
+      if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "Carrier Direct");
+      const sourceUrl = q.link ?? app.source.url;
+      const ext = `${new URL(sourceUrl).hostname}:${g.opportunityId}`;
+      const keepFirm = (await deps.getExistingQuoteStatuses(env, [ext], "Portal")).get(ext) === 738590002;
+      const extra = await coercedExtras(deps, env, "quote", crmGroup(app, "crm:quote") ?? undefined);
+      const { quoteId } = await withExtrasFallback(extra, x => deps.createQuote(env, {
+        accountId: msg.accountId,
+        opportunityId: g.opportunityId,
+        carrierId: q.carrierId,
+        lobId: g.lobId,
+        name: `${q.carrierName} - ${msg.recordName}`,
+        premium: q.premium,
+        coverageSummary: q.coverageSummary,
+        effectiveDate: g.desiredEffectiveDate,
+        sourceUrl,
+        quotingMethodId,
+        premiumStatus: q.premiumStatus,
+        keepFirm
+      }, x));
+      results.push({ key: `Quote: ${q.carrierName} ${q.premium != null ? `$${q.premium.toFixed(2)}` : ""} (${q.premiumStatus === "firm" ? "Firm" : "Estimated"})`, status: 204, error: null, entityId: quoteId });
+      if (q.coverageLines.length) {
+        try {
+          await writeCoverageLines(env, [{ quote: { coverageLines: q.coverageLines } as import("@/types").CapturedQuote, quoteId }], {
+            getCoverageQuoteNavProp: deps.getCoverageQuoteNavProp,
+            getCoverageRowIds: deps.getCoverageRowIds,
+            executeBatch: deps.executeBatch
+          });
+        } catch { /* coverage depth is best-effort; the quote row stands */ }
+      }
+    } catch (e) {
+      results.push({ key: `Quote: ${q.carrierName}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+    }
+  }
+
+  // servicing agent owns what this load created and joins the team
+  if (msg.ownerId && msg.ownerName && selected.length) {
+    try {
+      const sv = await ensureServicingAssignment(env, {
+        accountId: msg.accountId,
+        ownerId: msg.ownerId,
+        ownerName: msg.ownerName,
+        accountCreatedByPanel: msg.accountCreatedByPanel,
+        createdOpportunityIds: msg.groups.filter(g => g.created).map(g => g.opportunityId)
+      }, {
+        assignOwner: deps.assignOwner,
+        hasServicingTeamMember: deps.hasServicingTeamMember,
+        createServicingTeamMember: deps.createServicingTeamMember
+      });
+      if (sv.ownersAssigned || sv.teamMemberCreated) {
+        results.push({ key: `Servicing: ${msg.ownerName}${sv.ownersAssigned ? ` owns ${sv.ownersAssigned} new record${sv.ownersAssigned === 1 ? "" : "s"}` : ""}${sv.teamMemberCreated ? ", added to the servicing team" : ""}`, status: 204, error: null, entityId: null });
+      }
+    } catch (e) {
+      results.push({ key: "Servicing assignment", status: 0, error: String((e as Error).message ?? e), entityId: null });
+    }
+  }
+  return results;
+}
+
 /** Raw captured column text for one record -> catalog-coerced values. Any
  * catalog failure yields no extras rather than failing the record. */
 async function coercedExtras(deps: Deps, env: CrmEnvironment, entityKey: string, raw: Record<string, string> | undefined): Promise<Record<string, unknown>> {
@@ -156,9 +370,22 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "env/list":
         return { ok: true, data: await deps.getEnvironments() };
 
-      case "env/setActive":
+      case "env/setActive": {
         await deps.setActiveEnvironment(msg.id);
+        // CRM carrier ids belong to one environment: re-match held quotes
+        // against the new org's remembered aliases (others cleared)
+        const app = await deps.getCapturedApplication();
+        if (app?.quotes?.length) {
+          const env = await deps.getActiveEnvironment();
+          const aliases = await deps.getCarrierAliases(env.orgUrl);
+          app.quotes = app.quotes.map(q => ({
+            ...q,
+            carrierId: q.provider === "EZLynx" && q.carrierRef ? aliases[Number(q.carrierRef)] ?? null : null
+          }));
+          await deps.setCapturedApplication(app);
+        }
         return { ok: true, data: null };
+      }
 
       case "panel/getEzlynxContext":
         return deps.sendToEzlynxTab({ type: "ezlynx/getContext" });
@@ -427,6 +654,10 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: null };
 
       case "panel/portalIngest": {
+        // EZLynx is a DATA-SERVICE source: same intake, exact data (applicant
+        // + rating run from its own service), routed by Settings mappings
+        const tab = await chrome.tabs.get(msg.tabId).catch(() => null);
+        if (tab?.url && /^https:\/\/app\.ezlynx\.com\//i.test(tab.url)) return await ingestEzlynx(deps, tab.url);
         const harvested = await deps.ingestPortalTab(msg.tabId);
         const existing = await deps.getCapturedApplication();
         const outcome = mergeIngestedFields(existing, harvested.fields, {
@@ -434,9 +665,31 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           url: harvested.url,
           title: harvested.title
         });
+        // a portal page showing a quoted premium holds it as a quote too
+        const held = portalHeldQuote(outcome.app);
+        if (held) outcome.app.quotes = mergeHeldQuotes(outcome.app.quotes, [held]);
         await deps.setCapturedApplication(outcome.app);
         if (outcome.replaced) await chrome.storage.session.remove("bp/crmLink");
         return { ok: true, data: outcome };
+      }
+
+      case "panel/updateQuote": {
+        const app = await deps.getCapturedApplication();
+        const quote = app?.quotes?.find(q => q.key === msg.key);
+        if (!app || !quote) return { ok: false, error: "That quote is no longer held. Ingest the page again.", kind: "session" };
+        Object.assign(quote, msg.patch);
+        await deps.setCapturedApplication(app);
+        // a carrier chosen for an EZLynx quote is remembered for that carrier
+        if (msg.patch.carrierId && quote.provider === "EZLynx" && quote.carrierRef) {
+          const env = await deps.getActiveEnvironment();
+          await deps.saveCarrierAlias(env.orgUrl, Number(quote.carrierRef), msg.patch.carrierId);
+        }
+        return { ok: true, data: app };
+      }
+
+      case "panel/writeQuotes": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await writeHeldQuotes(deps, env, msg) };
       }
 
       case "panel/appCommit": {

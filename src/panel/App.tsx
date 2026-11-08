@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, makeStyles, tokens } from "@fluentui/react-components";
 import { HomeRegular } from "@fluentui/react-icons";
-import { useImportState } from "./state";
 import { EnvBadge } from "./EnvBadge";
 import { MappingsManager } from "./MappingsManager";
-import { RunPicker } from "./steps/RunPicker";
-import { AccountMatch } from "./steps/AccountMatch";
-import { OpportunityPin } from "./steps/OpportunityPin";
-import { CarrierMap } from "./steps/CarrierMap";
-import { ReviewCommit } from "./steps/ReviewCommit";
 import { CommercialCapture } from "./steps/CommercialCapture";
 import { PortalFill } from "./steps/PortalFill";
 import { send } from "./api";
@@ -41,12 +35,13 @@ const useStyles = makeStyles({
 
 export function App() {
   const styles = useStyles();
-  const [state, dispatch] = useImportState();
   const [page, setPage] = useState<PageContext | null>(null);
+  // an environment switch re-matches held quotes' carriers: remount intake
+  const [envNonce, setEnvNonce] = useState(0);
 
-  // The panel's mode follows the ACTIVE tab: EZLynx -> personal-lines wizard,
-  // Bold Penguin -> commercial capture, anything else with a captured
-  // application -> portal fill. Re-query on tab switches and navigations.
+  // The panel's mode follows the ACTIVE tab: Bold Penguin -> commercial
+  // capture; every other work site (carrier portals, AMS pages, EZLynx via
+  // its data service) -> the shared intake. Re-query on tab switches.
   const refreshPage = useCallback(() => {
     send<PageContext>({ type: "panel/getPageContext" })
       .then(setPage)
@@ -67,43 +62,21 @@ export function App() {
     };
   }, [refreshPage]);
 
-  // The portal card (ingest/fill) only offers itself while the personal-lines
-  // wizard is idle - glancing at another tab mid-import must not hide the
-  // in-progress wizard. CRM and sign-in tabs never present as portals.
-  const wizardIdle = state.step === "run" && !state.captured;
-  // The rater import wizard is one source among many: it shows on its own
-  // site, or while an import is in progress. Every other tab gets its own
-  // intake, and tabs with nothing to work on (CRM, Settings, edge://) say so
-  // instead of falling back to a rater-specific screen.
-  const rawMode: "commercial" | "portal" | "personal" | "idle" =
-    !wizardIdle || page?.kind === "ezlynx" ? "personal" :
+  // One intake for every source; tabs with nothing to work on (CRM,
+  // Settings, edge://) say so.
+  const rawMode: "commercial" | "portal" | "idle" =
     page?.kind === "boldpenguin" ? "commercial" :
-    page?.kind === "other" ? "portal" :
+    page?.kind === "other" || page?.kind === "ezlynx" ? "portal" :
     "idle";
 
   // While a CRM load / fill flow is active, the mode is PINNED: the
   // interactive sign-in popup (login.microsoftonline.com) briefly becomes the
   // active tab, and following it would unmount the in-flight flow and dump
-  // the user into the EZLynx wizard mid-commit.
+  // the user onto another screen mid-commit.
   const [flowActive, setFlowActive] = useState(false);
   const [showMappings, setShowMappings] = useState(false);  const lastModeRef = useRef(rawMode);
   const mode = flowActive ? lastModeRef.current : rawMode;
   lastModeRef.current = mode;
-
-  // The EZLynx content script broadcasts SPA navigations to a different
-  // applicant; restart the wizard against them (stale captures cross-wire
-  // customers). Key on RunPicker below forces a remount + fresh run list.
-  useEffect(() => {
-    const onMessage = (msg: unknown) => {
-      const m = msg as { type?: string; applicantId?: number | null };
-      if (m.type === "ezlynx/applicantChanged") {
-        dispatch({ t: "applicantChanged", applicantId: m.applicantId ?? null });
-      }
-    };
-    chrome.runtime.onMessage.addListener(onMessage);
-    return () => chrome.runtime.onMessage.removeListener(onMessage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className={styles.root}>
@@ -122,7 +95,7 @@ export function App() {
             aria-label="Home"
             onClick={() => { setShowMappings(false); refreshPage(); }}
           />
-          <EnvBadge dispatch={dispatch} onOpenMappings={() => setShowMappings(true)} />
+          <EnvBadge onOpenMappings={() => setShowMappings(true)} onEnvChanged={() => setEnvNonce(n => n + 1)} />
         </div>
       </div>
       <div className={styles.body}>
@@ -132,18 +105,7 @@ export function App() {
           <div style={{ fontSize: "12px", color: tokens.colorNeutralForeground3 }}>Nothing to work on in this tab.</div>
         )}
         {mode === "commercial" && <CommercialCapture onChanged={refreshPage} onFlowActive={setFlowActive} />}
-        {mode === "portal" && <PortalFill onChanged={refreshPage} onFlowActive={setFlowActive} />}
-        {mode === "personal" && <>
-        {state.step === "run" && (
-          <RunPicker key={state.ezlynxApplicantId ?? "none"} state={state} dispatch={dispatch} />
-        )}
-        {state.step === "account" && <AccountMatch state={state} dispatch={dispatch} />}
-        {state.step === "opportunities" && <OpportunityPin state={state} dispatch={dispatch} />}
-        {state.step === "carriers" && <CarrierMap state={state} dispatch={dispatch} />}
-        {(state.step === "review" || state.step === "done") && (
-          <ReviewCommit state={state} dispatch={dispatch} />
-        )}
-        </>}
+        {mode === "portal" && <PortalFill key={envNonce} onChanged={refreshPage} onFlowActive={setFlowActive} />}
         </>}
       </div>
     </div>

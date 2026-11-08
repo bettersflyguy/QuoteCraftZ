@@ -21,6 +21,8 @@ export interface CommitPayload {
   accountCreatedByPanel: boolean;
   /** opportunity ids THIS import created (owner assignment follows) */
   createdOpportunityIds: string[];
+  /** The agent's Firm/Estimated choice per quote key (absent = Estimated). */
+  premiumStatusByKey?: Record<string, "estimated" | "firm">;
 }
 
 const TERM_CHOICE: Record<number, number> = { 6: 738590203, 12: 738590205 };
@@ -87,8 +89,11 @@ export function buildQuoteOps(
         "iacrm_OpportunityId@odata.bind": `/opportunities(${sel.opportunityId})`
       };
 
-      // Estimated always; NEVER downgrade an agent's Firm (spec invariant)
-      if (existingStatuses.get(q.key) !== PREMIUM_STATUS_FIRM) {
+      // the agent's Firm is written; Estimated NEVER downgrades a Firm the
+      // agent already set in CRM (spec invariant)
+      if (payload.premiumStatusByKey?.[q.key] === "firm") {
+        body["iacrm_premium_status"] = PREMIUM_STATUS_FIRM;
+      } else if (existingStatuses.get(q.key) !== PREMIUM_STATUS_FIRM) {
         body["iacrm_premium_status"] = PREMIUM_STATUS_ESTIMATED;
       }
 

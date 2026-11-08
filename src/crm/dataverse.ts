@@ -234,6 +234,10 @@ export interface NewQuoteFields {
   quotingMethodId: string | null;
   /** Captured CRM-column values (raw text) - coerced worker-side; explicit fields win. */
   extra?: Record<string, string>;
+  /** The agent's choice; Firm is written, Estimated never downgrades a Firm
+   * already on the quote (the caller passes keepFirm when it is). */
+  premiumStatus?: "estimated" | "firm";
+  keepFirm?: boolean;
 }
 
 /** Upserts a portal-captured quote onto the opportunity - provider "Portal",
@@ -250,7 +254,8 @@ export async function createQuote(env: CrmEnvironment, f: NewQuoteFields, extra:
     iacrm_provider: "Portal",
     iacrm_amsexternalid: `${host}:${f.opportunityId}`,
     iacrm_status: 738590002,          // Quote Received
-    iacrm_premium_status: 738590000,  // Estimated
+    // Firm 738590002 / Estimated 738590000; an existing Firm is never downgraded
+    ...(f.premiumStatus === "firm" ? { iacrm_premium_status: 738590002 } : f.keepFirm ? {} : { iacrm_premium_status: 738590000 }),
     iacrm_coveragelimitsummary: f.coverageSummary.slice(0, 4000),
     iacrm_quotelink: f.sourceUrl.slice(0, 500),
     "iacrm_AccountId@odata.bind": `/accounts(${f.accountId})`,
@@ -767,10 +772,10 @@ export async function createQuotingMethod(env: CrmEnvironment, name: string): Pr
   return r["iacrm_quotingmethodid"]!;
 }
 
-export async function getExistingQuoteStatuses(env: CrmEnvironment, keys: string[]): Promise<Map<string, number>> {
+export async function getExistingQuoteStatuses(env: CrmEnvironment, keys: string[], provider: "EZLynx" | "Portal" = "EZLynx"): Promise<Map<string, number>> {
   if (!keys.length) return new Map();
   const ors = keys.map(k => `iacrm_amsexternalid eq '${esc(k)}'`).join(" or ");
-  const q = `iacrm_quotes?$select=iacrm_amsexternalid,iacrm_premium_status&$filter=iacrm_provider eq 'EZLynx' and (${ors})`;
+  const q = `iacrm_quotes?$select=iacrm_amsexternalid,iacrm_premium_status&$filter=iacrm_provider eq '${provider}' and (${ors})`;
   const { value } = await dvJson<{ value: { iacrm_amsexternalid: string; iacrm_premium_status: number | null }[] }>(env, q);
   return new Map(value.filter(v => v.iacrm_premium_status != null).map(v => [v.iacrm_amsexternalid, v.iacrm_premium_status!]));
 }

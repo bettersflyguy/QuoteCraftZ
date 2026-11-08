@@ -9,7 +9,7 @@ export interface CapturedAppField {
   name?: string;
   section: string;
   group: string;
-  source: "control" | "choice-group" | "definition-list" | "table" | "review-row" | "entity-card" | "money-line" | "sale" | "taught";
+  source: "control" | "choice-group" | "definition-list" | "table" | "review-row" | "entity-card" | "money-line" | "sale" | "taught" | "dataservice";
   /** Explicit rule path for agent-taught captures ("contact2.email") - the
    * normalizer routes it directly, bypassing label-alias scoring, so entity
    * slots with identical-looking values (account email vs contact 2 email)
@@ -30,6 +30,43 @@ export interface CapturedApplication {
   scannedSections: string[];
   normalized: NormalizedApplication;
   fields: CapturedAppField[];
+  /** Quotes held for import, from any source (EZLynx data service, a
+   * carrier portal's quote page). The agent selects them, maps carriers and
+   * sets Firm/Estimated before loading. */
+  quotes?: HeldQuote[];
+  /** Carriers that returned no quote ("Carrier Abort: product unavailable"). */
+  quoteIssues?: { lob: string; carrierName: string; message: string }[];
+  /** The exact rating run behind EZLynx-sourced quotes: the load writes
+   * them precisely (alt keys, coverage lines, carrier Q&A, license data). */
+  dataService?: { kind: "ezlynx"; run: import("@/types").CapturedRun };
+}
+
+export type PremiumStatus = "estimated" | "firm";
+
+export interface HeldQuote {
+  /** Stable identity: "ezlynx:{execId}:req|alt{n}" or "portal:{host}". */
+  key: string;
+  provider: "EZLynx" | "Portal";
+  /** Where it came from, for display ("EZLynx", "express.nationwide.com"). */
+  source: string;
+  /** Line of business as the source names it ("Home", "Auto"; "" unknown). */
+  lob: string;
+  carrierName: string;
+  /** Source's own carrier id (EZLynx), for remembered carrier aliases. */
+  carrierRef: string | null;
+  /** CRM carrier chosen for this quote (environment-specific). */
+  carrierId: string | null;
+  kind: "requested" | "alternate";
+  quoteNumber: string | null;
+  premium: number | null;
+  termMonths: number | null;
+  /** EZLynx only ever returns estimates; bindable raters return firm. Set by
+   * the agent before importing. */
+  premiumStatus: PremiumStatus;
+  coverageSummary: string;
+  coverageLines: { code: string; label: string; limitText: string }[];
+  link: string | null;
+  selected: boolean;
 }
 
 export interface PortalFillResult {

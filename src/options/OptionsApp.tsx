@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { DataServicesSection } from "./DataServicesSection";
 import {
   Button,
   Input,
@@ -348,6 +349,7 @@ export function OptionsApp() {
       </Text>
 
       <FieldMapsSection />
+      <DataServicesSection />
     </div>
   );
 }

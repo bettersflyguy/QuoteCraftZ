@@ -13,7 +13,7 @@ type OptionGroup = { group: string; paths: { path: string; label: string }[] };
  * hierarchy order) plus the semantic risk-data groups that have no CRM table
  * (building, payroll, vehicles). Without a catalog (not signed in), the
  * built-in semantic vocabulary stands in. */
-function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
+export function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
   const riskData = MAP_PATH_GROUPS.filter(g => /risk data/.test(g.group));
   if (!catalog?.entities.length) return MAP_PATH_GROUPS;
   const crm = catalog.entities.map(e => ({

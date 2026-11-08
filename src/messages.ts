@@ -37,7 +37,8 @@ export interface CaptureUpdatedBroadcast {
 export type BridgeRequest =
   | { type: "ezlynx/getContext" }
   | { type: "ezlynx/listRuns"; applicantId: number }
-  | { type: "ezlynx/captureRun"; applicantId: number; run: RunListItem };
+  | { type: "ezlynx/captureRun"; applicantId: number; run: RunListItem }
+  | { type: "ezlynx/getApplicant"; applicantId: number };
 
 export type PanelRequest =
   | { type: "panel/getEzlynxContext" }
@@ -60,6 +61,18 @@ export type PanelRequest =
   /** items null clears the highlights. */
   | { type: "panel/portalPeek"; tabId: number; items: import("@/boldpenguin/types").PeekItem[] | null }
   | { type: "panel/portalPeekUnmapped"; tabId: number; on: boolean }
+  /** Edits a held quote: include/exclude, CRM carrier, Firm/Estimated. */
+  | { type: "panel/updateQuote"; key: string; patch: { selected?: boolean; carrierId?: string | null; premiumStatus?: "estimated" | "firm" } }
+  /** Writes the selected held quotes onto their per-LOB opportunities. */
+  | {
+      type: "panel/writeQuotes";
+      accountId: string;
+      recordName: string;
+      accountCreatedByPanel: boolean;
+      ownerId: string | null;
+      ownerName: string | null;
+      groups: { lob: string; opportunityId: string; lobId: string | null; desiredEffectiveDate: string | null; created: boolean }[];
+    }
   | { type: "panel/saveFieldMap"; origin: string; map: Record<string, string> }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }

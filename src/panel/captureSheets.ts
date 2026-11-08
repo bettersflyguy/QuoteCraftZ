@@ -44,6 +44,17 @@ export function captureSheets(app: CapturedApplication): Sheet[] {
   for (const t of arrayTables(regular)) {
     sheets.push({ name: t.title, columns: t.columns, rows: t.rows.map(r => t.columns.map(c => r[c] ?? "")) });
   }
+  if (app.quotes?.length) {
+    sheets.push({
+      name: "Quotes",
+      columns: ["Line of business", "Carrier", "Kind", "Premium", "Term (months)", "Premium status", "Included", "Source", "Coverage"],
+      rows: app.quotes.map(q => [
+        q.lob, q.carrierName, q.kind === "alternate" ? "Alternate" : "Requested",
+        q.premium != null ? q.premium.toFixed(2) : "", q.termMonths != null ? String(q.termMonths) : "",
+        q.premiumStatus === "firm" ? "Firm" : "Estimated", q.selected ? "Yes" : "No", q.source, q.coverageSummary
+      ])
+    });
+  }
   const noteSingles = notes.filter(f => !isGridRow(f));
   if (noteSingles.length) {
     sheets.push({ name: "Timeline Notes", columns: ["Record", "Section", "Field", "Value"], rows: noteSingles.map(f => [recordLabel(f.mapped), f.section, f.label, f.value]) });

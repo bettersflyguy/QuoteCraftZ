@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
-import { Button, Checkbox, Input, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
+import { Button, Checkbox, Input, Spinner, Tab, TabList, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { grantActiveTab } from "../portalAccess";
@@ -7,6 +7,7 @@ import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
+import { QuotesView } from "../QuotesView";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { isGridRow } from "@/boldpenguin/normalize";
@@ -133,6 +134,8 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const [autoCap, setAutoCap] = useState(false);
   const [live, setLive] = useState<CaptureUpdatedBroadcast | null>(null);
   const [crmOpen, setCrmOpen] = useState(false);
+  // move between the captured data and the quotes held for import
+  const [view, setView] = useState<"data" | "quotes">("data");
   // "peek unmapped": red outlines on the page for what no mapping covers
   const [peekUnmapped, setPeekUnmapped] = useState(false);
   const [peekCount, setPeekCount] = useState<number | null>(null);
@@ -413,8 +416,14 @@ export function PortalFill({ onChanged, onFlowActive }: {
       {crmNote && <div className={styles.result}>{crmNote}</div>}
       {autoCap && live?.replaced && (
         <div className={styles.result}>New person detected. Started a fresh capture.</div>
+      )}      {app && (
+        <TabList size="small" selectedValue={view} onTabSelect={(_, d) => setView(d.value as "data" | "quotes")}>
+          <Tab value="data">Data ({app.fields.length})</Tab>
+          <Tab value="quotes">Quotes ({(app.quotes ?? []).length})</Tab>
+        </TabList>
       )}
-      {app && regular.some(f => !isGridRow(f)) && (
+      {app && view === "quotes" && <QuotesView app={app} onChange={setApp} />}
+      {app && view === "data" && regular.some(f => !isGridRow(f)) && (
         <div className={styles.grid}>
           <table className={styles.table}>
             <colgroup><col style={{ width: "42%" }} /><col /></colgroup>
@@ -451,8 +460,8 @@ export function PortalFill({ onChanged, onFlowActive }: {
           </table>
         </div>
       )}
-      {app && gridTables(regular).map(renderGrid)}
-      {app && noteFields.length > 0 && (
+      {app && view === "data" && gridTables(regular).map(renderGrid)}
+      {app && view === "data" && noteFields.length > 0 && (
         <div className={styles.notesBlock}>
           <div className={styles.notesTitle}><NotepadRegular /> Non Mapped Timeline Entries</div>
           {NOTE_TARGETS.filter(t => noteFields.some(f => f.mapped === t.value)).map(t => {

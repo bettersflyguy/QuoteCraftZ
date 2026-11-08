@@ -1,4 +1,4 @@
-import { fetchRunList, fetchCapturedRun, applicantIdFromUrl, EzlynxSessionError } from "./client";
+import { fetchApplicant, fetchRunList, fetchCapturedRun, applicantIdFromUrl, EzlynxSessionError } from "./client";
 import { NormalizeError } from "./normalize";
 import type { ApplicantChangedBroadcast, BridgeRequest, Res } from "@/messages";
 
@@ -18,6 +18,8 @@ if (!ezAlreadyLoaded) chrome.runtime.onMessage.addListener((msg: BridgeRequest, 
           return sendResponse({ ok: true, data: await fetchRunList(msg.applicantId) });
         case "ezlynx/captureRun":
           return sendResponse({ ok: true, data: await fetchCapturedRun(msg.applicantId, msg.run) });
+        case "ezlynx/getApplicant":
+          return sendResponse({ ok: true, data: await fetchApplicant(msg.applicantId) });
         default:
           return sendResponse({ ok: false, error: `unknown bridge message: ${(msg as { type: string }).type}`, kind: "unknown" });
       }

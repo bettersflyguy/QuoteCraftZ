@@ -16,6 +16,11 @@ async function getJson(url: string, fetcher: Fetcher): Promise<unknown> {
   return res.json();
 }
 
+/** The applicant alone (an applicant with no rating run yet). */
+export async function fetchApplicant(applicantId: number, fetcher: Fetcher = defaultFetcher): Promise<import("@/types").CapturedApplicant> {
+  return normalizeApplicant(await getJson(endpoints.applicant.replace("{applicantId}", String(applicantId)), fetcher));
+}
+
 export async function fetchRunList(applicantId: number, fetcher: Fetcher = defaultFetcher): Promise<RunListItem[]> {
   const url = endpoints.recentQuotes.replace("{applicantId}", String(applicantId));
   return normalizeRunList(await getJson(url, fetcher));
