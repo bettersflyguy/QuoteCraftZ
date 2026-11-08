@@ -9,10 +9,11 @@ import {
   Text,
   MessageBar,
   MessageBarBody,
+  Tooltip,
   makeStyles,
   tokens
 } from "@fluentui/react-components";
-import { DeleteRegular, AddRegular } from "@fluentui/react-icons";
+import { DeleteRegular, AddRegular, ArrowDownloadRegular, ArrowUploadRegular } from "@fluentui/react-icons";
 import {
   getEnvironments,
   saveEnvironments,
@@ -21,6 +22,7 @@ import {
   type CrmEnvironment
 } from "@/crm/environments";
 import {
+  FIELDMAP_STORAGE_KEY,
   getAllFieldMaps,
   setAllFieldMaps,
   buildFieldMapExport,
@@ -42,15 +44,35 @@ function FieldMapsSection() {
 
   const origins = Object.keys(maps).sort();
 
-  const exportMaps = () => {
-    const blob = new Blob([JSON.stringify(buildFieldMapExport(maps), null, 2)], { type: "application/json" });
+  /** Share file for every site, or just one ("www8.nowcerts.com"). */
+  const exportMaps = (only?: string) => {
+    const subset = only ? { [only]: maps[only]! } : maps;
+    const blob = new Blob([JSON.stringify(buildFieldMapExport(subset), null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `quotecraftz-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
+    const tag = only ? `${new URL(only).hostname}-` : "";
+    a.download = `quotecraftz-field-mappings-${tag}${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const pickImportFile = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = () => { const f = input.files?.[0]; if (f) void importMaps(f); };
+    input.click();
+  };
+
+  // the panel teaches/removes sites while this page is open
+  useEffect(() => {
+    const onChanged = (changes: Record<string, unknown>, area: string) => {
+      if (area === "local" && FIELDMAP_STORAGE_KEY in changes) refresh();
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
 
   const applyImport = async (parsed: FieldMapImport) => {
     const merged = { ...await getAllFieldMaps() };
@@ -87,29 +109,32 @@ function FieldMapsSection() {
 
   return (
     <div style={{ marginTop: 32 }}>
-      <Text as="h2" size={500} weight="semibold" block>Pages Mapped</Text>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Text as="h2" size={500} weight="semibold">Pages Mapped</Text>
+        <Tooltip content="Import mappings from a share file" relationship="label" withArrow>
+          <Button size="small" icon={<ArrowUploadRegular />} onClick={pickImportFile} />
+        </Tooltip>
+        {origins.length > 1 && (
+          <Tooltip content="Export every site's mappings" relationship="label" withArrow>
+            <Button size="small" icon={<ArrowDownloadRegular />} onClick={() => exportMaps()} />
+          </Tooltip>
+        )}
+      </div>
       {origins.length === 0
         ? <Text block style={{ marginTop: 12 }}>No saved mappings yet.</Text>
         : origins.map(origin => (
-            <div key={origin} style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+            <div key={origin} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
               <Text style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                 {origin}: {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
               </Text>
-              <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} title="Remove this site's mapping" />
+              <Tooltip content="Export this site's mappings" relationship="label" withArrow>
+                <Button size="small" icon={<ArrowDownloadRegular />} onClick={() => exportMaps(origin)} />
+              </Tooltip>
+              <Tooltip content="Remove this site's mapping" relationship="label" withArrow>
+                <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} />
+              </Tooltip>
             </div>
           ))}
-      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        <Button onClick={exportMaps} disabled={origins.length === 0}>Export mappings…</Button>
-        <Button onClick={() => {
-          const input = document.createElement("input");
-          input.type = "file";
-          input.accept = "application/json,.json";
-          input.onchange = () => { const f = input.files?.[0]; if (f) void importMaps(f); };
-          input.click();
-        }}>
-          Import mappings…
-        </Button>
-      </div>
       {pendingImport && (
         <MessageBar intent="warning" style={{ marginTop: 12 }}>
           <MessageBarBody>

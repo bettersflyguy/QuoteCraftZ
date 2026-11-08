@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
-import { DeleteRegular } from "@fluentui/react-icons";
+import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
+import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { FIELDMAP_STORAGE_KEY, getAllFieldMaps, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
 import { grantActiveTab } from "./portalAccess";
@@ -19,9 +19,10 @@ const useStyles = makeStyles({
   }
 });
 
-/** In-panel "Pages Mapped": list/remove mapped sites and teach the current
- * page. Sharing (export/import) lives on the Settings page. */
-export function MappingsManager({ onClose }: { onClose: () => void }) {
+/** In-panel Mappings view: the current page plus every mapped site, each
+ * with its actions inline. Sharing (export/import) lives on Settings; the
+ * header's Home button returns to intake. */
+export function MappingsManager() {
   const styles = useStyles();
   const [maps, setMaps] = useState<FieldMaps>({});
   const [note, setNote] = useState<string | null>(null);
@@ -43,7 +44,29 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
-  const origins = Object.keys(maps).sort();
+  // the page the agent is on always gets a row (mapped or not), first
+  const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => {
+      void chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
+        const url = tab?.url ?? "";
+        setCurrentOrigin(/^https:\/\//i.test(url) ? new URL(url).origin : null);
+      }).catch(() => setCurrentOrigin(null));
+    };
+    read();
+    const onActivated = () => read();
+    const onUpdated = (_id: number, info: { url?: string }) => { if (info.url) read(); };
+    chrome.tabs.onActivated.addListener(onActivated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    return () => {
+      chrome.tabs.onActivated.removeListener(onActivated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+    };
+  }, []);
+  const rowOrigins = [
+    ...(currentOrigin ? [currentOrigin] : []),
+    ...Object.keys(maps).sort().filter(o => o !== currentOrigin)
+  ];
 
   // works from ANY tab (EZLynx, CRM, carrier portals alike): scans whatever
   // page is open and teaches its fields
@@ -95,15 +118,33 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
 
   return (
     <div className={styles.root}>
-      <Text weight="semibold">Pages Mapped</Text>
-      {origins.map(origin => (
-            <div key={origin} className={styles.row}>
-              <Text size={200} className={styles.origin}>
-                {origin}: {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
-              </Text>
-              <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} title="Remove this site's mapping" />
-            </div>
-          ))}
+      {rowOrigins.map(origin => {
+        const count = maps[origin] ? Object.keys(maps[origin]!).length : 0;
+        const here = origin === currentOrigin;
+        return (
+          <div key={origin} className={styles.row}>
+            <Text size={200} className={styles.origin} weight={here ? "semibold" : "regular"}>
+              {origin}: {count ? `${count} field${count === 1 ? "" : "s"}` : "not mapped"}
+            </Text>
+            {here && (
+              <Tooltip content={count ? "Edit this page's mapping" : "Map this page"} relationship="label" withArrow>
+                <Button
+                  size="small"
+                  appearance={scan ? "primary" : "secondary"}
+                  icon={busy === "scan" ? <Spinner size="tiny" /> : <EditRegular />}
+                  disabledFocusable={busy !== null}
+                  onClick={busy !== null ? undefined : mapThisPage}
+                />
+              </Tooltip>
+            )}
+            {count > 0 && (
+              <Tooltip content="Remove this site's mapping" relationship="label" withArrow>
+                <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} />
+              </Tooltip>
+            )}
+          </div>
+        );
+      })}
       {awaiting && (
         <Text size={200} weight="semibold">
           Waiting for browser approval to access {awaiting}. Click Allow on the permission prompt
@@ -130,12 +171,6 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
             : items => send<PeekResult>({ type: "panel/portalPeek", tabId: scanTabId, items })}
         />
       )}
-      <div className={styles.row}>
-        <Button size="small" appearance="primary" disabled={busy !== null} onClick={mapThisPage}>
-          {busy === "scan" ? <Spinner size="tiny" /> : "Map this page…"}
-        </Button>
-        <Button size="small" appearance="primary" onClick={onClose}>Done</Button>
-      </div>
       {note && <div className={styles.note}>{note}</div>}
       {problem && <div className={styles.note}>{problem}</div>}
     </div>

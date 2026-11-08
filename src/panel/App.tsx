@@ -105,7 +105,10 @@ export function App() {
       <div className={styles.header}>
         {/* the browser's own side-panel header already shows the name
             (manifest), so this strip carries only the logo and controls */}
-        <img className={styles.logo} src="/icons/32.png" alt="QuoteCraftZ" title="QuoteCraftZ" />
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+          <img className={styles.logo} src="/icons/32.png" alt="QuoteCraftZ" title="QuoteCraftZ" />
+          <span style={{ fontSize: "13px", fontWeight: 600 }}>{showMappings ? "Mappings" : "Intake"}</span>
+        </div>
         <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
           <Button
             appearance="subtle"
@@ -118,7 +121,7 @@ export function App() {
         </div>
       </div>
       <div className={styles.body}>
-        {showMappings && <MappingsManager onClose={() => setShowMappings(false)} />}
+        {showMappings && <MappingsManager />}
         {!showMappings && <>
         {mode === "commercial" && <CommercialCapture onChanged={refreshPage} onFlowActive={setFlowActive} />}
         {mode === "portal" && <PortalFill onChanged={refreshPage} onFlowActive={setFlowActive} />}
