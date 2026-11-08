@@ -128,8 +128,13 @@ export function parseFieldMapImport(text: string): FieldMapImport {
     for (const [key, path] of Object.entries(entries as Record<string, unknown>)) {
       const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path) &&
         !isSensitiveLabel(path.slice(6));
-      if (typeof key !== "string" || !key || key.length > 200 ||
-          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path))) {
+      // "pick:<selector>" keys teach read-only-text CAPTURE: selectors run
+      // deeper than control keys (hence the longer cap) and may only target
+      // known CRM fields — a "label:" target would invert the data direction
+      const pickKey = typeof key === "string" && key.startsWith("pick:");
+      if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
+          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path)) ||
+          (pickKey && path !== "skip" && !PATH_LABEL.has(path))) {
         dropped += 1;
         continue;
       }

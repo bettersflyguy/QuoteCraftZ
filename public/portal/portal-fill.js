@@ -445,6 +445,19 @@
         mapped: typeof ov[key] === "string" ? ov[key] : null
       });
     }
+    /* saved read-only-text teachings ("pick:<selector>" -> CRM field) show as
+     * rows too, so a revisit can review/retarget/clear them */
+    for (const key of Object.keys(ov)) {
+      if (key.indexOf("pick:") !== 0 || seen.has(key)) continue;
+      seen.add(key);
+      let el = null;
+      try { el = document.querySelector(key.slice(5)); } catch (_e) { /* stale selector */ }
+      const snippet = el ? clean(el.innerText).slice(0, 60) : "";
+      const label = el
+        ? (inferTextLabel(el) ? inferTextLabel(el) + " — " : "") + (snippet || "(empty)")
+        : "(taught text — not on this page)";
+      rows.push({ key, label, type: "text", payment: false, autoPath: null, mapped: typeof ov[key] === "string" ? ov[key] : null });
+    }
     return rows;
   }
 
@@ -471,6 +484,73 @@
 
   var PICK_STOP = { form: 1, table: 1, tbody: 1, main: 1, section: 1, body: 1, html: 1 };
 
+  /* --- read-only text picking: source pages (AMS/CRM details views) render
+   * values as plain text, not controls. A clicked text leaf is teachable as
+   * "always capture this element's text as <CRM field>" --- */
+
+  function textPickable(node) {
+    if (!node || node.nodeType !== 1 || !node.tagName) return null;
+    var tag = node.tagName.toLowerCase();
+    if (["script", "style", "svg", "path", "input", "select", "textarea", "button", "iframe", "body", "html"].indexOf(tag) !== -1) return null;
+    if (node.children.length > 3) return null;
+    var t = clean(node.innerText || "");
+    if (!t || t.length > 300) return null;
+    return node;
+  }
+
+  /* stable-enough re-locator: tag:nth-of-type chain up to the nearest id'd
+   * ancestor (ASP.NET/NowCerts ids are stable) or the body */
+  function cssPath(el) {
+    var parts = [];
+    var n = el;
+    while (n && n.nodeType === 1 && n.tagName.toLowerCase() !== "html") {
+      if (n.id) {
+        parts.unshift("#" + (window.CSS && CSS.escape ? CSS.escape(n.id) : n.id.replace(/[^a-zA-Z0-9_-]/g, "\\$&")));
+        return parts.join(" > ");
+      }
+      var tag = n.tagName.toLowerCase();
+      var parent = n.parentElement;
+      var idx = 1;
+      if (parent) {
+        var sibs = Array.prototype.filter.call(parent.children, function (s) { return s.tagName === n.tagName; });
+        idx = Array.prototype.indexOf.call(sibs, n) + 1;
+      }
+      parts.unshift(tag + ":nth-of-type(" + idx + ")");
+      n = parent;
+    }
+    return parts.join(" > ");
+  }
+
+  /* best-effort label for a text value: its table row/column header, a
+   * preceding bold/label sibling, or aria metadata */
+  function inferTextLabel(el) {
+    var cell = el.closest ? el.closest("td") : null;
+    if (cell) {
+      var row = cell.parentElement;
+      var table = cell.closest("table");
+      if (row && row.children.length === 2 && row.children[1] === cell) {
+        var left = clean(row.children[0].innerText).replace(/[:*]+$/, "");
+        if (left && left.length <= 60) return left;
+      }
+      if (table && row) {
+        var head = table.querySelector("tr");
+        var idx = Array.prototype.indexOf.call(row.children, cell);
+        if (head && head !== row && head.children[idx] && /^th$/i.test(head.children[idx].tagName)) {
+          var h = clean(head.children[idx].innerText);
+          if (h && h.length <= 60) return h;
+        }
+      }
+    }
+    var prev = el.previousElementSibling;
+    if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV)$/.test(prev.tagName)) {
+      var p = clean(prev.innerText).replace(/[:*]+$/, "");
+      if (p && p.length <= 60 && p !== clean(el.innerText)) return p;
+    }
+    var aria = el.getAttribute && (el.getAttribute("aria-label") || el.getAttribute("title"));
+    if (aria && clean(aria).length <= 60) return clean(aria);
+    return "";
+  }
+
   /* composedPath reaches inside shadow roots (web-component carrier pages),
    * so a pick can identify fields the flat query scan cannot see. Returns
    * { control, box }: box is the element to outline — for composite widgets
@@ -488,11 +568,20 @@
       var node = path[i];
       if (!node || !node.tagName || !node.querySelectorAll) continue;
       if (PICK_STOP[node.tagName.toLowerCase()]) break;
+      /* visible controls only: a CSS-hidden input near the click (collapsed
+       * inline-edit boxes on AMS pages) can't be scanned or filled, so it
+       * must lose to the text fallback below */
       var inner = Array.prototype.filter.call(
         node.querySelectorAll("input, select, textarea"),
-        function (c) { return pickable(c); }
+        function (c) { return pickable(c) && visible(c); }
       );
       if (inner.length >= 1 && inner.length <= 3) return { control: inner[0], box: node };
+    }
+    /* no control anywhere near — read-only text (AMS details pages):
+     * teachable as a capture source */
+    for (i = 0; i < path.length; i += 1) {
+      var textEl = textPickable(path[i]);
+      if (textEl) return { control: null, textEl: textEl, box: textEl };
     }
     return null;
   }
@@ -555,18 +644,34 @@
       function onClick(event) {
         var t = pickTarget(event);
         if (!t) return;
-        var el = t.control;
         event.preventDefault();
         event.stopPropagation();
-        var name = fieldName(el) || "";
-        finish({
-          key: controlKey(el),
-          label: primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id) || controlKey(el),
-          type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
-          payment: PAYMENT_FIELD.test(name),
-          autoPath: null,
-          mapped: null
-        });
+        if (t.control) {
+          var el = t.control;
+          var name = fieldName(el) || "";
+          finish({
+            key: controlKey(el),
+            label: primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id) || controlKey(el),
+            type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
+            payment: PAYMENT_FIELD.test(name),
+            autoPath: null,
+            mapped: null
+          });
+        } else {
+          /* read-only text: key is a re-locatable selector, so the taught
+           * binding extracts this element's text on every future capture */
+          var tx = t.textEl;
+          var inferred = inferTextLabel(tx);
+          var snippet = clean(tx.innerText).slice(0, 60);
+          finish({
+            key: "pick:" + cssPath(tx),
+            label: (inferred ? inferred + " — " : "") + snippet,
+            type: "text",
+            payment: PAYMENT_FIELD.test(inferred),
+            autoPath: null,
+            mapped: null
+          });
+        }
         broadcastCancel();
       }
 

@@ -356,7 +356,24 @@
       !/^[•*xX.-]{4,}$/.test(field.value));
   }
 
+  /* agent-taught read-only-text extractions: {selector, label} pairs saved
+   * via the mapping editor's picker ("this element's text IS the email").
+   * Labels come from the worker's own CRM-field vocabulary, never the page. */
+  function taughtFields(taught) {
+    const out = [];
+    (Array.isArray(taught) ? taught : []).forEach((t) => {
+      if (!t || typeof t.selector !== "string" || typeof t.label !== "string") return;
+      let el = null;
+      try { el = document.querySelector(t.selector); } catch (_e) { return; }
+      if (!el || !isVisible(el)) return;
+      const value = clean(el.innerText).slice(0, 300);
+      if (!value || PAYMENT_FIELD.test(t.label)) return;
+      out.push({ label: t.label, value, section: "", group: "", source: "taught" });
+    });
+    return out;
+  }
+
   /* invoked per frame by the worker via chrome.scripting.executeScript func —
    * fields from every frame are aggregated worker-side */
-  globalThis.__bettersPortalIngest = () => ({ fields: collect(), title: document.title, url: location.href });
+  globalThis.__bettersPortalIngest = (taught) => ({ fields: taughtFields(taught).concat(collect()), title: document.title, url: location.href });
 })();

@@ -84,6 +84,27 @@ describe("field-map share files", () => {
     expect(parsed.labelTargets).toEqual([]);
   });
 
+  it("accepts pick-key (read-only text) teachings with CRM-field targets only", () => {
+    const longSel = "pick:" + "div:nth-of-type(2) > ".repeat(20) + "span:nth-of-type(1)"; // ~450 chars
+    const tooLong = "pick:" + "div:nth-of-type(2) > ".repeat(25) + "span:nth-of-type(1)"; // >500
+    const doc = buildFieldMapExport({
+      "https://ams.example.com": {
+        [longSel]: "contact.email",            // deep selector within the pick cap — kept
+        "pick:#summary > span": "business.fein", // kept
+        "pick:#x > em": "skip",                  // kept (suppression)
+        "pick:#y > i": "label:email",            // capture keys can't take fill-direction targets — dropped
+        [tooLong]: "contact.phone"               // over the 500-char pick cap — dropped
+      }
+    });
+    const parsed = parseFieldMapImport(JSON.stringify(doc));
+    const kept = parsed.maps["https://ams.example.com"]!;
+    expect(kept[longSel]).toBe("contact.email");
+    expect(kept["pick:#summary > span"]).toBe("business.fein");
+    expect(kept["pick:#x > em"]).toBe("skip");
+    expect(Object.keys(kept)).toHaveLength(3);
+    expect(parsed.dropped).toBe(2);
+  });
+
   it("rejects files that are not ours", () => {
     expect(() => parseFieldMapImport("not json")).toThrow(/valid JSON/);
     expect(() => parseFieldMapImport(JSON.stringify({ type: "other", maps: {} }))).toThrow(/not a Quote Connector/);

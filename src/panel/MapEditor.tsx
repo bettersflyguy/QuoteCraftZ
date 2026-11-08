@@ -118,7 +118,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           </Button>
           {picking && <Spinner size="tiny" />}
           <span className={styles.label} style={{ maxWidth: "none" }}>
-            {picking ? "Now click the field in the page (Esc or Stop cancels)." : pickNote ?? "Jumps to that field's row below."}
+            {picking
+              ? "Now click a field OR a plain-text value in the page (Esc or Stop cancels)."
+              : pickNote ?? "Fields jump to their row; read-only text becomes a capture teaching."}
           </span>
         </div>
       )}
@@ -135,7 +137,19 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
             <span className={styles.label} title={r.key}>{r.label}</span>
             {r.payment
               ? <span>payment field — never filled</span>
-              : (
+              : r.key.startsWith("pick:") ? (
+                /* read-only text teaching: capture direction, CRM fields only */
+                <select
+                  className={styles.select}
+                  value={current}
+                  onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [r.key]: v })); }}
+                >
+                  <option value="">Not captured</option>
+                  <optgroup label="Capture as (CRM field)">
+                    {MAP_PATHS.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
+                  </optgroup>
+                </select>
+              ) : (
                 <select
                   className={styles.select}
                   value={current}

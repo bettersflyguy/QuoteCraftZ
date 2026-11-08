@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -636,8 +636,15 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
     .filter((r): r is import("@/boldpenguin/types").PortalScanRow[] => r !== null)
     .flat();
   if (!rows.length) throw new Error("No fillable fields found on this page. Open the quote form, then retry.");
+  // dedupe by key; a "pick:" teaching that resolved in SOME frame beats
+  // another frame's "not on this page" placeholder for the same key
+  const unresolved = (r: import("@/boldpenguin/types").PortalScanRow) => r.label === "(taught text — not on this page)";
   const seen = new Set<string>();
-  return { origin, rows: rows.filter(r => !seen.has(r.key) && seen.add(r.key)) };
+  const deduped: import("@/boldpenguin/types").PortalScanRow[] = [];
+  for (const r of [...rows.filter(x => !unresolved(x)), ...rows.filter(unresolved)]) {
+    if (!seen.has(r.key)) { seen.add(r.key); deduped.push(r); }
+  }
+  return { origin, rows: deduped };
 }
 
 /** One-shot "click a field to identify it" pick. Every frame arms a picker;
@@ -701,9 +708,18 @@ async function fillPortalTab(
 async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }> {
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-ingest.js"] });
   type FrameHarvest = { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string };
+  // agent-taught read-only-text extractions for this site: "pick:<selector>"
+  // entries resolve to the taught CRM field's display label, which the
+  // normalizer recognizes — the page never chooses its own labels
+  const origin = await tabOrigin(tabId);
+  const siteMap = origin ? await fieldMapFor(origin) : {};
+  const taught = Object.entries(siteMap)
+    .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && PATH_LABEL.has(v))
+    .map(([k, v]) => ({ selector: k.slice(5), label: PATH_LABEL.get(v) as string }));
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: () => (globalThis as { __bettersPortalIngest?: () => unknown }).__bettersPortalIngest?.() ?? null
+    func: (t: unknown) => (globalThis as { __bettersPortalIngest?: (t: unknown) => unknown }).__bettersPortalIngest?.(t) ?? null,
+    args: [taught]
   });
   const results = frames.map(f => f.result as FrameHarvest | null).filter((r): r is FrameHarvest => r !== null);
   const top = results[0];
