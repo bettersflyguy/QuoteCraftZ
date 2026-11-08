@@ -24,7 +24,7 @@ export function ErrorBar({ error, onRetry }: { error: PanelError; onRetry?: () =
     return (
       <MessageBar intent="error">
         <MessageBarBody>
-          <MessageBarTitle>Couldn&apos;t read EZLynx results</MessageBarTitle>
+          <MessageBarTitle>Couldn&apos;t read this page&apos;s results</MessageBarTitle>
           {error.message} (the extension may need an update)
           <div style={{ marginTop: 4 }}>
             <Button size="small" onClick={() => navigator.clipboard.writeText(error.detail ?? "")}>

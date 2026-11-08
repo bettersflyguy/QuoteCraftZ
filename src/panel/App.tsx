@@ -71,10 +71,15 @@ export function App() {
   // wizard is idle - glancing at another tab mid-import must not hide the
   // in-progress wizard. CRM and sign-in tabs never present as portals.
   const wizardIdle = state.step === "run" && !state.captured;
-  const rawMode: "commercial" | "portal" | "personal" =
+  // The rater import wizard is one source among many: it shows on its own
+  // site, or while an import is in progress. Every other tab gets its own
+  // intake, and tabs with nothing to work on (CRM, Settings, edge://) say so
+  // instead of falling back to a rater-specific screen.
+  const rawMode: "commercial" | "portal" | "personal" | "idle" =
+    !wizardIdle || page?.kind === "ezlynx" ? "personal" :
     page?.kind === "boldpenguin" ? "commercial" :
-    page?.kind === "other" && wizardIdle ? "portal" :
-    "personal";
+    page?.kind === "other" ? "portal" :
+    "idle";
 
   // While a CRM load / fill flow is active, the mode is PINNED: the
   // interactive sign-in popup (login.microsoftonline.com) briefly becomes the
@@ -123,6 +128,9 @@ export function App() {
       <div className={styles.body}>
         {showMappings && <MappingsManager />}
         {!showMappings && <>
+        {mode === "idle" && (
+          <div style={{ fontSize: "12px", color: tokens.colorNeutralForeground3 }}>Nothing to work on in this tab.</div>
+        )}
         {mode === "commercial" && <CommercialCapture onChanged={refreshPage} onFlowActive={setFlowActive} />}
         {mode === "portal" && <PortalFill onChanged={refreshPage} onFlowActive={setFlowActive} />}
         {mode === "personal" && <>

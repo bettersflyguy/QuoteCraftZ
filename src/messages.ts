@@ -8,7 +8,7 @@ export type { CommitPayload, CapturedApplication, PortalFillResult };
 /** What kind of page the active tab is showing - drives the panel's mode.
  * "crm" (Dynamics / Microsoft sign-in) renders the default wizard, never the
  * portal card. "other" is a candidate carrier portal (ingest/fill). */
-export type PageKind = "ezlynx" | "boldpenguin" | "crm" | "other";
+export type PageKind = "ezlynx" | "boldpenguin" | "crm" | "other" | "none";
 export interface PageContext {
   kind: PageKind;
   /** A Bold Penguin application is held in session storage, ready to fill portals. */

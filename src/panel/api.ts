@@ -42,7 +42,7 @@ export async function send<T>(msg: PanelRequest): Promise<T> {
         reject(
           new PanelError(
             "unknown",
-            `No response to ${msg.type} after ${timeoutMs / 1000}s. If the extension was just updated, reload the EZLynx tab and reopen this panel.`
+            `The page did not respond after ${timeoutMs / 1000}s. Reload the page and try again.`
           )
         ),
       timeoutMs
@@ -50,7 +50,7 @@ export async function send<T>(msg: PanelRequest): Promise<T> {
   });
   try {
     const res = (await Promise.race([chrome.runtime.sendMessage(msg), timeout])) as Res<T> | undefined;
-    if (!res) throw new PanelError("unknown", `Empty response to ${msg.type}. Reload the EZLynx tab and retry.`);
+    if (!res) throw new PanelError("unknown", "No response from the extension. Reload the page and try again.");
     if (!res.ok) throw new PanelError(res.kind, res.error, res.detail);
     return res.data;
   } finally {

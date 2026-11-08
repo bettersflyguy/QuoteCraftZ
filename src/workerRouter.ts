@@ -123,7 +123,9 @@ function pageKindOf(url: string): import("@/messages").PageKind {
   if (/^https:\/\/([^/]+\.)*boldpenguin\.com\//i.test(url)) return "boldpenguin";
   if (/^https:\/\/[^/]+\.(crm[0-9]*\.)?dynamics\.com\//i.test(url) || /^https:\/\/login\.microsoftonline\.com\//i.test(url)) return "crm";
   if (/^https:/i.test(url)) return "other";
-  return "crm"; // chrome://, edge://, file:, http: - never a fillable/ingestable portal
+  // extension pages (QuoteCraftZ Settings), chrome://, edge://, file:, http:
+  // - nothing to ingest or fill, and no EZLynx run to look up
+  return "none";
 }
 
 /** Raw captured column text for one record -> catalog-coerced values. Any

@@ -16,4 +16,24 @@ describe("routeMessage", () => {
     const res = await routeMessage({ type: "panel/searchAccounts", name: "S", postalCode: null }, deps as never);
     expect(res).toMatchObject({ ok: false, kind: "auth", error: expect.stringContaining("DEV") });
   });
+
+  it("classifies the active tab so only rater sites open the rater wizard", async () => {
+    const kindOf = async (url: string) => {
+      const deps = {
+        getActiveTab: vi.fn(async () => ({ id: 7, url })),
+        getCapturedApplication: vi.fn(async () => null),
+        isAutoCapturing: vi.fn(async () => false)
+      };
+      const res = await routeMessage({ type: "panel/getPageContext" }, deps as never);
+      return (res as { data: { kind: string } }).data.kind;
+    };
+    expect(await kindOf("https://app.ezlynx.com/web/applicant/1")).toBe("ezlynx");
+    expect(await kindOf("https://app.boldpenguin.com/x")).toBe("boldpenguin");
+    expect(await kindOf("https://bettersinsurance.crm.dynamics.com/main.aspx")).toBe("crm");
+    expect(await kindOf("https://www8.nowcerts.com/AMSINS/Insureds")).toBe("other");
+    // the extension's own Settings page and browser pages have nothing to work on
+    expect(await kindOf("chrome-extension://abc/src/options/index.html")).toBe("none");
+    expect(await kindOf("extension://abc/src/options/index.html")).toBe("none");
+    expect(await kindOf("edge://extensions")).toBe("none");
+  });
 });
