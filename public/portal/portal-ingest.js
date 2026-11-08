@@ -953,6 +953,15 @@
   globalThis.__bettersFieldsByLabel = (page, key) =>
     (page && labelKey(pageTitle()) !== page ? [] : fieldsByLabel(key));
   globalThis.__bettersFieldLabelText = fieldLabelText;
+  /* the label of the labelled form-field box an element sits in ("" when
+   * it isn't in one) - click-to-map turns that into a label mapping */
+  globalThis.__bettersFormFieldLabel = (el) => {
+    const box = el && el.closest ? el.closest(FORM_FIELD) : null;
+    if (!box) return "";
+    const lab = box.querySelector("label, mat-label, .k-label, legend");
+    const t = lab ? stripMarks(text(lab)) : "";
+    return t && t.length <= 80 ? t : "";
+  };
   globalThis.__bettersCaptureElements = captureElements;
   /* `controls`: the page's saved control mappings. `secure` comes back
    * separately and is never merged into the capture by the worker. */

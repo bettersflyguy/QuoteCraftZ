@@ -1092,7 +1092,9 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
  * frames: a row wins; else any "timeout" (keep going - an Esc broadcast
  * can race one frame's timer); else null (user cancelled). */
 async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanRow | "timeout" | null> {
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+  // the ingester supplies form-field labels, so a click inside a labelled
+  // field maps it by label (robust on any site's design system)
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: () => (globalThis as { __bettersPortalPick?: () => unknown }).__bettersPortalPick?.() ?? null

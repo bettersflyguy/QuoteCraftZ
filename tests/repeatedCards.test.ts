@@ -64,6 +64,34 @@ describe("labelled-field keys (EZLynx steps)", () => {
   });
 });
 
+describe("click-to-map on any site", () => {
+  type Row = { key: string; label: string };
+  const pickAfterClick = async (target: () => Element) => {
+    // a finished pick broadcasts a cancel to every frame (async): let the
+    // previous test's message drain before arming again
+    await new Promise(r => setTimeout(r, 60));
+    const pending = (globalThis as unknown as { __bettersPortalPick: (ms?: number) => Promise<Row | "timeout" | null> }).__bettersPortalPick(2000);
+    await new Promise(r => setTimeout(r, 20));
+    target().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    return pending;
+  };
+
+  it("a value inside a labelled field box maps by label", async () => {
+    document.title = "Momentum";
+    document.body.innerHTML = `<main><mat-form-field class="mat-mdc-form-field"><label>Line of Business</label>
+      <mat-select id="mat-select-17" role="combobox"><span id="mat-select-value-17" class="mat-mdc-select-value-text">Personal Auto</span></mat-select></mat-form-field></main>`;
+    const row = await pickAfterClick(() => document.querySelector(".mat-mdc-select-value-text")!);
+    expect(row).toMatchObject({ key: "field:line of business", label: "Line of Business" });
+  });
+
+  it("otherwise a selector that never anchors on a generated id", async () => {
+    document.body.innerHTML = `<main><div id="mat-tab-content-3"><div class="summary"><b>Premium</b><span>$1,200</span></div></div></main>`;
+    const row = await pickAfterClick(() => document.querySelector(".summary span")!);
+    expect(row && row !== "timeout" ? row.key : "").toMatch(/^pick:/);
+    expect(row && row !== "timeout" ? row.key : "").not.toContain("mat-tab-content-3");
+  });
+});
+
 describe("repeated form cards", () => {
   it("VIN, Year and Make of each vehicle share one row of one table", () => {
     document.body.innerHTML = `<main><h1>Auto</h1><div id="cards">${card(1, "2FMDK38C09BA65577", "2009", "FORD")}${card(2, "2FMDA52207BA05536", "2007", "FORD")}</div></main>`;

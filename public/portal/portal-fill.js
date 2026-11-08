@@ -677,11 +677,14 @@
 
   /* stable-enough re-locator: tag:nth-of-type chain up to the nearest id'd
    * ancestor (ASP.NET/NowCerts ids are stable) or the body */
+  /* ids a framework generates per render (Angular Material/CDK, React useId,
+   * Kendo, Radix, MUI, GUIDs) change between visits: never anchor on them */
+  var GENERATED_ID = /^(mat|cdk|ng|react|ember|ext|radix|headlessui|mui|kendo|k|select2|aria|downshift|rc|el|v)[-_]|^:r[0-9a-z]*:$|^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}|^[0-9a-f]{16,}$/i;
   function cssPath(el) {
     var parts = [];
     var n = el;
     while (n && n.nodeType === 1 && n.tagName.toLowerCase() !== "html") {
-      if (n.id) {
+      if (n.id && !GENERATED_ID.test(n.id)) {
         parts.unshift("#" + (window.CSS && CSS.escape ? CSS.escape(n.id) : n.id.replace(/[^a-zA-Z0-9_-]/g, "\\$&")));
         return parts.join(" > ");
       }
@@ -845,9 +848,14 @@
           var hostLabel = host !== tx ? primaryLabel(host) : "";
           var inferred = hostLabel || inferTextLabel(tx);
           var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
+          /* inside a LABELLED form field (any site's design system): map the
+           * field by its label - it survives re-renders and covers every
+           * card that repeats it; otherwise a re-locatable selector */
+          var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
+          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80) : "";
           finish({
-            key: "pick:" + cssPath(tx),
-            label: hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + labelKey : "pick:" + cssPath(tx),
+            label: (labelKey && boxLabel) || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             type: "text",
             payment: PAYMENT_FIELD.test(inferred),
             autoPath: null,
