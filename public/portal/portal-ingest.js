@@ -140,6 +140,7 @@
 
   /* banking, payment and card data is never captured */
   const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|pay\s*method|method\s*of\s*payment|eft|ach)\b/i;
+  const PAYMENT_CONTEXT = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)|credit\s*card|debit|cvv|cvc|pay\s*method|method\s*of\s*payment|eft|ach)\b/i;
 
   /* identifier-class data (SSN, ITIN, passport) is never captured into the
    * application: only a control the agent mapped to a SECURED target lifts
@@ -307,6 +308,85 @@
     return clean(el.getAttribute("aria-label") || el.getAttribute("title") || "");
   }
 
+  /* REPEATED FORM CARDS (Vehicle 1 / Vehicle 2, Driver 1 / Driver 2): the
+   * same labelled field once per card. These helpers find a field's label,
+   * its counterparts in the other cards, and the cards' shared title, so
+   * every mapped field of a card lands in ONE table row. */
+  const FORM_FIELD = "mat-form-field, .mat-form-field, .mat-mdc-form-field, .k-floating-label-container, .form-group, .form-field, .field";
+  function stripMarks(s) { return clean(s).replace(/^[*\s]+|[:*\s]+$/g, ""); }
+
+  /* the label of the field an element belongs to ("Year", never "*Year"
+   * and never the value it shows) */
+  function fieldLabelOf(el) {
+    if (!el) return "";
+    const ff = el.closest(FORM_FIELD);
+    if (ff) {
+      const lab = ff.querySelector("label, mat-label, .k-label, legend");
+      const t = lab ? stripMarks(text(lab)) : "";
+      if (t && t.length <= 60) return t;
+    }
+    const control = el.matches("input, select, textarea") ? el : el.closest("[role='combobox'], select");
+    if (control && control.matches("input, select, textarea")) {
+      const t = stripMarks(labelFor(control));
+      if (t && t.length <= 60) return t;
+    }
+    return "";
+  }
+
+  /* an element's value: a control's value (a select's chosen text), or text */
+  function valueOf(el) {
+    if (el.matches("select")) { const o = el.options[el.selectedIndex]; return o ? clean(o.textContent) : ""; }
+    if (el.matches("input, textarea")) return clean(el.value);
+    const inner = el.matches(FORM_FIELD) ? el.querySelector("input, select, textarea") : null;
+    if (inner) return valueOf(inner);
+    return text(el);
+  }
+
+  /* the same field in every card: same form-field kind, same label, value
+   * element at the same position inside it. Null unless it repeats. */
+  function siblingsByLabel(anchor) {
+    const ff = anchor && anchor.closest(FORM_FIELD);
+    const label = fieldLabelOf(anchor);
+    if (!ff || !label) return null;
+    const path = [];
+    for (let n = anchor; n && n !== ff; n = n.parentElement) path.unshift(Array.prototype.indexOf.call(n.parentElement.children, n));
+    const kind = ff.tagName + "." + String(ff.className).split(/\s+/)[0];
+    const out = [];
+    document.querySelectorAll(FORM_FIELD).forEach((f) => {
+      if (f.tagName + "." + String(f.className).split(/\s+/)[0] !== kind || !isVisible(f)) return;
+      const lab = f.querySelector("label, mat-label, .k-label, legend");
+      if (!lab || stripMarks(text(lab)) !== label) return;
+      let el = f;
+      for (const i of path) { el = el && el.children[i]; }
+      out.push(el || f);
+    });
+    return out.length >= 2 ? out : null;
+  }
+
+  /* what the repeated cards are called ("Vehicle 1", "Vehicle 2" ->
+   * "Vehicles"), from the first card's own heading text */
+  function repeatTitle(els) {
+    if (!els || els.length < 2) return "";
+    let card = els[0];
+    while (card.parentElement && !card.parentElement.contains(els[1])) card = card.parentElement;
+    const scan = [card];
+    for (let p = card.previousElementSibling, i = 0; p && i < 3; p = p.previousElementSibling, i += 1) scan.push(p);
+    for (const root of scan) {
+      for (const n of [root].concat(Array.from(root.querySelectorAll("*")))) {
+        const own = clean(Array.from(n.childNodes).filter((c) => c.nodeType === 3).map((c) => c.textContent).join(" "));
+        const m = own.match(/^([A-Za-z][A-Za-z ]{1,30}?)\s*#?\s*1$/);
+        if (m) return /s$/i.test(m[1]) ? m[1] : m[1] + "s";
+      }
+    }
+    return "";
+  }
+
+  /* rows in page order, renumbered 1..n so columns from different fields
+   * of the same cards line up */
+  function inPageOrder(els) {
+    return els.slice().sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+  }
+
   function cellValue(td) {
     const t = clean(headingText(td).replace(/(^|\s)\+(?=\s|$)/g, " ")).replace(/\s+,/g, ",").replace(/,$/, "");
     if (t) return t;
@@ -388,6 +468,7 @@
     const fields = [];
     const map = controlMap || {};
     const keyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
+    const noteControls = [];
 
     Array.from(root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']"))
       .filter(isVisible)
@@ -409,8 +490,24 @@
         const field = { label, value, name: clean(control.name || control.id), section, group: "", source: "control" };
         if (path && (/^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ||
             /^note(:(contact|opportunity|quote|policy))?$/.test(path))) field.mapped = path;
+        if (field.mapped && /^note/.test(field.mapped)) noteControls.push({ field, control, key: keyOf(control) });
         fields.push(field);
       });
+    /* one note mapping on a control that repeats per card (both vehicles'
+     * VIN boxes share a key): rows of the cards' table, in page order */
+    const byKey = new Map();
+    noteControls.forEach((n) => { if (!byKey.has(n.key)) byKey.set(n.key, []); byKey.get(n.key).push(n); });
+    byKey.forEach((group) => {
+      if (group.length < 2) return;
+      const ordered = inPageOrder(group.map((g) => g.control));
+      const title = repeatTitle(ordered) || section;
+      ordered.forEach((control, i) => {
+        const g = group.find((x) => x.control === control);
+        g.field.group = "Row " + (i + 1);
+        g.field.section = title;
+        g.field.label = fieldLabelOf(control) || g.field.label;
+      });
+    });
 
     Array.from(root.querySelectorAll("fieldset"))
       .filter(isVisible).filter((fieldset) => !fieldset.querySelector("fieldset"))
@@ -621,7 +718,10 @@
       n = n.parentElement;
     }
     ctx = clean(ctx).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
-    if (PAYMENT_FIELD.test(ctx)) return false;
+    /* class names: a bare "card" is a layout card (mat-card, vehicle-card),
+     * not a payment card - only card NUMBER/credit/debit wording counts here;
+     * real card numbers are still caught by value (Luhn) below */
+    if (PAYMENT_CONTEXT.test(ctx)) return false;
     /* SSN in any common separator style (FEIN's ##-####### shape differs) */
     if (/\b\d{3}[\s.-]\d{2}[\s.-]\d{4}\b/.test(value)) return false;
     if (/\d{16,}/.test(value)) return false;
@@ -690,8 +790,18 @@
       try { anchor = document.querySelector(t.selector); } catch (_e) { return; }
       const row = (el) => {
         if (!el || !shown(el)) return null;
-        const value = text(el).slice(0, 300);
+        const value = valueOf(el).slice(0, 300);
         return value && taughtValueSafe(el, value) ? value : null;
+      };
+      /* the rows a teaching repeats over: a grid's rows as found; outside a
+       * table, the same labelled field in every card (else the structural
+       * repeat), renumbered in page order so a card's fields share a row */
+      const repeated = () => {
+        const found = expandTaughtRows(t.selector);
+        if (found && found[0] && found[0].el.closest("table")) return found;
+        const sib = anchor ? siblingsByLabel(anchor) : null;
+        const els = sib || (found ? found.map((r) => r.el) : null);
+        return els ? inPageOrder(els).map((el, i) => ({ n: i + 1, el })) : null;
       };
       if (isSecurePath(path)) {
         /* SECURED teaching: the value goes to the pass-through channel only
@@ -719,12 +829,13 @@
         /* timeline-note teaching ("note" = insured account, "note:<record>"
          * otherwise): on a grid cell, the whole column (every row, under the
          * grid's title and real header); else the one value */
-        const rows = expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : []);
+        const rows = repeated() || (anchor ? [{ n: 1, el: anchor }] : []);
         const multi = rows.length > 1;
         const first = rows[0] && rows[0].el;
-        const label = clean(t.label) || noteLabel(first) || "Note";
+        const label = clean(t.label) || fieldLabelOf(first) || noteLabel(first) || "Note";
         const table = multi && first ? first.closest("table") : null;
-        const section = table ? gridTitle(table, 0) : "Notes";
+        const section = table ? gridTitle(table, 0)
+          : multi ? (repeatTitle(rows.map((r) => r.el)) || pageSection(activeModal())) : "Notes";
         rows.forEach(function (r) {
           const value = row(r.el);
           if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: path });
@@ -737,7 +848,7 @@
          * table rows under the record type ("Related contacts" | Row N |
          * "First Name"), so every array shows as its own table */
         const cfg = ARRAY_SLOTS[arr[1]];
-        const rows = expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : []);
+        const rows = repeated() || (anchor ? [{ n: 1, el: anchor }] : []);
         const section = clean(t.section) || "Records";
         rows.forEach(function (r) {
           const value = row(r.el);

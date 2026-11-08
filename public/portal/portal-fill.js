@@ -609,9 +609,12 @@
       let el = null;
       try { el = document.querySelector(key.slice(5)); } catch (_e) { /* stale selector */ }
       const snippet = el ? clean(el.innerText).slice(0, 60) : "";
-      const label = el
-        ? (inferTextLabel(el) ? inferTextLabel(el) + ": " : "") + (snippet || "(empty)")
-        : "(taught text, not on this page)";
+      /* a styled dropdown's text is named by the dropdown's own label */
+      const host = el ? choiceHost(el) : null;
+      const hostLabel = host && host !== el ? primaryLabel(host) : "";
+      const label = !el ? "(taught text, not on this page)"
+        : hostLabel ? hostLabel
+        : (inferTextLabel(el) ? inferTextLabel(el) + ": " : "") + (snippet || "(empty)");
       rows.push({ key, label, type: "text", payment: false, autoPath: null, mapped: typeof ov[key] === "string" ? ov[key] : null });
     }
     return rows;
