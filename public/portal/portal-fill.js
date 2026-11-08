@@ -482,7 +482,11 @@
     return node;
   }
 
-  var PICK_STOP = { form: 1, table: 1, tbody: 1, main: 1, section: 1, body: 1, html: 1 };
+  /* tr/td/th are grid STRUCTURE, never composite widgets: a grid row's own
+   * controls (action menus, Primary checkboxes) must not make the row win
+   * over the clicked cell's text (the row-level controls remain directly
+   * clickable themselves) */
+  var PICK_STOP = { form: 1, table: 1, tbody: 1, tr: 1, td: 1, th: 1, main: 1, section: 1, body: 1, html: 1 };
 
   /* --- read-only text picking: source pages (AMS/CRM details views) render
    * values as plain text, not controls. A clicked text leaf is teachable as
@@ -493,7 +497,7 @@
     var tag = node.tagName.toLowerCase();
     if (["script", "style", "svg", "path", "input", "select", "textarea", "button", "iframe", "body", "html"].indexOf(tag) !== -1) return null;
     if (node.children.length > 3) return null;
-    var t = clean(node.innerText || "");
+    var t = clean(node.innerText || node.textContent || "");
     if (!t || t.length > 300) return null;
     return node;
   }
@@ -529,22 +533,22 @@
       var row = cell.parentElement;
       var table = cell.closest("table");
       if (row && row.children.length === 2 && row.children[1] === cell) {
-        var left = clean(row.children[0].innerText).replace(/[:*]+$/, "");
+        var left = clean(row.children[0].innerText || row.children[0].textContent).replace(/[:*]+$/, "");
         if (left && left.length <= 60) return left;
       }
       if (table && row) {
         var head = table.querySelector("tr");
         var idx = Array.prototype.indexOf.call(row.children, cell);
         if (head && head !== row && head.children[idx] && /^th$/i.test(head.children[idx].tagName)) {
-          var h = clean(head.children[idx].innerText);
+          var h = clean(head.children[idx].innerText || head.children[idx].textContent);
           if (h && h.length <= 60) return h;
         }
       }
     }
     var prev = el.previousElementSibling;
     if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV)$/.test(prev.tagName)) {
-      var p = clean(prev.innerText).replace(/[:*]+$/, "");
-      if (p && p.length <= 60 && p !== clean(el.innerText)) return p;
+      var p = clean(prev.innerText || prev.textContent).replace(/[:*]+$/, "");
+      if (p && p.length <= 60 && p !== clean(el.innerText || el.textContent)) return p;
     }
     var aria = el.getAttribute && (el.getAttribute("aria-label") || el.getAttribute("title"));
     if (aria && clean(aria).length <= 60) return clean(aria);
@@ -662,7 +666,7 @@
            * binding extracts this element's text on every future capture */
           var tx = t.textEl;
           var inferred = inferTextLabel(tx);
-          var snippet = clean(tx.innerText).slice(0, 60);
+          var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
           finish({
             key: "pick:" + cssPath(tx),
             label: (inferred ? inferred + " — " : "") + snippet,
