@@ -40,12 +40,26 @@ export function MappingsManager() {
   const [awaiting, setAwaiting] = useState<string | null>(null);
   // data-service sites (EZLynx): the editor maps the service's fields
   const [dsTabId, setDsTabId] = useState<number | null>(null);
+  // a field the data service doesn't return, picked on its page
+  const [injected, setInjected] = useState<PortalScanRow | null>(null);
   const openDataService = async () => {
-    if (dsTabId !== null) { setDsTabId(null); return; }
+    if (dsTabId !== null) { setDsTabId(null); setScan(null); return; }
     setBusy("scan");
     setProblem(null);
-    try { setDsTabId((await grantActiveTab(setAwaiting)).id); }
-    catch (e) { setProblem(String((e as Error).message ?? e)); }
+    setNote(null);
+    try {
+      const tab = await grantActiveTab(setAwaiting);
+      // the page's own fields beside the service's: saved page mappings
+      // only (the service already covers what auto-matching would find)
+      const s = await send<PortalScanResult>({ type: "panel/portalScan", tabId: tab.id });
+      const d: Record<string, string> = {};
+      for (const r of s.rows) if (r.mapped) d[r.key] = r.mapped;
+      setDraft(d);
+      setChoices((await getOptionMaps())[s.origin] ?? {});
+      setScan(s);
+      setScanTabId(tab.id);
+      setDsTabId(tab.id);
+    } catch (e) { setProblem(String((e as Error).message ?? e)); }
     finally { setBusy(null); }
   };
 
@@ -80,6 +94,7 @@ export function MappingsManager() {
   }, []);
   // the data-service editor belongs to the page it opened on
   useEffect(() => { setDsTabId(null); }, [currentOrigin]);
+  const dsMode = dsTabId !== null && Boolean(currentOrigin && DATA_SERVICE_ORIGINS[currentOrigin]);
   const rowOrigins = [
     ...(currentOrigin ? [currentOrigin] : []),
     ...Object.keys(maps).sort().filter(o => o !== currentOrigin)
@@ -118,6 +133,7 @@ export function MappingsManager() {
       await send({ type: "panel/saveFieldMap", origin: scan.origin, map, options: choices });
       setMaps(await getAllFieldMaps());
       const n = Object.keys(map).length;
+      setDsTabId(null);
       setNote(n
         ? `Saved ${n} mapping${n === 1 ? "" : "s"} for ${scan.origin}.`
         : `Cleared the saved mappings for ${scan.origin}.`);
@@ -145,7 +161,9 @@ export function MappingsManager() {
         if (ds && here) {
           return (
             <div key={origin} className={styles.row}>
-              <Text size={200} className={styles.origin} weight="semibold">{origin}: {ds.name} data service</Text>
+              <Text size={200} className={styles.origin} weight="semibold">
+                {origin}: {ds.name} data service{count ? ` + ${count} page field${count === 1 ? "" : "s"}` : ""}
+              </Text>
               <Tooltip content="Edit the data service mapping" relationship="label" withArrow>
                 <Button
                   size="small"
@@ -155,6 +173,11 @@ export function MappingsManager() {
                   onClick={busy !== null ? undefined : () => void openDataService()}
                 />
               </Tooltip>
+              {count > 0 && (
+                <Tooltip content="Remove this site's page field mappings" relationship="label" withArrow>
+                  <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} />
+                </Tooltip>
+              )}
             </div>
           );
         }
@@ -194,7 +217,8 @@ export function MappingsManager() {
           page={{
             onPick: () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: dsTabId }),
             onPickCancel: () => send<null>({ type: "panel/portalPickCancel", tabId: dsTabId }),
-            onRead: labels => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: dsTabId, labels })
+            onRead: labels => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: dsTabId, labels }),
+            onUnmatched: row => setInjected({ ...row })
           }}
         />
       )}
@@ -212,8 +236,11 @@ export function MappingsManager() {
             : key => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: scanTabId, key })}
           busy={busy === "save"}
           onSave={saveScan}
-          onCancel={() => setScan(null)}
-          onPick={scanTabId === null
+          onCancel={() => { setScan(null); setDsTabId(null); }}
+          title={dsMode ? "Page fields (not in the data service)" : undefined}
+          hideAuto={dsMode}
+          inject={dsMode ? injected : null}
+          onPick={scanTabId === null || dsMode
             ? undefined
             : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: scanTabId })}
           onPickCancel={scanTabId === null

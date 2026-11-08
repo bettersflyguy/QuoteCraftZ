@@ -88,7 +88,13 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject }: {
+  /** Header text (defaults to "Field mapping for <origin>"). */
+  title?: string;
+  /** List only mapped/picked rows, not auto-matches (data-service sites). */
+  hideAuto?: boolean;
+  /** A field picked elsewhere (the data-service editor) to add and focus. */
+  inject?: PortalScanRow | null;
   scan: PortalScanResult;
   /** This site's one-for-one choice mappings ({table.column: {text: value}}). */
   choices?: Record<string, ColumnOptionMap>;
@@ -200,13 +206,20 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     void onPickCancel?.().catch(() => {});
   };
 
+  useEffect(() => {
+    if (!inject) return;
+    if (!scan.rows.some(r => r.key === inject.key)) setExtraRows(x => (x.some(r => r.key === inject.key) ? x : [...x, inject]));
+    reveal(inject.key);
+    setFocusKey(inject.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inject]);
   const allRows = [...scan.rows, ...extraRows.filter(x => !scan.rows.some(r => r.key === x.key))];
   // Only rows that mean something are listed: auto-matched, already mapped,
   // or picked/edited this session. Unknown page fields stay hidden until the
   // agent clicks them on the page - building a map beats scrolling a list
   // of anonymous "Select Row" checkboxes.
   const rows = allRows.filter(r =>
-    showAll || revealed.has(r.key) || Boolean(r.autoPath) || Boolean(r.mapped) || Boolean(draft[r.key]));
+    showAll || revealed.has(r.key) || (!hideAuto && Boolean(r.autoPath)) || Boolean(r.mapped) || Boolean(draft[r.key]));
   const hiddenCount = allRows.length - rows.length;
 
   /* peek: what the current (unsaved) draft covers, including hidden rows that
@@ -251,7 +264,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   return (
     <div className={styles.root}>
       <div className={styles.row} style={{ fontWeight: 600 }}>
-        <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>Field mapping for {scan.origin}</span>
+        <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{title ?? `Field mapping for ${scan.origin}`}</span>
         {onPick && (
           <Button
             size="small"

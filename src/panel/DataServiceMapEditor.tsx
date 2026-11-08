@@ -46,6 +46,8 @@ export interface DataServicePageHooks {
   onPick: () => Promise<PortalScanRow | "timeout" | null>;
   onPickCancel: () => Promise<unknown>;
   onRead: (labels: string[]) => Promise<ChoicesRead | null>;
+  /** A picked field the service doesn't return: mapped as a page field. */
+  onUnmatched?: (row: PortalScanRow) => void;
 }
 
 /** Every field a data service returns, each routed to a CRM target, with
@@ -123,6 +125,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
         const hit = EZLYNX_FIELDS.find(f => f.section === "Applicant" && labelsOf(f).some(l => canonical(l) === want)) ??
           EZLYNX_FIELDS.find(f => labelsOf(f).some(l => canonical(l) === want));
         if (hit) { setFocus(hit.id); setPickNote(null); }
+        else if (page.onUnmatched) { page.onUnmatched(row); setPickNote(`${row.label} added to Page fields.`); }
         else setPickNote(`"${row.label}" is not a field the data service returns.`);
         return;
       }

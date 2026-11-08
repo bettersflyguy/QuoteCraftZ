@@ -153,7 +153,7 @@ async function catalogOrNull(deps: Deps): Promise<FieldCatalog | null> {
   try { return await deps.getFieldCatalog(await deps.getActiveEnvironment()); } catch { return null; }
 }
 
-async function ingestEzlynx(deps: Deps, url: string): Promise<Res<unknown>> {
+async function ingestEzlynx(deps: Deps, url: string, tabId?: number): Promise<Res<unknown>> {
   const ctx = await deps.sendToEzlynxTab<{ applicantId: number | null }>({ type: "ezlynx/getContext" });
   if (!ctx.ok) return ctx;
   const applicantId = ctx.data.applicantId;
@@ -174,8 +174,22 @@ async function ingestEzlynx(deps: Deps, url: string): Promise<Res<unknown>> {
   }
   const maps = await getDataServiceMaps();
   // EZLynx's wording for choices -> the exact CRM choice (Settings mappings)
-  const fields = translateCapturedChoices(ezlynxFields(applicant, maps["ezlynx"]),
-    (await getOptionMaps())[dataServiceScope("ezlynx")], await catalogOrNull(deps));
+  const catalog = await catalogOrNull(deps);
+  const optionMaps = await getOptionMaps();
+  const fields = translateCapturedChoices(ezlynxFields(applicant, maps["ezlynx"]), optionMaps[dataServiceScope("ezlynx")], catalog);
+  // fields the agent mapped ON the page that the service doesn't return
+  // (VIN, vehicle details...): read from the page, mapped ones only - the
+  // service already covers the rest exactly
+  let pageSecure: { path: string; value: string }[] = [];
+  const origin = (() => { try { return new URL(url).origin; } catch { return ""; } })();
+  if (tabId !== undefined && origin && Object.keys(await fieldMapFor(origin)).length) {
+    try {
+      const page = await deps.ingestPortalTab(tabId);
+      const mapped = page.fields.filter(f => f.mapped).map(f => ({ ...f, section: f.section || "Page fields" }));
+      fields.push(...translateCapturedChoices(mapped, optionMaps[origin], catalog));
+      pageSecure = page.secure ?? [];
+    } catch { /* the data service capture still lands */ }
+  }
   const existing = await deps.getCapturedApplication();
   const outcome = mergeIngestedFields(existing, fields, {
     system: "EZLynx",
@@ -191,7 +205,8 @@ async function ingestEzlynx(deps: Deps, url: string): Promise<Res<unknown>> {
   }
   await deps.setCapturedApplication(outcome.app);
   if (outcome.replaced) { await chrome.storage.session.remove("bp/crmLink"); await clearPendingSecure(); }
-  return { ok: true, data: outcome };
+  const securedHeld = await addPendingSecure(pageSecure);
+  return { ok: true, data: { ...outcome, securedHeld } };
 }
 
 /** A carrier portal page showing a quoted premium (no policy number) as a
@@ -706,7 +721,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         // EZLynx is a DATA-SERVICE source: same intake, exact data (applicant
         // + rating run from its own service), routed by Settings mappings
         const tab = await chrome.tabs.get(msg.tabId).catch(() => null);
-        if (tab?.url && /^https:\/\/app\.ezlynx\.com\//i.test(tab.url)) return await ingestEzlynx(deps, tab.url);
+        if (tab?.url && /^https:\/\/app\.ezlynx\.com\//i.test(tab.url)) return await ingestEzlynx(deps, tab.url, msg.tabId);
         const harvested = await deps.ingestPortalTab(msg.tabId);
         const existing = await deps.getCapturedApplication();
         // this site's wording for choices -> the exact CRM choice
