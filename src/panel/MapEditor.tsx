@@ -333,7 +333,10 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                     groups={identifier ? secured : fillGroups}
                     specials={[
                       { value: "", label: identifier ? "Not mapped" : r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)" },
-                      { value: "skip", label: "Never fill" }
+                      { value: "skip", label: "Never fill" },
+                      // a form field with no CRM column goes to a timeline note
+                      // on Ingest (never a secured/identifier field)
+                      ...(identifier ? [] : NOTE_TARGETS.map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> })))
                     ]}
                     currentText={orphanLabel ? `${orphanLabel} (saved; not in current capture)`
                       : current && !groupValues.has(pickerValue) ? `${targetText(current)} (saved)` : undefined}

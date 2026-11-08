@@ -318,7 +318,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
           typeof path !== "string" ||
           (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) &&
-            !(pickKey ? isCaptureTarget(path) : isRoutablePath(path))) ||
+            !(pickKey ? isCaptureTarget(path) : isRoutablePath(path) || isNoteTarget(path))) ||
           (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !isCaptureTarget(path))))) {
         dropped += 1;
         continue;

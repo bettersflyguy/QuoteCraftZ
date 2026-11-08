@@ -201,4 +201,16 @@ describe("page ingester", () => {
     expect(all).not.toContain("987-65-4321");
     expect(all).not.toContain("Passport 12345");
   });
+
+  it("a form field mapped to a timeline note is captured for that note, and never filled", async () => {
+    document.body.innerHTML = `<main><label for="vin">VIN</label><input id="vin" name="vin" type="text" value="2FMDK38C09BA65577"></main>`;
+    const res = (g["__bettersPortalIngest"] as (t: unknown, c: unknown) => { fields: { label: string; value: string; mapped?: string }[] })(
+      [], { "text:vin": "note:opportunity" });
+    expect(res.fields.find(f => f.label === "VIN")).toMatchObject({ value: "2FMDK38C09BA65577", mapped: "note:opportunity" });
+    (document.getElementById("vin") as HTMLInputElement).value = "";
+    const r = await (g["__bettersPortalFill"] as (p: unknown, o: boolean, a: boolean, ov: unknown) => Promise<Record<string, unknown>>)(
+      { normalized: {}, fields: [{ label: "VIN", value: "X", section: "", group: "" }], values: {} }, false, false, { "text:vin": "note:opportunity" });
+    expect((document.getElementById("vin") as HTMLInputElement).value).toBe("");
+    expect(r["noData"]).toEqual([]);
+  }, 10000);
 });

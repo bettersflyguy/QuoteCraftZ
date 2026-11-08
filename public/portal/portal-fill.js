@@ -394,6 +394,8 @@
       }
       const mapKey = controlKey(element);
       if (ov[mapKey] === "skip") continue;
+      /* a timeline-note mapping is capture-only: nothing to fill */
+      if (/^note(:[a-z]+)?$/.test(ov[mapKey] || "")) continue;
       const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
       if (!candidate) {
         if (ov[mapKey]) results.push({ label: name, path: ov[mapKey], status: "no-data" });

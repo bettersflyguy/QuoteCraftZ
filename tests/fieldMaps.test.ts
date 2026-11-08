@@ -138,10 +138,13 @@ describe("field-map share files", () => {
     const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
       "https://ams.example.com": {
         "pick:#a > td": "note", "pick:#b > td": "note:policy", "pick:#c > td": "note:systemuser",
-        "text:remarks": "note", "text:fn": "contact.firstName"
+        "text:remarks": "note", "text:vin": "note:opportunity", "text:bad": "note:systemuser", "text:fn": "contact.firstName"
       }
     })));
-    expect(parsed.maps["https://ams.example.com"]).toEqual({ "pick:#a > td": "note", "pick:#b > td": "note:policy", "text:fn": "contact.firstName" });
+    // form fields take timeline notes too (they route on Ingest)
+    expect(parsed.maps["https://ams.example.com"]).toEqual({
+      "pick:#a > td": "note", "pick:#b > td": "note:policy", "text:remarks": "note", "text:vin": "note:opportunity", "text:fn": "contact.firstName"
+    });
     expect(parsed.dropped).toBe(2);
   });
 

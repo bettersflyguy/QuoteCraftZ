@@ -407,7 +407,8 @@
           return;
         }
         const field = { label, value, name: clean(control.name || control.id), section, group: "", source: "control" };
-        if (path && /^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path)) field.mapped = path;
+        if (path && (/^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ||
+            /^note(:(contact|opportunity|quote|policy))?$/.test(path))) field.mapped = path;
         fields.push(field);
       });
 
