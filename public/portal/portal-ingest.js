@@ -20,6 +20,17 @@
     return style.display !== "none" && style.visibility !== "hidden";
   }
 
+  /* visible INCLUDING ancestors: a cell's own style says nothing about its
+   * hidden row, and a hidden cell still returns its textContent */
+  function shown(element) {
+    if (!isVisible(element)) return false;
+    for (let n = element.parentElement; n && n !== document.body; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === "none" || s.visibility === "hidden") return false;
+    }
+    return true;
+  }
+
   function text(element) {
     return clean(element && (element.innerText || element.textContent));
   }
@@ -254,6 +265,25 @@
       if (best) return titleCase(best);
     }
     return "Table " + n;
+  }
+
+  /* a taught value's label, read from the page: its grid column header,
+   * the left cell of a label/value row, or the text just before it */
+  function noteLabel(el) {
+    if (!el) return "";
+    const cell = el.closest("td, th");
+    if (cell && cell.parentElement) {
+      const row = cell.parentElement;
+      const idx = Array.prototype.indexOf.call(row.children, cell);
+      const table = cell.closest("table");
+      const head = table ? gridHeaders(table) : null;
+      if (head && head.headers.length === row.children.length && clean(head.headers[idx])) return clean(head.headers[idx]);
+      if (row.children.length === 2 && row.children[1] === cell) return clean(text(row.children[0])).replace(/[:*]+$/, "");
+    }
+    const prev = el.previousElementSibling;
+    const p = prev ? clean(text(prev)).replace(/[:*]+$/, "") : "";
+    if (p && p.length <= 60) return p;
+    return clean(el.getAttribute("aria-label") || el.getAttribute("title") || "");
   }
 
   function cellValue(td) {
@@ -585,10 +615,25 @@
       let anchor = null;
       try { anchor = document.querySelector(t.selector); } catch (_e) { return; }
       const row = (el) => {
-        if (!el || !isVisible(el)) return null;
+        if (!el || !shown(el)) return null;
         const value = text(el).slice(0, 300);
         return value && taughtValueSafe(el, value) ? value : null;
       };
+      if (path === "note") {
+        /* timeline-note teaching: on a grid cell, the whole column (every
+         * row, under the grid's title and real header); else the one value */
+        const rows = expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : []);
+        const multi = rows.length > 1;
+        const first = rows[0] && rows[0].el;
+        const label = clean(t.label) || noteLabel(first) || "Note";
+        const table = multi && first ? first.closest("table") : null;
+        const section = table ? gridTitle(table, 0) : "Notes";
+        rows.forEach(function (r) {
+          const value = row(r.el);
+          if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: "note" });
+        });
+        return;
+      }
       const arr = path.match(/^((?:crm:)?[a-z]+)\[\]\.([a-z][a-zA-Z0-9_]{0,99})$/);
       if (arr && ARRAY_SLOTS[arr[1]]) {
         /* array teaching: pull the taught cell from EVERY repeated row */

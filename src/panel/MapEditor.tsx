@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, StopRegular } from "@fluentui/react-icons";
+import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, NotepadRegular, StopRegular } from "@fluentui/react-icons";
 import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import { MAP_PATH_GROUPS, PATH_LABEL, isArrayPath } from "@/portal/fieldMaps";
+import { MAP_PATH_GROUPS, NOTE_TARGET, PATH_LABEL, isArrayPath } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
 import { send } from "./api";
 
@@ -178,6 +178,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     const v = draft[r.key] ?? "";
     if (r.payment) return [];
     if (v === "skip") return [{ key: r.key, label: "Never fill", kind: "skip" }];
+    if (v === NOTE_TARGET) return [{ key: r.key, label: "Notes (timeline)", kind: "mapped", array: true }];
     if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v) }];
     if (r.autoPath) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
     return [];
@@ -247,7 +248,10 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                   value={current}
                   onChange={v => setTarget(r.key, v)}
                   groups={groups}
-                  specials={[{ value: "", label: "Not captured" }]}
+                  specials={[
+                    { value: "", label: "Not captured" },
+                    { value: NOTE_TARGET, label: "Add to notes (timeline)", icon: <NotepadRegular /> }
+                  ]}
                   currentText={current && !groupValues.has(current)
                     ? `${PATH_LABEL.get(current) ?? catalogLabel(catalog, current) ?? current} (saved)`
                     : undefined}

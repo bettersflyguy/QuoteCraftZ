@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { makeStyles, tokens } from "@fluentui/react-components";
 
 import { filterTargets, normText as norm, type TargetGroup } from "./targetSearch";
 
-export interface TargetSpecial { value: string; label: string }
+export interface TargetSpecial { value: string; label: string; icon?: ReactElement }
 
 const useStyles = makeStyles({
   root: { flex: 1, minWidth: 0 },
@@ -98,7 +98,7 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
   };
 
   let idx = 0;
-  const item = (v: string, label: string, entity: string | null) => {
+  const item = (v: string, label: string, entity: string | null, icon?: ReactElement) => {
     const i = idx++;
     return (
       <div
@@ -110,7 +110,7 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
         role="option"
         aria-selected={v === value}
       >
-        <span>{v === value ? "✓ " : ""}{label}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{v === value ? "✓ " : ""}{icon}{label}</span>
         {entity && <span className={styles.chip}>in {entity}</span>}
       </div>
     );
@@ -119,7 +119,7 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
   return (
     <div className={styles.root} ref={rootRef}>
       <button type="button" className={styles.trigger} onClick={() => setOpen(o => !o)} title={selected ? `${selected.label} (${selected.group})` : undefined}>
-        {special ? special.label
+        {special ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{special.icon}{special.label}</span>
           : selected ? <>{selected.label} <span className={styles.entity}>· {selected.group}</span></>
           : currentText ?? value}
       </button>
@@ -134,7 +134,7 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
             onKeyDown={onKey}
           />
           <div className={styles.list} ref={listRef} role="listbox">
-            {matchingSpecials.map(s => item(s.value, s.label, null))}
+            {matchingSpecials.map(s => item(s.value, s.label, null, s.icon))}
             {searching
               ? (hits.length
                 ? hits.map(h => item(h.path, h.label, h.group))

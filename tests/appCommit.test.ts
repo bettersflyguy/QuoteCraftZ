@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applicantFromCapture, accountNameFromCapture, buildSupplementalNote, coApplicantsFromCapture, crmGroup, policyDraftsFromCapture, carrierGuess, detectPhone, parseMoney, policyFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
+import { applicantFromCapture, accountNameFromCapture, buildSupplementalNote, buildTimelineNote, coApplicantsFromCapture, crmGroup, policyDraftsFromCapture, carrierGuess, detectPhone, parseMoney, policyFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
 import { normalize } from "@/boldpenguin/normalize";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CrmEnvironment } from "@/crm/environments";
@@ -462,5 +462,33 @@ describe("CRM-column captures at commit", () => {
     expect(drafts[0]!.effectiveDate).toBe("06/01/2026");
     expect(drafts[1]!.extra["iacrm_premium"]).toBe("$3,892.14");
     expect(crmGroup(app, "crm:quote")).toBeNull();
+  });
+});
+
+describe("timeline note (Add to notes)", () => {
+  it("gathers tagged values into one organized rich-text note, escaped, and keeps them out of the leftovers note", () => {
+    const app = capture({
+      fields: [
+        { label: "Customer since", value: "11/04/2019", section: "Notes", group: "", source: "taught", mapped: "note" },
+        { label: "VIN", value: "JTMBF4DV4A5030644", section: "Vehicles list", group: "Row 1", source: "taught", mapped: "note" },
+        { label: "VIN", value: "5TDDKRFH9FS121015", section: "Vehicles list", group: "Row 2", source: "taught", mapped: "note" },
+        { label: "Remarks", value: "<script>x</script> & more", section: "Notes", group: "", source: "taught", mapped: "note" },
+        { label: "Employment Status", value: "Employed", section: "Quote", group: "", source: "control" }
+      ]
+    });
+    const note = buildTimelineNote(app)!;
+    expect(note.subject).toBe("QuoteCraftZ: notes (sales.geico.com)");
+    expect(note.count).toBe(4);
+    expect(note.html).toContain("<h3>Notes</h3>");
+    expect(note.html).toContain("<td>Customer since</td><td>11/04/2019</td>");
+    expect(note.html).toContain("<h3>Vehicles list</h3>");
+    expect(note.html).toContain("<tr><th>VIN</th></tr><tr><td>JTMBF4DV4A5030644</td></tr><tr><td>5TDDKRFH9FS121015</td></tr>");
+    expect(note.html).toContain("&lt;script&gt;x&lt;/script&gt; &amp; more");
+    expect(note.html).not.toContain("<script>");
+    // the leftovers note carries only what was NOT tagged
+    const leftovers = buildSupplementalNote(app)!;
+    expect(leftovers.body).toContain("Employment Status");
+    expect(leftovers.body).not.toContain("Customer since");
+    expect(buildTimelineNote(capture())).toBeNull();
   });
 });

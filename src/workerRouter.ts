@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, isCrmTarget } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGET, isCrmTarget } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -36,7 +36,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { buildSupplementalNote, coverageLinesFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
@@ -518,6 +518,17 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         } catch (e) {
           results.push({ key: "Supplemental data note", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
+        // values the agent tagged "Add to notes (timeline)": one organized
+        // rich-text entry per source site
+        try {
+          const tl = buildTimelineNote(app);
+          if (tl) {
+            const outcome = await deps.upsertAccountNote(env, msg.accountId, tl.subject, tl.html);
+            results.push({ key: `Notes: timeline entry ${outcome} with ${tl.count} value${tl.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+          }
+        } catch (e) {
+          results.push({ key: "Notes (timeline)", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
         return { ok: true, data: results };
       }
 
@@ -819,10 +830,11 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
     try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
   }
   const taught = Object.entries(siteMap)
-    .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v)))
+    .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || v === NOTE_TARGET))
     .map(([k, v]) => ({
       selector: k.slice(5),
-      label: PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ?? v.replace(/^crm:/, "").replace("[]", ""),
+      // note teachings are labeled on the page (column header / field label)
+      label: v === NOTE_TARGET ? "" : PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ?? v.replace(/^crm:/, "").replace("[]", ""),
       path: v
     }));
   const frames = await chrome.scripting.executeScript({

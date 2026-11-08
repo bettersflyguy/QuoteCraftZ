@@ -358,7 +358,8 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
 // bare "contact" prefix covers the primary (contact.) AND every related-
 // contact array slot (contact2., contact3., …) - all become contact records
 // "crm:" = agent-taught CRM columns, written to their records by the load
-const STRUCTURED_PATHS = ["contact", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate", "crm:"];
+// "note" = taught into the timeline note, which has its own entry
+const STRUCTURED_PATHS = ["contact", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate", "crm:", "note"];
 
 export interface SupplementalNote {
   subject: string;
@@ -395,6 +396,45 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
     legacyMatch: { prefix: "Quote Connector", suffix: ` captured application data (${app.source.system})` },
     body,
     count: extra.length
+  };
+}
+
+const html = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const TABLE = '<table border="1" cellpadding="4" style="border-collapse:collapse">';
+
+export interface TimelineNote { subject: string; html: string; count: number }
+
+/** Values the agent tagged "Add to notes (timeline)", gathered into ONE
+ * rich-text note per source site, organized like the panel shows them:
+ * single values as a Field/Value table, grid columns as a table under the
+ * grid's title with its real headers. Stable subject, so a re-load updates
+ * the same note. */
+export function buildTimelineNote(app: CapturedApplication): TimelineNote | null {
+  const tagged = app.fields.filter(f => f.mapped === "note" && clean(f.value));
+  if (!tagged.length) return null;
+  const parts: string[] = [`<p><b>Captured ${html(new Date(app.capturedAt).toLocaleString())} from ${html(app.source.system)}</b></p>`];
+  for (const section of [...new Set(tagged.map(f => f.section))]) {
+    const inSection = tagged.filter(f => f.section === section);
+    parts.push(`<h3>${html(section || "Notes")}</h3>`);
+    const singles = inSection.filter(f => !isGridRow(f));
+    if (singles.length) {
+      parts.push(TABLE + "<tr><th>Field</th><th>Value</th></tr>" +
+        singles.map(f => `<tr><td>${html(f.label)}</td><td>${html(f.value)}</td></tr>`).join("") + "</table>");
+    }
+    const rows = inSection.filter(isGridRow);
+    if (rows.length) {
+      const columns = [...new Set(rows.map(f => f.label))];
+      const byRow = new Map<string, Record<string, string>>();
+      for (const f of rows) byRow.set(f.group, { ...(byRow.get(f.group) ?? {}), [f.label]: f.value });
+      parts.push(TABLE + "<tr>" + columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
+        [...byRow.values()].map(r => "<tr>" + columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
+        "</table>");
+    }
+  }
+  return {
+    subject: `QuoteCraftZ: notes (${app.source.system})`,
+    html: parts.join("").slice(0, 100000),
+    count: tagged.length
   };
 }
 

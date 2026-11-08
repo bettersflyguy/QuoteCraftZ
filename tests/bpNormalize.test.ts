@@ -159,3 +159,10 @@ describe("data-grid rows", () => {
     expect(result["contact"]?.["fullName"]).toBe("Dittrich, Tracey");
   });
 });
+
+describe("timeline-note teachings", () => {
+  it("are never alias-guessed into a CRM field", () => {
+    const result = normalize([{ label: "Email", value: "note@example.com", mapped: "note" }]);
+    expect(result["contact"]?.["email"]).toBeUndefined();
+  });
+});

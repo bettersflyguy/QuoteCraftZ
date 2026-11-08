@@ -122,3 +122,24 @@ describe("data grids are captured as arrays", () => {
     ]);
   });
 });
+
+describe("Add to notes (timeline) teachings", () => {
+  it("a note on a grid cell takes the whole column under the grid's title and header", () => {
+    document.body.innerHTML = LISTS;
+    const fields = (globalThis as unknown as { __bettersPortalIngest: (t: unknown) => { fields: (GridField & { mapped?: string })[] } })
+      .__bettersPortalIngest([{ selector: "main > div:nth-of-type(1) > table > tbody > tr:nth-of-type(1) > td:nth-of-type(4)", label: "", path: "note" }])
+      .fields.filter(f => f.mapped === "note");
+    expect(fields.map(f => [f.section, f.group, f.label, f.value])).toEqual([
+      ["Vehicles list", "Row 1", "VIN", "JTMBF4DV4A5030644"],
+      ["Vehicles list", "Row 2", "VIN", "5TDDKRFH9FS121015"]
+    ]);
+  });
+
+  it("a note on a single value keeps its on-page label", () => {
+    document.body.innerHTML = `<main><div><b>Customer since</b><span id="since">11/04/2019</span></div></main>`;
+    const fields = (globalThis as unknown as { __bettersPortalIngest: (t: unknown) => { fields: (GridField & { mapped?: string })[] } })
+      .__bettersPortalIngest([{ selector: "#since", label: "", path: "note" }])
+      .fields.filter(f => f.mapped === "note");
+    expect(fields.map(f => [f.section, f.group, f.label, f.value])).toEqual([["Notes", "", "Customer since", "11/04/2019"]]);
+  });
+});

@@ -96,8 +96,14 @@ export const isRoutablePath = (path: string): boolean =>
   (CRM_ROUTABLE.test(path) && !AMS_OWNED.has(path.split(".")[1]!) && !path.endsWith(".governmentid") &&
     !isSensitiveLabel(path.split(".")[1]!.replace(/_/g, " ")));
 
-/** Valid capture (pick-key) target: a known semantic path or a CRM column. */
-export const isCaptureTarget = (path: string): boolean => PATH_LABEL.has(path) || isCrmTarget(path);
+/** Capture target for data with no CRM column: the value is gathered into
+ * the insured's timeline note (one organized entry per source site). On a
+ * grid cell it takes the whole column, every row. */
+export const NOTE_TARGET = "note";
+
+/** Valid capture (pick-key) target: a known semantic path, a CRM column,
+ * or the timeline note. */
+export const isCaptureTarget = (path: string): boolean => PATH_LABEL.has(path) || isCrmTarget(path) || path === NOTE_TARGET;
 
 /** MAP_PATHS partitioned into ordered entity groups for the editor's
  * target dropdowns. */
@@ -208,7 +214,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
       // "label:" target would invert the data direction
       const pickKey = typeof key === "string" && key.startsWith("pick:");
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
-          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) && !(pickKey && isCrmTarget(path))) ||
+          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) && !(pickKey && (isCrmTarget(path) || path === NOTE_TARGET))) ||
           (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !isCaptureTarget(path))))) {
         dropped += 1;
         continue;

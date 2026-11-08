@@ -133,6 +133,14 @@ describe("field-map share files", () => {
     expect(parsed.perOrigin[0]!.picks).toBe(4);
   });
 
+  it("accepts the timeline-note target on taught text only", () => {
+    const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
+      "https://ams.example.com": { "pick:#a > td": "note", "text:remarks": "note", "text:fn": "contact.firstName" }
+    })));
+    expect(parsed.maps["https://ams.example.com"]).toEqual({ "pick:#a > td": "note", "text:fn": "contact.firstName" });
+    expect(parsed.dropped).toBe(1);
+  });
+
   it("rejects files that are not ours", () => {
     expect(() => parseFieldMapImport("not json")).toThrow(/valid JSON/);
     expect(() => parseFieldMapImport(JSON.stringify({ type: "other", maps: {} }))).toThrow(/not a QuoteCraftZ/);
