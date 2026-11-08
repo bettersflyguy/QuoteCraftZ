@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { DataServicesSection } from "./DataServicesSection";
+import { useSettingsTransfer } from "./SettingsTransfer";
 import {
   Button,
   Input,
@@ -14,7 +15,7 @@ import {
   makeStyles,
   tokens
 } from "@fluentui/react-components";
-import { DeleteRegular, AddRegular, ArrowDownloadRegular, ArrowUploadRegular } from "@fluentui/react-icons";
+import { DeleteRegular, AddRegular } from "@fluentui/react-icons";
 import {
   getEnvironments,
   saveEnvironments,
@@ -26,62 +27,36 @@ import {
   FIELDMAP_STORAGE_KEY,
   getAllFieldMaps,
   setAllFieldMaps,
-  buildFieldMapExport,
-  parseFieldMapImport,
-  type FieldMaps,
-  type FieldMapImport
+  type FieldMaps
 } from "@/portal/fieldMaps";
-import { getOptionMaps, setOptionMaps } from "@/portal/optionMaps";
-import { EZLYNX_FIELDS, effectiveTargets, getDataServiceMaps, setDataServiceMap } from "@/sources/ezlynxSource";
-import { DATA_SERVICE_ORIGINS } from "@/panel/DataServiceMapEditor";
 
-/** Every data-service field's effective target (saved choice or default),
- * so a share file carries the complete mapping. */
-async function effectiveDataServiceMaps(): Promise<Record<string, Record<string, string>>> {
-  const saved = await getDataServiceMaps();
-  const targets = effectiveTargets(saved["ezlynx"]);
-  return { ezlynx: Object.fromEntries(EZLYNX_FIELDS.map(f => [f.id, targets[f.id] ?? ""])) };
+/** One mapped site: its field count, import/export for just this site,
+ * and removal. */
+function SiteRow({ origin, count, onRemove }: { origin: string; count: number; onRemove: () => void }) {
+  const t = useSettingsTransfer({ kind: "site", origin });
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Text style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+          {origin}: {count} field{count === 1 ? "" : "s"}
+        </Text>
+        {t.icons}
+        <Tooltip content="Remove this site's mapping" relationship="label" withArrow>
+          <Button size="small" icon={<DeleteRegular />} onClick={onRemove} />
+        </Tooltip>
+      </div>
+      {t.panel}
+    </div>
+  );
 }
 
-/** Carrier field mappings taught in the panel: list, share-file export, import
- * from a teammate's export, and per-site removal. */
+/** Carrier field mappings taught in the panel, per site. Whole-settings
+ * import/export sits beside the page title. */
 function FieldMapsSection() {
   const [maps, setMaps] = useState<FieldMaps>({});
-  const [note, setNote] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [pendingImport, setPendingImport] = useState<FieldMapImport | null>(null);
-
   const refresh = () => { void getAllFieldMaps().then(setMaps); };
   useEffect(refresh, []);
-
-  const origins = Object.keys(maps).sort();
-
-  /** Share file for every site, or just one ("www8.nowcerts.com"). */
-  const exportMaps = async (only?: string) => {
-    const subset = only ? { [only]: maps[only]! } : maps;
-    // choice mappings travel with their sites; data-service mappings go with
-    // a full export (and with the data service's own site)
-    const withServices = !only || only in DATA_SERVICE_ORIGINS;
-    const services = withServices ? await effectiveDataServiceMaps() : undefined;
-    const blob = new Blob([JSON.stringify(buildFieldMapExport(subset, await getOptionMaps(), services), null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const tag = only ? `${new URL(only).hostname}-` : "";
-    a.download = `quotecraftz-field-mappings-${tag}${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const pickImportFile = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json,.json";
-    input.onchange = () => { const f = input.files?.[0]; if (f) void importMaps(f); };
-    input.click();
-  };
-
-  // the panel teaches/removes sites while this page is open
+  // the panel (and imports) teach/remove sites while this page is open
   useEffect(() => {
     const onChanged = (changes: Record<string, unknown>, area: string) => {
       if (area === "local" && FIELDMAP_STORAGE_KEY in changes) refresh();
@@ -89,104 +64,24 @@ function FieldMapsSection() {
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
-
-  const applyImport = async (parsed: FieldMapImport) => {
-    const merged = { ...await getAllFieldMaps() };
-    for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
-    await setAllFieldMaps(merged);
-    for (const [origin, cols] of Object.entries(parsed.options)) await setOptionMaps(origin, cols);
-    for (const [source, m] of Object.entries(parsed.dataServices)) {
-      const current = (await getDataServiceMaps())[source] ?? {};
-      await setDataServiceMap(source, { ...current, ...m });
-    }
-    const dsCount = Object.values(parsed.dataServices).reduce((n, m) => n + Object.keys(m).length, 0);
-    setMaps(merged);
-    setPendingImport(null);
-    setNote(
-      `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
-      (dsCount ? `, ${dsCount} data service mapping${dsCount === 1 ? "" : "s"}` : "") +
-      (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") +
-      "."
-    );
-  };
-
-  const importMaps = async (file: File) => {
-    setNote(null);
-    setProblem(null);
-    setPendingImport(null);
-    try {
-      // every import gets a review step: the file decides which sites' fills
-      // change, so the user sees each origin (new vs replaced) before it lands
-      setPendingImport(parseFieldMapImport(await file.text()));
-    } catch (e) {
-      setProblem(String((e as Error).message ?? e));
-    }
-  };
-
+  const origins = Object.keys(maps).sort();
   const removeSite = async (origin: string) => {
     const next = { ...maps };
     delete next[origin];
     await setAllFieldMaps(next);
     setMaps(next);
   };
-
   return (
     <div style={{ marginTop: 32 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Text as="h2" size={500} weight="semibold">Pages Mapped</Text>
-        <Tooltip content="Import mappings from a share file" relationship="label" withArrow>
-          <Button size="small" icon={<ArrowUploadRegular />} onClick={pickImportFile} />
-        </Tooltip>
-        <Tooltip content="Export every site's mappings and the data service mappings" relationship="label" withArrow>
-          <Button size="small" icon={<ArrowDownloadRegular />} onClick={() => void exportMaps()} />
-        </Tooltip>
-      </div>
+      <Text as="h2" size={500} weight="semibold">Pages Mapped</Text>
       {origins.length === 0
         ? <Text block style={{ marginTop: 12 }}>No saved mappings yet.</Text>
         : origins.map(origin => (
-            <div key={origin} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-              <Text style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                {origin}: {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
-              </Text>
-              <Tooltip content="Export this site's mappings" relationship="label" withArrow>
-                <Button size="small" icon={<ArrowDownloadRegular />} onClick={() => exportMaps(origin)} />
-              </Tooltip>
-              <Tooltip content="Remove this site's mapping" relationship="label" withArrow>
-                <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} />
-              </Tooltip>
-            </div>
+            <SiteRow key={origin} origin={origin} count={Object.keys(maps[origin]!).length} onRemove={() => void removeSite(origin)} />
           ))}
-      {pendingImport && (
-        <MessageBar intent="warning" style={{ marginTop: 12 }}>
-          <MessageBarBody>
-            Review before applying:{" "}
-            {pendingImport.perOrigin.map(o =>
-              `${o.origin}: ${o.fields} field${o.fields === 1 ? "" : "s"} (${maps[o.origin] ? "replaces existing" : "new site"})` +
-              (o.labels.length ? ` · fills from captured: ${o.labels.join(", ")}` : "") +
-              (o.picks ? ` · ${o.picks} taught text capture${o.picks === 1 ? "" : "s"}` : "")
-            ).join("; ")}
-            {Object.entries(pendingImport.dataServices).map(([s, m]) =>
-              `${pendingImport.perOrigin.length ? "; " : ""}${s === "ezlynx" ? "EZLynx" : s} data service: ${Object.keys(m).length} field${Object.keys(m).length === 1 ? "" : "s"} (replaces those fields)`).join("")}
-            {" "}
-            <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>{" "}
-            <Button size="small" onClick={() => setPendingImport(null)}>Cancel</Button>
-          </MessageBarBody>
-        </MessageBar>
-      )}
-      {note && (
-        <MessageBar intent="success" style={{ marginTop: 12 }}>
-          <MessageBarBody>{note}</MessageBarBody>
-        </MessageBar>
-      )}
-      {problem && (
-        <MessageBar intent="error" style={{ marginTop: 12 }}>
-          <MessageBarBody>{problem}</MessageBarBody>
-        </MessageBar>
-      )}
     </div>
   );
 }
-
 const URL_PATTERN = /^https:\/\/[a-z0-9-]+\.crm\d*\.dynamics\.com$/;
 const COLORS: CrmEnvironment["color"][] = ["green", "blue", "orange", "red"];
 
@@ -234,6 +129,8 @@ const useStyles = makeStyles({
 
 export function OptionsApp() {
   const styles = useStyles();
+  // every setting in one file; the page reloads to show what was imported
+  const allTransfer = useSettingsTransfer({ kind: "all" }, () => window.setTimeout(() => location.reload(), 1200));
   const [envs, setEnvs] = useState<CrmEnvironment[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [saved, setSaved] = useState(false);
@@ -281,10 +178,12 @@ export function OptionsApp() {
 
   return (
     <div className={styles.root}>
-      <img src="/icons/32.png" alt="" style={{ width: 28, height: 28, verticalAlign: "-6px", marginRight: 10 }} />
-      <Text size={600} weight="semibold">
-        QuoteCraftZ Settings
-      </Text>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <img src="/icons/32.png" alt="" style={{ width: 28, height: 28, marginRight: 2 }} />
+        <Text size={600} weight="semibold">QuoteCraftZ Settings</Text>
+        {allTransfer.icons}
+      </div>
+      {allTransfer.panel}
       <Text as="h2" size={500} weight="semibold" block style={{ marginTop: 24 }}>Environments</Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">

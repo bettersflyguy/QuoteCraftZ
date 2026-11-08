@@ -322,7 +322,7 @@ const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
 /** Parses and validates a share file. Only https origins, known rule paths
  * and "skip" survive - a tampered or stale file degrades to fewer entries,
  * never to arbitrary data in storage. Throws on files that aren't ours. */
-export function parseFieldMapImport(text: string): FieldMapImport {
+export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapImport {
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { throw new Error("Not a valid JSON file."); }
   const doc = raw as Partial<FieldMapExport>;
@@ -370,7 +370,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
     }
   }
   const ds = parseDataServices((doc as { dataServices?: unknown }).dataServices);
-  if (!Object.keys(maps).length && !Object.keys(ds.maps).length) throw new Error("The file contained no usable mappings.");
+  if (!allowEmpty && !Object.keys(maps).length && !Object.keys(ds.maps).length) throw new Error("The file contained no usable mappings.");
   const options = parseOptionMaps((doc as { options?: unknown }).options,
     new Set([...Object.keys(maps), ...Object.keys(ds.maps).map(s => `dataservice:${s}`)]));
   return {
