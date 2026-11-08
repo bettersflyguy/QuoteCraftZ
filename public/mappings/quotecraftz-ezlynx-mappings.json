@@ -41,6 +41,9 @@
       "field:drivers|driver education": "note",
       "field:drivers|mature driver": "note",
       "field:drivers|good driver": "note",
+      "field:details|prefix": "crm:primarycontact.salutation",
+      "field:details|suffix": "crm:primarycontact.suffix",
+      "field:details|preferred language": "note:contact",
       "field:policy info|prior carrier": "coverage.currentCarrier",
       "field:policy info|prior policy premium": "coverage.currentPremium",
       "field:policy info|effective date new policy": "coverage.effectiveDate",
@@ -120,7 +123,9 @@
       "coApplicant.driversLicenseStatus": "note",
       "coApplicant.driversLicenseState": "crm:contacts[].iacrm_dlstate",
       "coApplicant.email": "contacts[].email",
-      "coApplicant.phone": "contacts[].phone"
+      "coApplicant.phone": "contacts[].phone",
+      "applicant.csr": "note",
+      "applicant.preferredContactMethod": "crm:primarycontact.preferredcontactmethodcode"
     }
   },
   "options": {

@@ -306,6 +306,8 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           <div
             key={r.key}
             className={focusKey === r.key ? styles.rowFocused : styles.row}
+            // same signal as the page peek: green mapped, red not, grey never fill
+            style={{ borderLeft: `3px solid ${r.payment ? "transparent" : current === "skip" ? "#8a8886" : current || r.autoPath ? "#13a10e" : "#d13438"}`, paddingLeft: 4 }}
             ref={el => { if (el) rowRefs.current.set(r.key, el); else rowRefs.current.delete(r.key); }}
           >
             <span className={styles.label} title={r.key}>{r.label}</span>

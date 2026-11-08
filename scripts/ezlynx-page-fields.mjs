@@ -25,6 +25,12 @@ const PAGES = {
     "License Sus/Rev (Last 5 years)", "SR-22 Required", "FR-44 Required", "Good Student", "Student > 100 miles away",
     "Driver Education", "Mature Driver", "Good Driver"
   ].map(l => [l, "note"]),
+  // Details screen fields the data service does not return
+  Details: [
+    ["Prefix", "crm:primarycontact.salutation"],
+    ["Suffix", "crm:primarycontact.suffix"],
+    ["Preferred Language", "note:contact"]
+  ],
   "Policy Info": [
     ["Prior Carrier", "coverage.currentCarrier"],
     ["Prior Policy Premium", "coverage.currentPremium"],
@@ -55,5 +61,10 @@ for (const [page, fields] of Object.entries(PAGES)) for (const [label, target] o
 const file = new URL("../public/mappings/quotecraftz-ezlynx-mappings.json", import.meta.url);
 const doc = JSON.parse(readFileSync(file, "utf8"));
 doc.maps = { "https://app.ezlynx.com": map };
+// data-service fields added after the first file: same routes as the defaults
+Object.assign(doc.dataServices.ezlynx, {
+  "applicant.csr": "note",
+  "applicant.preferredContactMethod": "crm:primarycontact.preferredcontactmethodcode"
+});
 writeFileSync(file, JSON.stringify(doc, null, 2) + "\n");
 console.log(`${Object.keys(map).length} page fields written`);

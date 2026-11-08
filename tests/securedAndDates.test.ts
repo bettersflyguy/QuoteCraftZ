@@ -77,4 +77,17 @@ describe("one peek: mapped green, unmapped red", () => {
     expect(outline("color")).toMatch(/d13438|rgb\(209, 52, 56\)/);
     expect(r.unmapped).toBe(1);
   });
+
+  it("never flags the site's own search box, and clears badges an older copy left behind", () => {
+    document.body.innerHTML = `<header><input placeholder="Search" name="q"></header>
+      <main><label for="color">Color</label><input id="color" name="color" value="Blue"></main>
+      <div data-betters-peek="1">Auto: First name</div>`;
+    (document.getElementById("color") as HTMLElement).style.outline = "2px dashed #0f6cbd";
+    (document.getElementById("color") as HTMLElement).style.outlineOffset = "1px";
+    const r = (globalThis as unknown as { __bettersPortalPeekAll: (a: unknown) => { unmapped: number } }).__bettersPortalPeekAll({ items: [], map: {}, payload: null, pageLabels: [] });
+    expect(r.unmapped).toBe(1);                                            // Color only, not the search box
+    expect((document.querySelector("header input") as HTMLElement).style.outline).toBe("");
+    expect(document.body.textContent).not.toContain("Auto: First name");  // stale badge gone
+    expect((document.getElementById("color") as HTMLElement).style.outline).toMatch(/d13438|rgb\(209, 52, 56\)/);
+  });
 });

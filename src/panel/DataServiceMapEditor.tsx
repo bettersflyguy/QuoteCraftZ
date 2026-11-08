@@ -186,6 +186,8 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
               <Fragment key={f.id}>
                 <div
                   className={focus === f.id ? styles.focused : styles.row}
+                  // same signal as the page peek: green mapped, red not mapped
+                  style={{ borderLeft: `3px solid ${target ? "#13a10e" : "#d13438"}`, paddingLeft: 4 }}
                   ref={el => { if (el) rowRefs.current.set(f.id, el); else rowRefs.current.delete(f.id); }}
                 >
                   <span className={styles.label}>{f.label}</span>

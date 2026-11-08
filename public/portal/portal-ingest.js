@@ -475,6 +475,12 @@
 
   const SKIP_TYPES = ["radio", "hidden", "password", "file", "submit", "button", "reset", "search"];
 
+  /* the site's own chrome (header/nav search boxes) is never insured data */
+  function siteChrome(control) {
+    if (control.closest("header, nav, [role='banner'], [role='navigation'], [role='search']")) return true;
+    return /^search\b/i.test(clean(control.getAttribute("placeholder") || control.getAttribute("aria-label") || ""));
+  }
+
   /* the on-page elements a capture reads structurally (form controls, grid
    * cells, label/value rows, definition lists) - the "peek unmapped" overlay
    * outlines the ones no saved mapping covers */
@@ -482,7 +488,7 @@
     const root = captureRoot();
     const els = [];
     root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']").forEach((c) => {
-      if (!isVisible(c) || inConsentUi(c) || SKIP_TYPES.includes((c.getAttribute("type") || "").toLowerCase())) return;
+      if (!isVisible(c) || inConsentUi(c) || siteChrome(c) || SKIP_TYPES.includes((c.getAttribute("type") || "").toLowerCase())) return;
       const label = clean(labelFor(c));
       if (PAYMENT_FIELD.test(label) || isGridChrome(c, label)) return;
       els.push(c);
@@ -511,7 +517,7 @@
 
     Array.from(root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']"))
       .filter(isVisible)
-      .filter((control) => !inConsentUi(control))
+      .filter((control) => !inConsentUi(control) && !siteChrome(control))
       .filter((control) => !["radio", "hidden", "password", "file", "submit", "button", "reset", "search"].includes((control.getAttribute("type") || "").toLowerCase()))
       .forEach((control) => {
         const label = clean(labelFor(control));

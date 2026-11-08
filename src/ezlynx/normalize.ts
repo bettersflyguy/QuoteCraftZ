@@ -149,6 +149,8 @@ function personDetails(r: Record<string, unknown>, address?: Record<string, unkn
     accountName: text(r["accountName"]),
     leadSource: text(r["leadSource"]),
     assignedProducer: text((r["assignedTo"] as Record<string, unknown> | undefined)?.["name"]).replace(/\s+/g, " "),
+    csr: text((r["csrUserModel"] as Record<string, unknown> | undefined)?.["name"]).replace(/\s+/g, " "),
+    preferredContactMethod: text(r["preferredContactMethod"]),
     isVip: text(r["isVip"]),
     isDeceased: text(r["isDeceased"]),
     ratingState: text(r["ratingState"]),

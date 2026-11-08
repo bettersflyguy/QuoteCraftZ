@@ -3,6 +3,9 @@
 
   if (globalThis.__bettersPortalFillerLoaded) return;
   globalThis.__bettersPortalFillerLoaded = true;
+  /* a fresh copy (after an extension update) clears whatever an orphaned
+   * earlier copy left highlighted */
+  setTimeout(function () { if (typeof sweepStalePeek === "function") sweepStalePeek(); }, 0);
 
   const mapper = globalThis.BettersPortalMapper;
 
@@ -937,18 +940,47 @@
     }
   }
 
+  /* outlines/badges left on the page by an EARLIER copy of this script (an
+   * extension update orphans it mid-peek): badges carry data-betters-peek;
+   * outlines are tagged since, and older ones are known by their exact
+   * peek colors with the 1px offset */
+  var PEEK_COLORS = /rgb\((19, 161, 14|15, 108, 189|138, 136, 134|209, 52, 56)\)|#(13a10e|0f6cbd|8a8886|d13438)/i;
+  function sweepStalePeek() {
+    try {
+      document.querySelectorAll("[data-betters-peek]").forEach(function (b) { if (b.parentNode) b.parentNode.removeChild(b); });
+      document.querySelectorAll("[data-betters-peek-outline]").forEach(function (el) {
+        el.style.outline = el.getAttribute("data-betters-peek-outline") || "";
+        el.style.outlineOffset = el.getAttribute("data-betters-peek-offset") || "";
+        el.removeAttribute("data-betters-peek-outline");
+        el.removeAttribute("data-betters-peek-offset");
+      });
+      document.querySelectorAll("[style*=\"outline\"]").forEach(function (el) {
+        if (el.style.outlineOffset === "1px" && PEEK_COLORS.test(el.style.outline)) { el.style.outline = ""; el.style.outlineOffset = ""; }
+      });
+    } catch (_e) { /* best effort */ }
+  }
+
   function clearPeek() {
     peekMarks.forEach(function (m) {
-      if (m.el) { m.el.style.outline = m.outline; m.el.style.outlineOffset = m.offset; }
+      if (m.el) {
+        m.el.style.outline = m.outline; m.el.style.outlineOffset = m.offset;
+        m.el.removeAttribute("data-betters-peek-outline");
+        m.el.removeAttribute("data-betters-peek-offset");
+      }
       if (m.badge && m.badge.parentNode) m.badge.parentNode.removeChild(m.badge);
     });
     peekMarks = [];
     watchBadges(false);
+    sweepStalePeek();
   }
 
   function markPeek(el, kind, label) {
     var s = PEEK_STYLE[kind] || PEEK_STYLE.mapped;
     var mark = { el: el, outline: el.style.outline, offset: el.style.outlineOffset, badge: null };
+    if (!el.hasAttribute("data-betters-peek-outline")) {
+      el.setAttribute("data-betters-peek-outline", el.style.outline || "");
+      el.setAttribute("data-betters-peek-offset", el.style.outlineOffset || "");
+    }
     el.style.outline = s.outline;
     el.style.outlineOffset = "1px";
     if (label) {

@@ -17,7 +17,7 @@ describe("EZLynx share file", () => {
 
   it("carries the EZLynx page fields as labelled-field keys", () => {
     const site = parsed.maps["https://app.ezlynx.com"]!;
-    expect(Object.keys(site).length).toBe(62);
+    expect(Object.keys(site).length).toBe(65);
     expect(site[fieldKeyOf("Vehicles", "VIN")]).toBe("note");
     expect(site[fieldKeyOf("Vehicles", "# Days/Week")]).toBe("note");
     expect(site[fieldKeyOf("Policy Info", "Prior Carrier")]).toBe("coverage.currentCarrier");
