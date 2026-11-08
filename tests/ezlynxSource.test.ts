@@ -108,19 +108,23 @@ describe("everything the data service returns is listed and captured", () => {
   it("captures detail fields: gender/marital default to CRM, the rest kept unmapped", () => {
     const fields = ezlynxFields(applicant, undefined);
     const by = (label: string) => fields.find(f => f.section === "Applicant" && f.label === label);
-    expect(by("Gender")?.mapped).toBe("contact.gender");
-    expect(by("Marital status")?.mapped).toBe("contact.maritalStatus");
-    expect(by("Occupation")?.value).toBe("Nurse - RN");
-    expect(by("Occupation")?.mapped).toBeUndefined();
-    expect(by("County")?.value).toBe("Hennepin");
+    // gender/marital go to the CRM columns and still bridge to the
+    // semantic fields that drive fill
+    expect(by("Gender")?.mapped).toBe("crm:primarycontact.gendercode");
+    expect(by("Marital status")?.mapped).toBe("crm:primarycontact.familystatuscode");
+    expect(by("Occupation")).toMatchObject({ value: "Nurse - RN", mapped: "crm:primarycontact.iacrm_employmentoccupation" });
+    expect(by("County")).toMatchObject({ value: "Hennepin", mapped: "crm:account.address1_county" });
+    expect(by("Lead source")?.mapped).toBeUndefined();
     const n = normalize(fields);
     expect(n["contact"]?.["gender"]).toBe("Male");
+    expect(n["crm:primarycontact"]?.["gendercode"]).toBe("Male");
   });
 
   it("reports which on-screen labels mapped service fields cover", () => {
     const labels = coveredPageLabels(undefined);
     expect(labels).toEqual(expect.arrayContaining(["first name", "dob", "postal code", "gender"]));
-    expect(labels).not.toContain("occupation");
-    expect(coveredPageLabels({ "applicant.occupation": "note" })).toContain("occupation");
+    expect(labels).toContain("occupation");
+    expect(labels).not.toContain("lead source");
+    expect(coveredPageLabels({ "applicant.leadSource": "note" })).toContain("lead source");
   });
 });

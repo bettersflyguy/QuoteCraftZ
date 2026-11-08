@@ -225,16 +225,50 @@ export interface FieldMapExport {
   version: 1;
   exportedAt: string;
   maps: FieldMaps;
-  /** One-for-one choice mappings per site ({origin: {table.column: {text: value}}}). */
+  /** One-for-one choice mappings per site ({origin: {table.column: {text: value}}}),
+   * and per data service ("dataservice:ezlynx"). */
   options?: OptionMaps;
+  /** Data-service field mappings ({ezlynx: {fieldId: target}}). */
+  dataServices?: Record<string, Record<string, string>>;
 }
 
-export function buildFieldMapExport(maps: FieldMaps, options?: OptionMaps): FieldMapExport {
-  const opts = options ? Object.fromEntries(Object.entries(options).filter(([o]) => o in maps)) : {};
+/** A data-service field's target: not mapped, a semantic path (one row or
+ * all rows), a CRM column (record or all rows) or a timeline note. Never a
+ * secured target (each agent maps those locally). */
+export const isDataServiceTarget = (t: string): boolean =>
+  t === "" || PATH_LABEL.has(t) || isRoutablePath(t) || isCrmTarget(t) || isNoteTarget(t);
+
+export function buildFieldMapExport(
+  maps: FieldMaps, options?: OptionMaps, dataServices?: Record<string, Record<string, string>>
+): FieldMapExport {
+  const ds = Object.fromEntries(Object.entries(dataServices ?? {})
+    .map(([s, m]) => [s, Object.fromEntries(Object.entries(m).filter(([, t]) => isDataServiceTarget(t)))] as const)
+    .filter(([, m]) => Object.keys(m).length));
+  // choice mappings travel with the sites and data services in the file
+  const opts = options ? Object.fromEntries(Object.entries(options)
+    .filter(([o]) => o in maps || (o.startsWith("dataservice:") && o.slice(12) in ds))) : {};
   return {
     type: EXPORT_TYPE, version: 1, exportedAt: new Date().toISOString(), maps: withoutSecured(maps),
-    ...(Object.keys(opts).length ? { options: opts } : {})
+    ...(Object.keys(opts).length ? { options: opts } : {}),
+    ...(Object.keys(ds).length ? { dataServices: ds } : {})
   };
+}
+
+/** Validated data-service mappings from a share file. */
+function parseDataServices(raw: unknown): { maps: Record<string, Record<string, string>>; dropped: number } {
+  const maps: Record<string, Record<string, string>> = {};
+  let dropped = 0;
+  if (typeof raw !== "object" || raw === null) return { maps, dropped };
+  for (const [source, entries] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^[a-z][a-z0-9]{0,30}$/.test(source) || typeof entries !== "object" || entries === null) { dropped += 1; continue; }
+    const kept: Record<string, string> = {};
+    for (const [id, t] of Object.entries(entries as Record<string, unknown>)) {
+      if (/^[a-z][a-zA-Z]{0,30}\.[a-zA-Z0-9]{1,60}$/.test(id) && typeof t === "string" && isDataServiceTarget(t)) kept[id] = t;
+      else dropped += 1;
+    }
+    if (Object.keys(kept).length) maps[source] = kept;
+  }
+  return { maps, dropped };
 }
 
 /** Validated choice mappings from a share file, for the origins it maps. */
@@ -256,8 +290,10 @@ function parseOptionMaps(raw: unknown, origins: Set<string>): OptionMaps {
 
 export interface FieldMapImport {
   maps: FieldMaps;
-  /** Choice mappings for the imported sites. */
+  /** Choice mappings for the imported sites and data services. */
   options: OptionMaps;
+  /** Data-service field mappings ({ezlynx: {fieldId: target}}). */
+  dataServices: Record<string, Record<string, string>>;
   sites: number;
   fields: number;
   /** Entries dropped by validation (unknown paths, malformed origins/keys). */
@@ -333,9 +369,14 @@ export function parseFieldMapImport(text: string): FieldMapImport {
       perOrigin.push({ origin, fields: Object.keys(clean).length, labels: [...originLabels].sort(), picks: originPicks });
     }
   }
-  if (!Object.keys(maps).length) throw new Error("The file contained no usable mappings.");
-  const options = parseOptionMaps((doc as { options?: unknown }).options, new Set(Object.keys(maps)));
-  return { maps, options, sites: Object.keys(maps).length, fields, dropped, secured, labelTargets: [...labelTargets].sort(), perOrigin };
+  const ds = parseDataServices((doc as { dataServices?: unknown }).dataServices);
+  if (!Object.keys(maps).length && !Object.keys(ds.maps).length) throw new Error("The file contained no usable mappings.");
+  const options = parseOptionMaps((doc as { options?: unknown }).options,
+    new Set([...Object.keys(maps), ...Object.keys(ds.maps).map(s => `dataservice:${s}`)]));
+  return {
+    maps, options, dataServices: ds.maps, sites: Object.keys(maps).length, fields, dropped: dropped + ds.dropped, secured,
+    labelTargets: [...labelTargets].sort(), perOrigin
+  };
 }
 
 /** A share file never carries secured mappings (see parseFieldMapImport). */

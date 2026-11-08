@@ -32,6 +32,16 @@ import {
   type FieldMapImport
 } from "@/portal/fieldMaps";
 import { getOptionMaps, setOptionMaps } from "@/portal/optionMaps";
+import { EZLYNX_FIELDS, effectiveTargets, getDataServiceMaps, setDataServiceMap } from "@/sources/ezlynxSource";
+import { DATA_SERVICE_ORIGINS } from "@/panel/DataServiceMapEditor";
+
+/** Every data-service field's effective target (saved choice or default),
+ * so a share file carries the complete mapping. */
+async function effectiveDataServiceMaps(): Promise<Record<string, Record<string, string>>> {
+  const saved = await getDataServiceMaps();
+  const targets = effectiveTargets(saved["ezlynx"]);
+  return { ezlynx: Object.fromEntries(EZLYNX_FIELDS.map(f => [f.id, targets[f.id] ?? ""])) };
+}
 
 /** Carrier field mappings taught in the panel: list, share-file export, import
  * from a teammate's export, and per-site removal. */
@@ -49,8 +59,11 @@ function FieldMapsSection() {
   /** Share file for every site, or just one ("www8.nowcerts.com"). */
   const exportMaps = async (only?: string) => {
     const subset = only ? { [only]: maps[only]! } : maps;
-    // choice mappings travel with their sites
-    const blob = new Blob([JSON.stringify(buildFieldMapExport(subset, await getOptionMaps()), null, 2)], { type: "application/json" });
+    // choice mappings travel with their sites; data-service mappings go with
+    // a full export (and with the data service's own site)
+    const withServices = !only || only in DATA_SERVICE_ORIGINS;
+    const services = withServices ? await effectiveDataServiceMaps() : undefined;
+    const blob = new Blob([JSON.stringify(buildFieldMapExport(subset, await getOptionMaps(), services), null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -82,10 +95,16 @@ function FieldMapsSection() {
     for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
     await setAllFieldMaps(merged);
     for (const [origin, cols] of Object.entries(parsed.options)) await setOptionMaps(origin, cols);
+    for (const [source, m] of Object.entries(parsed.dataServices)) {
+      const current = (await getDataServiceMaps())[source] ?? {};
+      await setDataServiceMap(source, { ...current, ...m });
+    }
+    const dsCount = Object.values(parsed.dataServices).reduce((n, m) => n + Object.keys(m).length, 0);
     setMaps(merged);
     setPendingImport(null);
     setNote(
       `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
+      (dsCount ? `, ${dsCount} data service mapping${dsCount === 1 ? "" : "s"}` : "") +
       (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") +
       "."
     );
@@ -118,11 +137,9 @@ function FieldMapsSection() {
         <Tooltip content="Import mappings from a share file" relationship="label" withArrow>
           <Button size="small" icon={<ArrowUploadRegular />} onClick={pickImportFile} />
         </Tooltip>
-        {origins.length > 1 && (
-          <Tooltip content="Export every site's mappings" relationship="label" withArrow>
-            <Button size="small" icon={<ArrowDownloadRegular />} onClick={() => exportMaps()} />
-          </Tooltip>
-        )}
+        <Tooltip content="Export every site's mappings and the data service mappings" relationship="label" withArrow>
+          <Button size="small" icon={<ArrowDownloadRegular />} onClick={() => void exportMaps()} />
+        </Tooltip>
       </div>
       {origins.length === 0
         ? <Text block style={{ marginTop: 12 }}>No saved mappings yet.</Text>
@@ -148,6 +165,8 @@ function FieldMapsSection() {
               (o.labels.length ? ` · fills from captured: ${o.labels.join(", ")}` : "") +
               (o.picks ? ` · ${o.picks} taught text capture${o.picks === 1 ? "" : "s"}` : "")
             ).join("; ")}
+            {Object.entries(pendingImport.dataServices).map(([s, m]) =>
+              `${pendingImport.perOrigin.length ? "; " : ""}${s === "ezlynx" ? "EZLynx" : s} data service: ${Object.keys(m).length} field${Object.keys(m).length === 1 ? "" : "s"} (replaces those fields)`).join("")}
             {" "}
             <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>{" "}
             <Button size="small" onClick={() => setPendingImport(null)}>Cancel</Button>

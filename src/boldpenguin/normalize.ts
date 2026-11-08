@@ -131,6 +131,8 @@ export const CRM_BRIDGE: Record<string, string> = {
   "crm:primarycontact.mobilephone": "contact.phone",
   "crm:primarycontact.telephone1": "contact.phone",
   "crm:primarycontact.birthdate": "contact.dateOfBirth",
+  "crm:primarycontact.gendercode": "contact.gender",
+  "crm:primarycontact.familystatuscode": "contact.maritalStatus",
   "crm:policy1.iacrm_policynumber": "policy.number",
   "crm:policy1.iacrm_premium": "policy.premium",
   "crm:policy1.iacrm_effectivedate": "coverage.effectiveDate",
