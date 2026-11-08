@@ -8,6 +8,7 @@ import {
   Button,
   tokens
 } from "@fluentui/react-components";
+import { SettingsRegular } from "@fluentui/react-icons";
 import type { CrmEnvironment } from "@/crm/environments";
 import { getActiveEnvironment } from "@/crm/environments";
 import { send } from "./api";
@@ -72,6 +73,9 @@ export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) =
       <MenuTrigger disableButtonEnhancement>
         <Button
           appearance="subtle"
+          icon={<SettingsRegular />}
+          iconPosition="after"
+          title="Settings: environment, field mappings"
           style={{
             backgroundColor: BACKGROUND_TOKEN[active.color],
             color: FOREGROUND_TOKEN[active.color],
@@ -91,7 +95,7 @@ export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) =
           ))}
           {onOpenMappings && (
             <MenuItem onClick={onOpenMappings}>
-              Field mappings…
+              Field mappings
             </MenuItem>
           )}
           <MenuItem onClick={() => chrome.runtime.openOptionsPage()}>

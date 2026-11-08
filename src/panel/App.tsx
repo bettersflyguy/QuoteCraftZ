@@ -89,10 +89,7 @@ export function App() {
   // active tab, and following it would unmount the in-flight flow and dump
   // the user into the EZLynx wizard mid-commit.
   const [flowActive, setFlowActive] = useState(false);
-  const [showMappings, setShowMappings] = useState(false);
-  // opened from the carrier-portal screen: start mapping that page right away
-  const [mapOnOpen, setMapOnOpen] = useState(false);
-  const lastModeRef = useRef(rawMode);
+  const [showMappings, setShowMappings] = useState(false);  const lastModeRef = useRef(rawMode);
   const mode = flowActive ? lastModeRef.current : rawMode;
   lastModeRef.current = mode;
 
@@ -118,19 +115,13 @@ export function App() {
           <img className={styles.logo} src="/icons/32.png" alt="" />
           <span className={styles.title}>D365 Insurance Quote Connector</span>
         </div>
-        <EnvBadge dispatch={dispatch} onOpenMappings={() => { setMapOnOpen(false); setShowMappings(v => !v); }} />
+        <EnvBadge dispatch={dispatch} onOpenMappings={() => setShowMappings(v => !v)} />
       </div>
       <div className={styles.body}>
-        {showMappings && <MappingsManager onClose={() => setShowMappings(false)} mapOnOpen={mapOnOpen} />}
+        {showMappings && <MappingsManager onClose={() => setShowMappings(false)} />}
         {!showMappings && <>
         {mode === "commercial" && <CommercialCapture onChanged={refreshPage} onFlowActive={setFlowActive} />}
-        {mode === "portal" && (
-          <PortalFill
-            onChanged={refreshPage}
-            onFlowActive={setFlowActive}
-            onOpenMappings={() => { setMapOnOpen(true); setShowMappings(true); }}
-          />
-        )}
+        {mode === "portal" && <PortalFill onChanged={refreshPage} onFlowActive={setFlowActive} />}
         {mode === "personal" && <>
         {state.step === "run" && (
           <RunPicker key={state.ezlynxApplicantId ?? "none"} state={state} dispatch={dispatch} />

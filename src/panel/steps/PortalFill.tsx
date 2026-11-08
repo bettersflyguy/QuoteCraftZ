@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { Button, Checkbox, Input, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { Button, Checkbox, Input, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
+import { ArrowDownloadRegular, DatabaseArrowDownRegular, FormRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { grantActiveTab } from "../portalAccess";
 import { send, PanelError } from "../api";
@@ -60,14 +61,30 @@ function businessName(app: CapturedApplication | null): string | null {
 }
 
 
-/** Carrier-portal mode: the active tab is neither EZLynx, Bold Penguin, nor the
- * CRM. Ingest reads the visible insured data on this page into the held
- * application; Fill writes the held application into this page's form. */
-export function PortalFill({ onChanged, onFlowActive, onOpenMappings }: {
+/** Icon-only action with its description as the hover tooltip. Disabled
+ * actions stay hoverable so the tooltip still says why/what. */
+function ActionIcon({ tip, icon, onClick, disabled, active }: {
+  tip: string; icon: ReactElement; onClick: () => void; disabled?: boolean; active?: boolean;
+}) {
+  return (
+    <Tooltip content={tip} relationship="label" withArrow>
+      <Button
+        icon={icon}
+        appearance={active ? "primary" : "secondary"}
+        disabledFocusable={disabled}
+        onClick={disabled ? undefined : onClick}
+      />
+    </Tooltip>
+  );
+}
+
+/** Carrier-portal mode (the active tab is neither EZLynx, Bold Penguin, nor
+ * the CRM): Ingest reads the visible insured data into the held application;
+ * Fill writes it into this page's form. Mapping lives on its own page (the
+ * settings menu), never inline with these actions. */
+export function PortalFill({ onChanged, onFlowActive }: {
   onChanged: () => void;
   onFlowActive?: (active: boolean) => void;
-  /** Mapping lives on its own page, never inline with ingest/fill. */
-  onOpenMappings?: () => void;
 }) {
   const styles = useStyles();
   const [app, setApp] = useState<CapturedApplication | null>(null);
@@ -213,7 +230,34 @@ export function PortalFill({ onChanged, onFlowActive, onOpenMappings }: {
 
   return (
     <div className={styles.root}>
-      <div className={styles.title}>Carrier portal</div>
+      <div className={styles.buttons}>
+        <ActionIcon
+          tip={autoCap ? "Stop auto-capture" : "Auto-capture as I work: reads every page you visit into the capture"}
+          icon={busy === "autocap" ? <Spinner size="tiny" /> : autoCap ? <RecordStopRegular /> : <RecordRegular />}
+          active={autoCap}
+          disabled={busy !== null}
+          onClick={toggleAutoCap}
+        />
+        <ActionIcon
+          tip="Ingest this page: reads the insured data shown here"
+          icon={busy === "ingest" ? <Spinner size="tiny" /> : <ArrowDownloadRegular />}
+          disabled={busy !== null}
+          onClick={() => run("ingest")}
+        />
+        <ActionIcon
+          tip={app ? "Fill this page from the capture" : "Fill this page (capture or ingest something first)"}
+          icon={busy === "fill" ? <Spinner size="tiny" /> : <FormRegular />}
+          disabled={busy !== null || !app}
+          onClick={() => run("fill")}
+        />
+        <ActionIcon
+          tip="Fill from CRM: pick an insured to fill this page"
+          icon={<DatabaseArrowDownRegular />}
+          active={crmOpen}
+          disabled={busy !== null}
+          onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}
+        />
+      </div>
       {app
         ? <div className={styles.ready}>
             {name ?? "Application ready"}: {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held
@@ -232,23 +276,6 @@ export function PortalFill({ onChanged, onFlowActive, onOpenMappings }: {
         </Text>
       )}
       {error && <ErrorBar error={error} />}
-      <div className={styles.buttons}>
-        <Button appearance={autoCap ? "secondary" : "primary"} disabled={busy !== null} onClick={toggleAutoCap}>
-          {busy === "autocap" ? <Spinner size="tiny" /> : autoCap ? "Stop auto-capture" : "Auto-capture as I work"}
-        </Button>
-        <Button disabled={busy !== null} onClick={() => run("ingest")}>
-          {busy === "ingest" ? <Spinner size="tiny" /> : "Ingest this page"}
-        </Button>
-        <Button appearance="primary" disabled={busy !== null || !app} onClick={() => run("fill")}>
-          {busy === "fill" ? <Spinner size="tiny" /> : "Fill this page"}
-        </Button>
-        <Button disabled={busy !== null} onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}>
-          Fill from CRM…
-        </Button>
-        {onOpenMappings && (
-          <Button disabled={busy !== null} onClick={onOpenMappings}>Field mappings</Button>
-        )}
-      </div>
       {crmOpen && (
         <>
           <div className={styles.row}>
