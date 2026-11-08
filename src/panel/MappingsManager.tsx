@@ -5,6 +5,7 @@ import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow }
 import { FIELDMAP_STORAGE_KEY, getAllFieldMaps, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
+import type { ChoicesRead } from "./OptionMapEditor";
 import { send } from "./api";
 import { getOptionMaps, type ColumnOptionMap } from "@/portal/optionMaps";
 
@@ -166,6 +167,9 @@ export function MappingsManager() {
           choices={choices}
           setChoices={u => setChoices(u)}
           capturedFields={app?.fields}
+          onReadChoices={scanTabId === null
+            ? undefined
+            : key => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: scanTabId, key })}
           busy={busy === "save"}
           onSave={saveScan}
           onCancel={() => setScan(null)}

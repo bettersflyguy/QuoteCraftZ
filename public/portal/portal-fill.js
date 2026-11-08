@@ -493,6 +493,73 @@
     return out.length ? out.slice(0, 100) : undefined;
   }
 
+  /* CHOICES of one mapped field, for the choice-mapping editor: its current
+   * value plus every option it offers, in the page's wording. Styled
+   * dropdowns (Angular Material, Kendo, ARIA comboboxes) only render their
+   * options while open: the dropdown is opened, read and closed again -
+   * nothing is selected. Identifier and payment fields are refused. */
+  const OPTION_SELECTOR = "[role='listbox'] [role='option'], mat-option, .mat-option, .mat-mdc-option, .k-list-item, .k-list li, .k-animation-container li, .dropdown-menu.show .dropdown-item, [class*='select__option']";
+  function visibleOptionTexts() {
+    return Array.from(new Set(Array.from(document.querySelectorAll(OPTION_SELECTOR))
+      .filter((o) => o.getClientRects().length)
+      .map((o) => clean(o.innerText || o.textContent))
+      .filter((t) => t && t.length <= 100 && !PLACEHOLDER_OPTION.test(t))));
+  }
+  function choiceHost(el) {
+    return el.closest("select, [role='combobox'], mat-select, [aria-haspopup='listbox'], .k-dropdown, .k-dropdownlist, .k-picker, .mat-mdc-select, .mat-select") || el;
+  }
+  async function readChoices(key) {
+    let el = null;
+    if (key.indexOf("pick:") === 0) {
+      try { el = document.querySelector(key.slice(5)); } catch (_e) { el = null; }
+    } else {
+      el = Array.from(document.querySelectorAll("input, select, textarea")).find((c) => controlKey(c) === key) || null;
+    }
+    if (!el) return null;
+    const host = choiceHost(el);
+    const name = fieldName(host) || fieldName(el) || "";
+    if (isSensitiveSource(name) || PAYMENT_FIELD.test(name)) return { current: "", options: [], refused: true };
+    if (host.tagName === "SELECT") {
+      const sel = host.options[host.selectedIndex];
+      return { current: sel ? clean(sel.textContent) : "", options: choiceOptions(host) || [] };
+    }
+    if ((el.type || "").toLowerCase() === "radio") {
+      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => r.name === el.name);
+      const on = group.find((r) => r.checked);
+      return { current: on ? optionName(on) : "", options: choiceOptions(el) || [] };
+    }
+    const current = clean(host.value != null && typeof host.value === "string" ? host.value : (host.innerText || host.textContent)).slice(0, 100);
+    /* options already in the DOM (aria-controls / aria-owns listbox) */
+    const ownedId = host.getAttribute("aria-controls") || host.getAttribute("aria-owns");
+    const owned = ownedId ? document.getElementById(ownedId) : null;
+    if (owned) {
+      const texts = Array.from(owned.querySelectorAll("[role='option'], li")).map((o) => clean(o.textContent)).filter((t) => t && t.length <= 100);
+      if (texts.length) return { current, options: Array.from(new Set(texts)) };
+    }
+    /* open, read, close */
+    const before = new Set(visibleOptionTexts());
+    const press = (t) => {
+      ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach((type) =>
+        t.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true })));
+    };
+    press(host.querySelector(".mat-mdc-select-trigger, .mat-select-trigger, .k-input-button, .k-select") || host);
+    let options = [];
+    for (let i = 0; i < 8 && !options.length; i += 1) {
+      await new Promise((r) => setTimeout(r, 150));
+      options = visibleOptionTexts().filter((t) => !before.has(t));
+    }
+    const esc = (t) => t && t.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
+    esc(document.activeElement);
+    esc(host);
+    await new Promise((r) => setTimeout(r, 150));
+    if (visibleOptionTexts().some((t) => options.indexOf(t) >= 0)) {
+      /* still open: a click on the page backdrop closes CDK/Kendo overlays */
+      const backdrop = document.querySelector(".cdk-overlay-backdrop");
+      if (backdrop) press(backdrop); else press(host);
+    }
+    return { current, options };
+  }
+
   /* mapping editor's view of this frame: every fillable control with its key,
    * visible label, what auto-matching would pick, and any saved mapping */
   function scanControls(payload, overrides) {
@@ -933,6 +1000,7 @@
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalFillSecure = (values, overwrite, overrides) => fillSecure(values, Boolean(overwrite), overrides || {});
   globalThis.__bettersPortalAdvance = () => advance(activeModal() || document);
+  globalThis.__bettersPortalChoices = (key) => (typeof key === "string" && key ? readChoices(key) : null);
   /* shared with the ingester, so a control's saved mapping routes its value
    * on capture exactly as it does on fill */
   globalThis.__bettersControlKey = controlKey;

@@ -674,6 +674,19 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/portalPick":
         return { ok: true, data: await deps.pickPortalTab(msg.tabId) };
 
+      case "panel/portalChoices": {
+        // one field's current value and options (styled dropdowns opened,
+        // read and closed); the first frame holding the field answers
+        await chrome.scripting.executeScript({ target: { tabId: msg.tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+        const frames = await chrome.scripting.executeScript({
+          target: { tabId: msg.tabId, allFrames: true },
+          func: (k: string) => (globalThis as { __bettersPortalChoices?: (k: string) => unknown }).__bettersPortalChoices?.(k) ?? null,
+          args: [msg.key]
+        });
+        const hit = frames.map(fr => fr.result as { current: string; options: string[]; refused?: boolean } | null).find(r => r !== null) ?? null;
+        return { ok: true, data: hit };
+      }
+
       case "panel/portalPickCancel":
         await deps.cancelPortalPick(msg.tabId);
         return { ok: true, data: null };

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, NotepadRegular, StopRegular, TextBulletListLtrRegular } from "@fluentui/react-icons";
-import { OptionMapEditor } from "./OptionMapEditor";
+import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { choiceColumnOf } from "@/portal/choiceRouting";
 import { columnKeyOf, type ColumnOptionMap } from "@/portal/optionMaps";
 import { TargetPicker } from "./TargetPicker";
@@ -88,13 +88,15 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices }: {
   scan: PortalScanResult;
   /** This site's one-for-one choice mappings ({table.column: {text: value}}). */
   choices?: Record<string, ColumnOptionMap>;
   setChoices?: (updater: (c: Record<string, ColumnOptionMap>) => Record<string, ColumnOptionMap>) => void;
   /** Held capture fields: their values are known source wordings for a choice. */
   capturedFields?: { value: string; mapped?: string }[];
+  /** Reads one field's current value and options from the page. */
+  onReadChoices?: (key: string) => Promise<ChoicesRead | null>;
   draft: Record<string, string>;
   setDraft: (updater: (d: Record<string, string>) => Record<string, string>) => void;
   captured: CapturedTarget[];
@@ -360,6 +362,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
               sources={choiceSources}
               value={choices?.[choiceKey] ?? {}}
               onChange={next => setChoices?.(c => ({ ...c, [choiceKey]: next }))}
+              onRead={onReadChoices ? () => onReadChoices(r.key) : undefined}
             />
           )}
           </Fragment>

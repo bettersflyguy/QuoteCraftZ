@@ -84,6 +84,10 @@ describe("page scan lists a selection field's choices", () => {
     HTMLElement.prototype.getBoundingClientRect = function () {
       return { left: 10, top: 40, width: 80, height: 16, right: 90, bottom: 56, x: 10, y: 40, toJSON() { return {}; } } as DOMRect;
     };
+    // jsdom has no layout: every attached element gets one box
+    Element.prototype.getClientRects = function (this: Element) {
+      return (this.isConnected ? [this.getBoundingClientRect()] : []) as unknown as DOMRectList;
+    };
     for (const f of ["portal-mapper.js", "portal-fill.js"]) {
       // eslint-disable-next-line no-new-func
       new Function(readFileSync(path.resolve(__dirname, "../public/portal", f), "utf8"))();
@@ -96,5 +100,37 @@ describe("page scan lists a selection field's choices", () => {
     const rows = (globalThis as unknown as { __bettersPortalScan: (p: unknown, o: unknown) => { key: string; options?: string[] }[] })
       .__bettersPortalScan(null, {});
     expect(rows.find(r => r.key === "select:edu")?.options).toEqual(["Some College", "Bachelors Degree"]);
+  });
+
+  type Choices = { current: string; options: string[]; refused?: boolean } | null;
+  const readChoices = (key: string) =>
+    (globalThis as unknown as { __bettersPortalChoices: (k: string) => Promise<Choices> }).__bettersPortalChoices(key);
+
+  it("reads a styled dropdown's current value and its options by opening and closing it", async () => {
+    // Angular-Material-like: options exist only while the overlay is open
+    document.body.innerHTML = `
+      <label id="lbl">Education</label>
+      <mat-select id="edu" role="combobox" aria-labelledby="lbl"><span id="shown">Bachelors</span></mat-select>
+      <div class="cdk-overlay-container"></div>`;
+    const host = document.getElementById("edu")!;
+    const overlay = document.querySelector(".cdk-overlay-container")!;
+    host.addEventListener("click", () => {
+      overlay.innerHTML = `<div role="listbox"><mat-option role="option">High School</mat-option><mat-option role="option">Bachelors</mat-option><mat-option role="option">Masters</mat-option></div>`;
+    });
+    host.addEventListener("keydown", e => { if ((e as KeyboardEvent).key === "Escape") overlay.innerHTML = ""; });
+    const r = await readChoices("pick:#shown");
+    expect(r).toEqual({ current: "Bachelors", options: ["High School", "Bachelors", "Masters"] });
+    expect(overlay.innerHTML).toBe("");                       // closed again
+    expect(document.getElementById("shown")!.textContent).toBe("Bachelors"); // nothing selected
+  });
+
+  it("reads a native select without opening it, and refuses identifier fields", async () => {
+    document.body.innerHTML = `
+      <label for="edu">Education</label>
+      <select id="edu" name="edu"><option value="">Select...</option><option>Some College</option><option selected>Bachelors Degree</option></select>
+      <label for="ssnq">SSN type</label>
+      <select id="ssnq" name="ssnq"><option>Full</option></select>`;
+    expect(await readChoices("select:edu")).toEqual({ current: "Bachelors Degree", options: ["Some College", "Bachelors Degree"] });
+    expect((await readChoices("select:ssnq"))?.refused).toBe(true);
   });
 });
