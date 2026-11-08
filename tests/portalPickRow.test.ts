@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /** Picker vs grid rows: clicking a text cell in a row that carries its own
- * controls (action menu, "Primary" checkbox — the NowCerts contacts list)
+ * controls (action menu, "Primary" checkbox - the NowCerts contacts list)
  * must resolve the CELL TEXT as a capture teaching, never the row's stray
  * checkbox as a "composite widget". The picker ships as a plain injected
- * script — test it as shipped, against a real DOM. */
+ * script - test it as shipped, against a real DOM. */
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";

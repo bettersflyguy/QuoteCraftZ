@@ -66,7 +66,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   const [target, setTarget] = useState<"insured" | "lead">("insured");
   const [insuredType, setInsuredType] = useState<1 | 2>(() => guessInsuredType(app));
   const [opp, setOpp] = useState<OppState>({ create: false, lobId: null, name: "", nameEdited: false });
-  // A captured policy number means the ingest happened on a SALE screen —
+  // A captured policy number means the ingest happened on a SALE screen -
   // policy creation offers itself pre-checked with the captured terms.
   // Policies are an array: a taught AMS policies list yields one row per
   // captured policy (with its mapped columns); otherwise the single draft.
@@ -84,7 +84,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
 
   const setPolicyRow = (i: number, patch: Partial<PolicyRow>) =>
     setPolicy(p => ({ ...p, rows: p.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
-  // A quoted premium with NO policy number = a rating-portal quote — offer
+  // A quoted premium with NO policy number = a rating-portal quote - offer
   // writing it as an iacrm_quote on a picked-or-created opportunity.
   const [quote, setQuote] = useState<QuoteState>(() => {
     const d = quoteFromCapture(app);
@@ -116,7 +116,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
 
   useEffect(() => { getActiveEnvironment().then(setEnv).catch(() => {}); }, []);
 
-  // pin the panel's mode while this flow is open or a write is in flight —
+  // pin the panel's mode while this flow is open or a write is in flight -
   // the sign-in popup stealing focus must not unmount an in-progress load
   const flowActive = step !== "closed" || busy !== null;
   useEffect(() => {
@@ -242,7 +242,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             extra: crmGroup(app, "crm:opportunity") ?? undefined
           });
           createdOppId = createdOpp.opportunityId;
-          rows.push({ key: `Opportunity — created "${name}"`, status: 204, error: null, entityId: null });
+          rows.push({ key: `Opportunity: created "${name}"`, status: 204, error: null, entityId: null });
         } catch (e) {
           rows.push({ key: "Opportunity", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
@@ -268,7 +268,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 extra: pr.extra
               }
             });
-            rows.push({ key: `Policy — created ${pr.number.trim()}${pr.extra ? "" : " (Active)"}`, status: 204, error: null, entityId: null });
+            rows.push({ key: `Policy: created ${pr.number.trim()}${pr.extra ? "" : " (Active)"}`, status: 204, error: null, entityId: null });
           } catch (e) {
             rows.push({ key: `Policy ${pr.number.trim()}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
           }
@@ -285,7 +285,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
               opportunityId: quoteOppId,
               carrierId: quote.carrierId,
               lobId: quote.lobId ?? opp.lobId,
-              name: `${carrierName} — ${recordName}`,
+              name: `${carrierName} - ${recordName}`,
               premium: parseMoney(quote.premium),
               coverageSummary: draft.coverageSummary,
               effectiveDate: toIsoDate(draft.effectiveDate.trim() || null),
@@ -294,7 +294,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
               extra: crmGroup(app, "crm:quote") ?? undefined
             }
           });
-          rows.push({ key: `Quote — ${carrierName} ${quote.premium || ""} on the opportunity${q.linesWritten ? ` with ${q.linesWritten} coverage lines` : ""} (re-captures update it)`, status: 204, error: null, entityId: null });
+          rows.push({ key: `Quote: ${carrierName} ${quote.premium || ""} on the opportunity${q.linesWritten ? ` with ${q.linesWritten} coverage lines` : ""} (re-captures update it)`, status: 204, error: null, entityId: null });
         } catch (e) {
           rows.push({ key: "Quote", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
@@ -345,7 +345,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       const created = await send<{ leadId: string; name: string }>({
         type: "panel/createLead",
         fields: {
-          topic: `${oppName(lobName)} — ${recordName}`,
+          topic: `${oppName(lobName)} - ${recordName}`,
           name: insuredType === 2 ? identity.businessName || recordName : personName,
           firstName: identity.firstName || null, lastName: identity.lastName || null,
           street: identity.street || null, city: identity.city || null,
@@ -355,8 +355,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           leadSource: leadSourceGuess(app)
         }
       });
-      setResults([{ key: `Lead created — ${created.name} (source: ${leadSourceGuess(app)})`, status: 204, error: null, entityId: null },
-        { key: "Risk-data logging requires an insured Account — convert the lead to load it", status: 204, error: null, entityId: null }]);
+      setResults([{ key: `Lead created: ${created.name} (source: ${leadSourceGuess(app)})`, status: 204, error: null, entityId: null },
+        { key: "Risk-data logging requires an insured Account. Convert the lead to load it.", status: 204, error: null, entityId: null }]);
       setLoadedInto(created.name);
       setLoadedRecord({ etn: "lead", id: created.leadId });
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
@@ -401,11 +401,11 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     if (quote.create && target === "insured" && !quote.lobId && !opp.lobId) missing.push("a line of business for the quote's opportunity");
     return (
       <div className={styles.root}>
-        <div className={styles.title}>Review before loading — edit anything that's wrong</div>
+        <div className={styles.title}>Review before loading</div>
         {error && <ErrorBar error={error} />}
         {identityEmpty && (
           <div className={styles.warn}>
-            This capture has no insured identity yet — it only holds page details.
+            This capture has no insured identity yet. It only holds page details.
             Open the Policyholder / Named Insured section (or the purchase
             confirmation) and hit <b>Ingest this page</b> there too; captures for
             the same client merge into one application.
@@ -415,12 +415,12 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         {dupes && dupes.length > 0 && (
           <>
             <div className={styles.hint}>
-              Already in CRM — load into one of these instead of creating a duplicate:
+              Already in CRM. Load into one of these instead of creating a duplicate:
             </div>
             {dupes.map(d => (
               <div key={`${d.kind}:${d.id}`} className={styles.match}>
                 <span className={styles.matchText}>
-                  <b>{d.kind === "lead" ? "Lead" : "Account"}</b> — {d.name}
+                  <b>{d.kind === "lead" ? "Lead" : "Account"}</b>: {d.name}
                   {d.city ? `, ${d.city}` : ""}{d.postalCode ? ` ${d.postalCode}` : ""} ({MATCH_LABEL[d.matchedBy]})
                 </span>
                 {d.kind === "account" ? (
@@ -526,7 +526,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             </Dropdown>
             <div className={styles.hint}>
               After you pick the insured, you'll choose which opportunity the
-              quote attaches to — or create one.
+              quote attaches to, or create one.
             </div>
           </>
         )}
@@ -534,7 +534,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           <Checkbox
             checked={policy.create}
             onChange={(_, d) => void togglePolicy(Boolean(d.checked))}
-            label="Create policy (sold — policy number captured)"
+            label="Create policy (sold, policy number captured)"
           />
         )}
         {target === "insured" && policy.create && (
@@ -589,7 +589,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         )}
         {target === "lead" && policy.create && (
           <div className={styles.hint}>
-            A policy number was captured — policies attach to insured Accounts.
+            A policy number was captured. Policies attach to insured Accounts.
             Switch "Create as" to Insured to write the policy.
           </div>
         )}
@@ -609,11 +609,11 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   if (pendingOpp) {
     return (
       <div className={styles.root}>
-        <div className={styles.title}>Attach the quote — {pendingOpp.accountName}</div>
+        <div className={styles.title}>Attach the quote: {pendingOpp.accountName}</div>
         {error && <ErrorBar error={error} />}
         {pendingOpp.opps.map(o => (
           <div key={o.opportunityId} className={styles.match}>
-            <span className={styles.matchText}>{o.name}{o.lobName ? ` — ${o.lobName}` : ""}</span>
+            <span className={styles.matchText}>{o.name}{o.lobName ? ` - ${o.lobName}` : ""}</span>
             <Button size="small" disabled={busy !== null} onClick={() => commit(pendingOpp.accountId, pendingOpp.accountName, { existingOppId: o.opportunityId })}>
               {busy === pendingOpp.accountId ? <Spinner size="tiny" /> : "Use"}
             </Button>
@@ -638,12 +638,12 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       {dupes && dupes.length > 0 && (
         <>
           <div className={styles.hint}>
-            Existing records for this person — load into one instead of creating a duplicate:
+            Existing records for this person. Load into one instead of creating a duplicate:
           </div>
           {dupes.map(d => (
             <div key={`${d.kind}:${d.id}`} className={styles.match}>
               <span className={styles.matchText}>
-                <b>{d.kind === "lead" ? "Lead" : "Account"}</b> — {d.name}
+                <b>{d.kind === "lead" ? "Lead" : "Account"}</b>: {d.name}
                 {d.city ? `, ${d.city}` : ""}{d.postalCode ? ` ${d.postalCode}` : ""} ({MATCH_LABEL[d.matchedBy]})
               </span>
               {d.kind === "account" ? (
@@ -680,7 +680,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           {matches?.map(m => (
             <div key={m.accountId} className={styles.match}>
               <span className={styles.matchText}>
-                {m.name}{m.city ? ` — ${m.city}` : ""}{m.postalCode ? ` ${m.postalCode}` : ""}
+                {m.name}{m.city ? `, ${m.city}` : ""}{m.postalCode ? ` ${m.postalCode}` : ""}
               </span>
               <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                 {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", m.accountId)} target="_blank">Open</Button>}

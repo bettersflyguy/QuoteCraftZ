@@ -1,5 +1,5 @@
 /** The portal mapper ships as a plain UMD script (public/portal/) because it is
- * injected on demand into arbitrary carrier-portal tabs — test it as shipped. */
+ * injected on demand into arbitrary carrier-portal tabs - test it as shipped. */
 import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -48,7 +48,7 @@ describe("portal mapper", () => {
       normalized: { contact: { fullName: "Edward Parkin" } },
       fields: [{ section: "Personal Information", label: "Name", value: "Edward Parkin" }]
     });
-    // FAO's internal field ids contain "NamedInsured" — must not match a bare Name field
+    // FAO's internal field ids contain "NamedInsured" - must not match a bare Name field
     expect(matchField("City NamedInsured.City", candidates)).toBeNull();
     expect(matchField("First Name NamedInsured.FirstName", candidates)?.value).toBe("Edward");
     expect(matchField("Last Name NamedInsured.LastName", candidates)?.value).toBe("Parkin");

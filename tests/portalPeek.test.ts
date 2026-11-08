@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** Mapping-editor peek: outlines exactly what the draft covers, keyed the
  * same way the fill and capture resolve elements, and restores the page. The
- * scripts ship as plain injected files — tested as shipped, on a real DOM. */
+ * scripts ship as plain injected files - tested as shipped, on a real DOM. */
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -10,7 +10,7 @@ type Item = { key: string; label: string; kind: "mapped" | "auto" | "skip"; arra
 let peek: (items: Item[] | null) => { shown: number; missing: number };
 
 beforeAll(() => {
-  // jsdom has no layout: give elements a box like a browser would — zero
+  // jsdom has no layout: give elements a box like a browser would - zero
   // inside a display:none ancestor (a hidden table row's cells), real otherwise
   HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
     const hidden = Boolean(this.closest("[style*='display:none'], [style*='display: none']"));

@@ -120,7 +120,7 @@ export function OpportunityPin({
         type: "panel/createOpportunity",
         accountId: state.accountId,
         lobId: chosenLobId,
-        name: `${state.accountName ?? "New insured"} — ${lobName}`,
+        name: `${state.accountName ?? "New insured"} - ${lobName}`,
         pipelineId: pipeline?.pipelineId ?? null,
         stageId: chosenStageId
       });
@@ -155,7 +155,7 @@ export function OpportunityPin({
             <CardHeader
               header={
                 <Text weight="semibold">
-                  {b.lob} — {b.quotes.length} quotes
+                  {b.lob}: {b.quotes.length} quotes
                 </Text>
               }
             />

@@ -1,4 +1,4 @@
-/** Bold Penguin application capture — content script on *.boldpenguin.com.
+/** Bold Penguin application capture - content script on *.boldpenguin.com.
  * TypeScript port of the Application Assistant concept's content/extract.js.
  *
  * Walks the question-set navigation of a completed application, reads native
@@ -336,7 +336,7 @@ async function capture(): Promise<CapturedApplication> {
 }
 
 // the worker re-injects this script to revive orphaned tabs after an
-// extension update — never register the listener twice in one world
+// extension update - never register the listener twice in one world
 const bpGuard = globalThis as { __bettersBpLoaded?: boolean };
 const bpAlreadyLoaded = bpGuard.__bettersBpLoaded === true;
 bpGuard.__bettersBpLoaded = true;

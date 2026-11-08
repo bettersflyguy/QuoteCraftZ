@@ -97,7 +97,7 @@ function FieldMapsSection() {
         : origins.map(origin => (
             <div key={origin} style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
               <Text style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                {origin} — {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
+                {origin}: {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
               </Text>
               <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} title="Remove this site's mapping" />
             </div>
@@ -119,7 +119,7 @@ function FieldMapsSection() {
           <MessageBarBody>
             Review before applying:{" "}
             {pendingImport.perOrigin.map(o =>
-              `${o.origin} — ${o.fields} field${o.fields === 1 ? "" : "s"} (${maps[o.origin] ? "replaces existing" : "new site"})` +
+              `${o.origin}: ${o.fields} field${o.fields === 1 ? "" : "s"} (${maps[o.origin] ? "replaces existing" : "new site"})` +
               (o.labels.length ? ` · fills from captured: ${o.labels.join(", ")}` : "")
             ).join("; ")}
             {" "}
@@ -156,7 +156,7 @@ const useStyles = makeStyles({
     fontFamily: tokens.fontFamilyBase
   },
   /* one shared grid for header + rows so the columns always line up and
-   * every field owns its own track — no intrinsic-width overlap */
+   * every field owns its own track - no intrinsic-width overlap */
   grid: {
     marginTop: "16px",
     display: "grid",
@@ -238,7 +238,7 @@ export function OptionsApp() {
     <div className={styles.root}>
       <img src="/icons/32.png" alt="" style={{ width: 28, height: 28, verticalAlign: "-6px", marginRight: 10 }} />
       <Text size={600} weight="semibold">
-        D365 Insurance Quote Connector — Environments
+        D365 Insurance Quote Connector: Environments
       </Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">

@@ -46,7 +46,7 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
   specials: TargetSpecial[];
   /** Display text for the current value when it isn't in groups/specials. */
   currentText?: string;
-  /** Header prefix in browse mode ("Capture as — "). */
+  /** Header prefix in browse mode ("Capture as - "). */
   groupPrefix?: string;
 }) {
   const styles = useStyles();
@@ -118,7 +118,7 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
 
   return (
     <div className={styles.root} ref={rootRef}>
-      <button type="button" className={styles.trigger} onClick={() => setOpen(o => !o)} title={selected ? `${selected.label} — ${selected.group}` : undefined}>
+      <button type="button" className={styles.trigger} onClick={() => setOpen(o => !o)} title={selected ? `${selected.label} (${selected.group})` : undefined}>
         {special ? special.label
           : selected ? <>{selected.label} <span className={styles.entity}>· {selected.group}</span></>
           : currentText ?? value}
@@ -145,7 +145,7 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
                   {g.paths.map(p => item(p.path, p.label, null))}
                 </div>
               ))}
-            {searching && hits.length >= 200 && <div className={styles.empty}>Showing the first 200 — keep typing to narrow.</div>}
+            {searching && hits.length >= 200 && <div className={styles.empty}>Showing the first 200. Keep typing to narrow.</div>}
           </div>
         </div>
       )}

@@ -100,12 +100,12 @@ export interface NormalizableField {
   value: string;
   name?: string;
   section?: string;
-  /** Explicit rule path (agent-taught capture) — routed directly, never
+  /** Explicit rule path (agent-taught capture) - routed directly, never
    * alias-scored. Only known MAP_PATHS paths are honored. */
   mapped?: string;
 }
 
-/** Well-known CRM columns that ALSO feed the semantic pipeline — identity
+/** Well-known CRM columns that ALSO feed the semantic pipeline - identity
  * review, duplicate gate, contact dedupe, policy draft and portal fill all
  * read semantic paths, so a taught "Insured (account): Email" must drive
  * them exactly like the semantic "Email" target would. */
@@ -170,7 +170,7 @@ function explicitRouting(fields: NormalizableField[]): {
   return { indices, byIndex, paths, bridged };
 }
 
-/** Which field indices the rules under the given path prefixes would claim —
+/** Which field indices the rules under the given path prefixes would claim -
  * used to decide what is "structurally mapped" (written to CRM columns)
  * versus supplemental data that belongs in an activity note. */
 export function claimedIndices(fields: NormalizableField[], pathPrefixes: string[]): Set<number> {
@@ -200,7 +200,7 @@ export function normalize(fields: NormalizableField[]): NormalizedApplication {
   const claimed = new Set<number>();
 
   // explicitly routed (agent-taught) fields first: they claim their index and
-  // own their path outright — alias scoring never sees them or overwrites them
+  // own their path outright - alias scoring never sees them or overwrites them
   const explicit = explicitRouting(fields);
   for (const index of explicit.indices) claimed.add(index);
   for (const [index, path] of explicit.byIndex) setPath(result, path, clean(fields[index]!.value));

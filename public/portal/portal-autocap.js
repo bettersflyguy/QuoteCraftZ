@@ -1,6 +1,6 @@
 /* Auto-capture driver: while enabled, watches the page (SPA mutations + URL
  * changes), lets it settle, then harvests via the ingest collector and sends
- * the fields to the worker to merge into the held application. Pure observer —
+ * the fields to the worker to merge into the held application. Pure observer -
  * it never clicks, types, or navigates. Injected on demand next to
  * portal-ingest.js after the user enables auto-capture for this site. */
 (function () {
@@ -25,7 +25,7 @@
       if (signature === lastSignature) return;
       lastSignature = signature;
       chrome.runtime.sendMessage({ type: "portal/autoCaptured", fields: res.fields, title: res.title, url: res.url }).catch(() => {});
-    } catch (_e) { /* page mid-transition — the next settle retries */ }
+    } catch (_e) { /* page mid-transition - the next settle retries */ }
   }
 
   function settleSoon() {

@@ -1,4 +1,4 @@
-/** CRM load for a captured application (Bold Penguin or portal ingest) —
+/** CRM load for a captured application (Bold Penguin or portal ingest) -
  * the non-EZLynx twin of the quote commit: insured enrichment from the
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
@@ -29,7 +29,7 @@ const digitsOf = (v: string | null) => (v ?? "").replace(/\D/g, "");
 
 /** A usable phone number, with mobile detection. Portals often pair a
  * "Phone Type" select ("Cellular telephone") with the number in a separate
- * control — a value without >=7 digits is a TYPE, never a number. */
+ * control - a value without >=7 digits is a TYPE, never a number. */
 export function detectPhone(app: CapturedApplication): { number: string; isMobile: boolean } | null {
   const typeField = app.fields.find(f => /\bphone\s*type\b|\btype\s*of\s*phone\b/i.test(f.label));
   const typeSaysMobile = Boolean(typeField && /cell|mobile|wireless/i.test(typeField.value));
@@ -46,7 +46,7 @@ export function detectPhone(app: CapturedApplication): { number: string; isMobil
   return null;
 }
 
-/** The editable identity the panel shows before anything is written —
+/** The editable identity the panel shows before anything is written -
  * captured data is a starting point the agent reviews, not gospel. */
 export interface CaptureIdentity {
   firstName: string;
@@ -108,7 +108,7 @@ export function splitUsAddress(line: string): { street: string; city: string; st
 
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-/** Carrier decorations on person names — GEICO renders the primary named
+/** Carrier decorations on person names - GEICO renders the primary named
  * insured as "Richard Lewandowski (PNI)". Parentheticals are never part of a
  * person's name; left in place they poison the duplicate gate's name match
  * AND the created account's name. Business names are never run through this. */
@@ -135,7 +135,7 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   if (!firstName && !lastName) {
     // an exactly-labeled "Name" fact row (GEICO Edge's Personal Information
     // tab) beats rail headings that glue the middle name in ("Edward
-    // La-Valle Parkin"); middle tokens are middle names — last word is the
+    // La-Valle Parkin"); middle tokens are middle names - last word is the
     // surname, editable in review for multi-word surnames. A value equal to
     // the BUSINESS name is never a person ("B H Towing Service" must not
     // become first "B", last "Service").
@@ -155,7 +155,7 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   let postalCode = str(app, "address", "postalCode") ?? "";
   if (street && !city) {
     // the whole "street city, ST zip" line landed in one field (the ZIP may
-    // already be known separately — rate-by-zip flows capture it first)
+    // already be known separately - rate-by-zip flows capture it first)
     const split = splitUsAddress(street);
     if (split) {
       street = split.street;
@@ -208,7 +208,7 @@ const HEADERISH = /^(name|full ?name|first ?name|last ?name|e-?mails?|phones?|co
  * pipeline find-or-creates as a Contact under the account AFTER the account
  * itself (hierarchy: account first, then related contacts). A row restating
  * the PRIMARY insured (NowCerts lists them among related contacts) is
- * skipped — the primary contact is a one-to-one handled separately. */
+ * skipped - the primary contact is a one-to-one handled separately. */
 export function coApplicantsFromCapture(app: CapturedApplication): CapturedApplicant["coApplicants"] {
   const primary = identityFromCapture(app);
   const primaryName = canonical(`${primary.firstName} ${primary.lastName}`);
@@ -265,7 +265,7 @@ export function crmGroup(app: CapturedApplication, name: string): Record<string,
 
 /** One policy draft per CRM-taught policy row (policies are an array: an
  * AMS policies list fans into crm:policy1..N). Empty when no policy row was
- * taught — the caller falls back to the single label-scored draft. */
+ * taught - the caller falls back to the single label-scored draft. */
 export function policyDraftsFromCapture(app: CapturedApplication): (PolicyDraft & { extra: Record<string, string> })[] {
   return Object.keys(app.normalized)
     .map(k => /^crm:policy(\d+)$/.exec(k))
@@ -332,7 +332,7 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
   const effectiveDate = str(app, "coverage", "effectiveDate") ?? fieldValue(app, /effective\s*date/i);
   let expirationDate = str(app, "coverage", "expirationDate") ?? fieldValue(app, /expiration\s*date/i);
   if (!expirationDate && effectiveDate) {
-    // sale screens rarely print the expiration — derive it from the term
+    // sale screens rarely print the expiration - derive it from the term
     // ("Policy Term: 6 months" / "6 Month Auto Premium")
     const termField = app.fields.find(f => /\b(6|12)\s*[- ]?month/i.test(`${f.label} ${f.value}`));
     const termText = fieldValue(app, /policy\s*term/i) || (termField ? `${termField.label} ${termField.value}` : "");
@@ -349,15 +349,18 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
   };
 }
 
-/** Rule paths whose fields are written to real CRM columns by the load —
+/** Rule paths whose fields are written to real CRM columns by the load -
  * everything else is supplemental and goes into the activity note. */
 // bare "contact" prefix covers the primary (contact.) AND every related-
-// contact array slot (contact2., contact3., …) — all become contact records
+// contact array slot (contact2., contact3., …) - all become contact records
 // "crm:" = agent-taught CRM columns, written to their records by the load
 const STRUCTURED_PATHS = ["contact", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate", "crm:"];
 
 export interface SupplementalNote {
   subject: string;
+  /** Matches the subject earlier versions wrote (same words, different
+   * separator), so a re-load updates that note instead of adding another. */
+  legacyMatch: { prefix: string; suffix: string };
   body: string;
   count: number;
 }
@@ -368,13 +371,13 @@ export interface SupplementalNote {
  * the same note instead of stacking duplicates. */
 export function buildSupplementalNote(app: CapturedApplication): SupplementalNote | null {
   const claimed = claimedIndices(app.fields, STRUCTURED_PATHS);
-  // "Related contacts" rows are CRM-sourced display context — never written back
+  // "Related contacts" rows are CRM-sourced display context - never written back
   const extra = app.fields.filter((f, i) => !claimed.has(i) && f.section !== "Related contacts");
   if (!extra.length) return null;
   const bySection = new Map<string, string[]>();
   for (const f of extra) {
     const section = f.section || "Details";
-    const line = `  ${f.group ? `${f.group} — ` : ""}${f.label}: ${f.value}`;
+    const line = `  ${f.group ? `${f.group}: ` : ""}${f.label}: ${f.value}`;
     (bySection.get(section) ?? bySection.set(section, []).get(section)!).push(line);
   }
   const body = [
@@ -383,7 +386,8 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
     ...[...bySection.entries()].flatMap(([section, lines]) => [section, ...lines, ""])
   ].join("\n").slice(0, 90000);
   return {
-    subject: `Quote Connector — captured application data (${app.source.system})`,
+    subject: `Quote Connector: captured application data (${app.source.system})`,
+    legacyMatch: { prefix: "Quote Connector ", suffix: ` captured application data (${app.source.system})` },
     body,
     count: extra.length
   };
@@ -391,7 +395,7 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
 
 /** Default for the Insured type radio. Commercial only when the capture
  * carries real commercial markers (NAIC/SIC/FEIN, revenue/payroll, business
- * insurance lines) or a business with no person — a stray company-ish field
+ * insurance lines) or a business with no person - a stray company-ish field
  * on a personal-lines quote must not flip the default. */
 export function guessInsuredType(app: CapturedApplication): 1 | 2 {
   const id = identityFromCapture(app);
@@ -454,7 +458,7 @@ export function carrierGuess(app: CapturedApplication): string {
 
 /** What a rating portal's coverage/summary screen yields toward an
  * iacrm_quote: a quoted premium WITHOUT a policy number (a number means it
- * sold — that's the policy flow instead). */
+ * sold - that's the policy flow instead). */
 export interface QuoteDraft {
   hasQuote: boolean;
   premiumText: string;
@@ -489,7 +493,7 @@ export function accountNameFromCapture(app: CapturedApplication): string {
 /** Upserts every captured field into the knowledge tables via the shared
  * READ-then-write core (`upsertKnowledge`): dictionary keyed by
  * `capture:{canonical label}` in iacrm_questionid, one answer per
- * account+question (re-loads update). Never touches iacrm_amsexternalid —
+ * account+question (re-loads update). Never touches iacrm_amsexternalid -
  * that column is reserved for the AMS sync. */
 export async function writeApplicationKnowledge(
   env: CrmEnvironment,

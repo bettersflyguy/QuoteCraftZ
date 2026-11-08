@@ -35,8 +35,8 @@ export interface AnswerSpec {
 
 /** Shared upsert core for the question-knowledge layer. Idempotency comes
  * from READ-then-write on `iacrm_questionid` and the account/question
- * lookups — NEVER from iacrm_amsexternalid, which is reserved for the AMS
- * sync (Nathan, 2026-09-28). canonicalkey is never written here either —
+ * lookups - NEVER from iacrm_amsexternalid, which is reserved for the AMS
+ * sync (Nathan, 2026-09-28). canonicalkey is never written here either -
  * mapping is a curation concern, not a capture concern. */
 export async function upsertKnowledge(
   env: CrmEnvironment,

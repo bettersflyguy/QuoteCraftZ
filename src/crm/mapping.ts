@@ -60,8 +60,8 @@ export function buildQuoteOps(
       // endpoint - deferred. Run date beats an empty field.
       const effective = sel.desiredEffectiveDate ?? run.ratedAt?.slice(0, 10) ?? null;
       const name =
-        `${q.carrierName} – ${block.lob}${effective ? ` – ${effective}` : ""}` +
-        (q.kind === "alternate" ? " – Alt" : "");
+        `${q.carrierName} - ${block.lob}${effective ? ` - ${effective}` : ""}` +
+        (q.kind === "alternate" ? " - Alt" : "");
 
       // @odata.bind uses SCHEMA-cased nav properties (iacrm_AccountId, not
       // iacrm_accountid) - logical case fails with "undeclared property".

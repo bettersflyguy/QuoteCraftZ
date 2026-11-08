@@ -3,7 +3,7 @@ import { NormalizeError } from "./normalize";
 import type { ApplicantChangedBroadcast, BridgeRequest, Res } from "@/messages";
 
 // the worker re-injects this script to revive orphaned tabs after an
-// extension update — never register the listener or poll twice in one world
+// extension update - never register the listener or poll twice in one world
 const ezGuard = globalThis as { __bettersEzLoaded?: boolean };
 const ezAlreadyLoaded = ezGuard.__bettersEzLoaded === true;
 ezGuard.__bettersEzLoaded = true;
@@ -23,10 +23,10 @@ if (!ezAlreadyLoaded) chrome.runtime.onMessage.addListener((msg: BridgeRequest, 
       }
     } catch (e) {
       if (e instanceof EzlynxSessionError) {
-        return sendResponse({ ok: false, error: "EZLynx session expired — sign in on the EZLynx tab and retry.", kind: "session" });
+        return sendResponse({ ok: false, error: "EZLynx session expired. Sign in on the EZLynx tab and retry.", kind: "session" });
       }
       if (e instanceof NormalizeError) {
-        return sendResponse({ ok: false, error: "Couldn't read EZLynx results — the extension needs an update.", kind: "normalize", detail: `${e.message}\n---payload---\n${e.payloadSnippet}` });
+        return sendResponse({ ok: false, error: "Couldn't read EZLynx results. The extension needs an update.", kind: "normalize", detail: `${e.message}\n---payload---\n${e.payloadSnippet}` });
       }
       return sendResponse({ ok: false, error: String(e), kind: "unknown" });
     }

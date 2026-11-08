@@ -8,7 +8,7 @@ export interface CrmSourceRecords {
   contact: Record<string, unknown> | null;
   /** iacrm_riskanswer rows (label/value), when the knowledge tables exist. */
   riskAnswers: { label: string; value: string }[];
-  /** Every active contact on the account — agent context in the panel;
+  /** Every active contact on the account - agent context in the panel;
    * the portal mapper skips this section so they never fill forms. */
   relatedContacts?: Record<string, unknown>[];
 }
@@ -35,7 +35,7 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
 
   // the ACCOUNT's insured name columns are the named insured; the primary
   // contact can be a spouse/co-insured (Tracey Dittrich's account lists
-  // Alexander as primary contact) — it only speaks for the insured when the
+  // Alexander as primary contact) - it only speaks for the insured when the
   // names agree, and person-specific fields (DOB/gender/marital, contact
   // phone/email fallbacks) are suppressed otherwise
   const insuredFirst = s(account, "iacrm_insuredfirstname");
@@ -47,7 +47,7 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
   let firstName = insuredFirst || s(contact, "firstname");
   let lastName = insuredLast || s(contact, "lastname");
   // dirty records (early imports) sometimes hold the FULL name in one or both
-  // name columns — repair rather than propagate
+  // name columns - repair rather than propagate
   if (firstName.includes(" ") && (firstName === lastName || !lastName)) {
     const parts = firstName.split(/\s+/);
     firstName = parts[0]!;
@@ -99,7 +99,7 @@ export function buildCrmCaptureFields(records: CrmSourceRecords): CapturedAppFie
       s(c, "jobtitle")
     ].filter(Boolean).join(" · ");
     const label = c["contactid"] === primaryId ? `${name} (primary)` : name;
-    fields.push({ label, value: detail || "—", section: "Related contacts", group: "", source: "entity-card" });
+    fields.push({ label, value: detail || "-", section: "Related contacts", group: "", source: "entity-card" });
   }
   return fields;
 }

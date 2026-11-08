@@ -1,7 +1,7 @@
 # Pre-release E2E checklist
 
 Manual walk, run before every release (spec: one e2e, manual, not CI). Run it in
-Chrome AND Edge — the pinned extension ID makes the same `dist/` valid in both.
+Chrome AND Edge - the pinned extension ID makes the same `dist/` valid in both.
 
 Prereqs: an EZLynx login with at least one completed Auto or Home rate run; a
 Dataverse account with a security role in the target environment (DEV:
@@ -10,7 +10,7 @@ Dataverse account with a security role in the target environment (DEV:
 | # | Step | Expected |
 |---|---|---|
 | 1 | `npm run build`; load `dist/` unpacked | Extension ID is `nppecoclmgfkccogikgalbgpkimljhch` in both browsers |
-| 2 | Sign into EZLynx; open an applicant with a completed rate | — |
+| 2 | Sign into EZLynx; open an applicant with a completed rate | - |
 | 3 | Open the side panel | Header shows active env badge (**DEV**, green); runs list shows the applicant's rate runs newest-first, one row per run |
 | 4 | Pick the run | Capture succeeds; account step shows applicant name/address/DOB summary |
 | 5 | Search accounts | Matching Account ranked first when postal code matches; open-opp counts shown; "Create new account…" is a button, never automatic |
@@ -22,7 +22,7 @@ Dataverse account with a security role in the target environment (DEV:
 | 11 | Re-commit the same run unchanged | Row count in CRM unchanged (upsert, not duplicate) |
 | 12 | In the CRM set one imported quote's premium status to Firm; re-commit | That quote stays **Firm** |
 | 13 | Options → add a second environment, set it active | Panel badge changes color/name; pinned CRM selections cleared; captured run survives |
-| 14 | Switch back to DEV | Prior token reused — no interactive sign-in inside the same browser session |
+| 14 | Switch back to DEV | Prior token reused - no interactive sign-in inside the same browser session |
 | 15 | Worker devtools → `chrome.storage.session.clear()` → retry a CRM call | Panel drops to sign-in button; after sign-in (account picker appears), the captured run is still present |
 | 16 | EZLynx: sign out, then try to capture | Panel shows "EZLynx session expired" warning, not a crash |
 

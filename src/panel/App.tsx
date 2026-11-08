@@ -76,7 +76,7 @@ export function App() {
   }, [refreshPage]);
 
   // The portal card (ingest/fill) only offers itself while the personal-lines
-  // wizard is idle — glancing at another tab mid-import must not hide the
+  // wizard is idle - glancing at another tab mid-import must not hide the
   // in-progress wizard. CRM and sign-in tabs never present as portals.
   const wizardIdle = state.step === "run" && !state.captured;
   const rawMode: "commercial" | "portal" | "personal" =

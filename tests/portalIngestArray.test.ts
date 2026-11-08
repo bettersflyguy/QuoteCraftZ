@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** Array-relationship taught captures: teaching ONE row's cell pulls that
  * cell from EVERY row of the repeated structure. The ingest ships as a plain
- * injected script — test it as shipped, against a real DOM. */
+ * injected script - test it as shipped, against a real DOM. */
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";

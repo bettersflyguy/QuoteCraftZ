@@ -14,7 +14,7 @@ describe("portal ingest merge", () => {
       field("Legal Business Name *", "Northwind Bakery LLC"),
       field("Legal Business Name", "Northwind Bakery LLC"), // dup after label cleanup
       field("Email Address", "alex@example.com"),
-      field("Notes", "  ") // blank after cleanup — dropped
+      field("Notes", "  ") // blank after cleanup - dropped
     ], site);
 
     expect(added).toBe(2);

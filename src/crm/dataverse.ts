@@ -15,7 +15,7 @@ export class CrmAccessError extends Error {
   }
 }
 
-/** Account the token was issued to, read off the JWT payload — lets the panel
+/** Account the token was issued to, read off the JWT payload - lets the panel
  * say WHICH account Dataverse rejected (wrong-account-picked vs missing role). */
 export function upnFromToken(token: string): string | null {
   try {
@@ -143,9 +143,9 @@ export interface NewLeadFields extends NewAccountFields {
   lastName: string | null;
   /** Fills mobilephone instead of telephone1 when the number is a cell. */
   phoneIsMobile: boolean;
-  /** Lead subject, e.g. "Progressive Auto Quote — Dearris Thomas". */
+  /** Lead subject, e.g. "Progressive Auto Quote - Dearris Thomas". */
   topic: string;
-  /** Intake source name ("Tivly", ...) — resolved-or-created in iacrm_leadsource. */
+  /** Intake source name ("Tivly", ...) - resolved-or-created in iacrm_leadsource. */
   leadSource: string | null;
 }
 
@@ -190,7 +190,7 @@ export interface NewPolicyFields {
   carrierId: string | null;
   lobId: string | null;
   opportunityId: string | null;
-  /** Captured CRM-column values (raw text) taught for this policy row —
+  /** Captured CRM-column values (raw text) taught for this policy row -
    * coerced against the live catalog worker-side; explicit fields win. */
   extra?: Record<string, string>;
 }
@@ -232,11 +232,11 @@ export interface NewQuoteFields {
   /** The portal page the quote came from (iacrm_quotelink + alt-key host). */
   sourceUrl: string;
   quotingMethodId: string | null;
-  /** Captured CRM-column values (raw text) — coerced worker-side; explicit fields win. */
+  /** Captured CRM-column values (raw text) - coerced worker-side; explicit fields win. */
   extra?: Record<string, string>;
 }
 
-/** Upserts a portal-captured quote onto the opportunity — provider "Portal",
+/** Upserts a portal-captured quote onto the opportunity - provider "Portal",
  * alt-keyed per host+opportunity so a re-capture updates instead of
  * duplicating. Same column conventions as the EZLynx writer; premium status
  * is always Estimated (standing rule), source type left unset (carrier
@@ -339,7 +339,7 @@ export async function getInsuredSourceRecords(
   }
 
   // every contact on the account, so the agent has household/stakeholder
-  // context in the panel (display-only — the mapper never fills from these)
+  // context in the panel (display-only - the mapper never fills from these)
   let relatedContacts: Record<string, unknown>[] = [];
   if (accountId) {
     try {
@@ -355,16 +355,24 @@ export async function getInsuredSourceRecords(
 
 /** One evergreen note per subject per account: found by subject -> PATCH,
  * else POST bound to the account. Returns "created" | "updated". */
-export async function upsertAccountNote(env: CrmEnvironment, accountId: string, subject: string, text: string): Promise<"created" | "updated"> {
+export async function upsertAccountNote(
+  env: CrmEnvironment, accountId: string, subject: string, text: string,
+  legacyMatch?: { prefix: string; suffix: string }
+): Promise<"created" | "updated"> {
+  // a renamed subject still finds (and renames) the note an earlier version wrote
+  const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+  const subjects = `subject eq ${q(subject)}` + (legacyMatch
+    ? ` or (startswith(subject,${q(legacyMatch.prefix)}) and endswith(subject,${q(legacyMatch.suffix)}))`
+    : "");
   const { value } = await dvJson<{ value: Record<string, string>[] }>(
     env,
-    `annotations?$select=annotationid&$filter=_objectid_value eq ${accountId} and subject eq '${subject.replace(/'/g, "''")}'&$top=1`
+    `annotations?$select=annotationid&$filter=_objectid_value eq ${accountId} and (${subjects})&$top=1`
   );
   if (value[0]) {
     await dv(env, `annotations(${value[0]["annotationid"]})`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notetext: text })
+      body: JSON.stringify({ subject, notetext: text })
     });
     return "updated";
   }
@@ -500,7 +508,7 @@ export async function findInsuredMatches(env: CrmEnvironment, q: MatchQuery): Pr
     for (const l of value) {
       out.push({
         kind: "lead", id: l["leadid"]!,
-        name: [l["fullname"], l["companyname"]].filter(Boolean).join(" — "),
+        name: [l["fullname"], l["companyname"]].filter(Boolean).join(", "),
         matchedBy: why(l["emailaddress1"], [l["telephone1"], l["mobilephone"]]),
         city: l["address1_city"] ?? null, postalCode: l["address1_postalcode"] ?? null
       });
@@ -518,8 +526,8 @@ export async function getLinesOfBusiness(env: CrmEnvironment): Promise<LobRow[]>
 }
 
 /** Resolves the pipeline for a LOB (iacrm_DefaultForLob match, else a
- * name-matched active pipeline — "Commercial …" for commercial LOBs/insureds,
- * "… Personal …" for personal — else first active) and its ordered stages.
+ * name-matched active pipeline - "Commercial …" for commercial LOBs/insureds,
+ * "… Personal …" for personal - else first active) and its ordered stages.
  * Null when the org has no active pipelines. No org currently sets
  * DefaultForLob, so the name match is the path that actually runs. */
 export async function getStagesForLob(
@@ -579,7 +587,7 @@ export async function createOpportunity(
   // default pipeline + chosen stage so panel-created opps land on the Kanban
   if (pipelineId) body["iacrm_PipelineId@odata.bind"] = `/iacrm_pipelines(${pipelineId})`;
   if (stageId) body["iacrm_PipelineStageId@odata.bind"] = `/iacrm_pipelinestages(${stageId})`;
-  // intake attribution (Tivly etc.) — account-path loads otherwise lose it
+  // intake attribution (Tivly etc.) - account-path loads otherwise lose it
   if (leadSource) body["iacrm_LeadSourceId@odata.bind"] = `/iacrm_leadsources(${await getLeadSourceId(env, leadSource)})`;
   const r = await dvPost<Record<string, string | null>>(
     env, "opportunities?$select=opportunityid,name,_iacrm_lineofbusinessid_value,iacrm_desiredeffectivedate", body
@@ -640,7 +648,7 @@ export async function updateAccount(env: CrmEnvironment, accountId: string, patc
 }
 
 /** Writes captured column values onto an existing record ONLY where the
- * column is empty — agent-entered CRM data always wins over captured data.
+ * column is empty - agent-entered CRM data always wins over captured data.
  * Returns the columns written. */
 export async function fillIfEmpty(env: CrmEnvironment, entitySet: string, id: string, values: Record<string, unknown>): Promise<string[]> {
   const cols = Object.keys(values).filter(c => /^[a-z][a-z0-9_]*$/.test(c));

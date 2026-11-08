@@ -167,7 +167,7 @@ export function ReviewCommit({
               >
                 <Text weight="semibold" style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   {ok ? <CheckmarkCircleRegular /> : <ErrorCircleRegular />}
-                  {row ? `${row.carrier} — ${row.lob} (${row.kind})` : r.key}
+                  {row ? `${row.carrier} - ${row.lob} (${row.kind})` : r.key}
                 </Text>
                 <Text size={200}>{ok ? "Created/updated" : r.error ?? `HTTP ${r.status}`}</Text>
                 {ok && r.entityId && env && (
@@ -246,7 +246,7 @@ export function ReviewCommit({
                     {r.kind === "Alt" ? " (Alt)" : ""}
                   </Text>
                   <Text weight="semibold" wrap={false}>
-                    {r.premium != null ? `$${r.premium.toFixed(2)}` : "—"}
+                    {r.premium != null ? `$${r.premium.toFixed(2)}` : "-"}
                   </Text>
                 </div>
                 <Text size={200}>
@@ -274,7 +274,7 @@ export function ReviewCommit({
         label="Servicing agent (record owner)"
         required
         validationState={owner ? "none" : "warning"}
-        validationMessage={owner ? undefined : "Pick who these quotes belong to — required."}
+        validationMessage={owner ? undefined : "Pick who these quotes belong to (required)."}
         style={{ marginTop: 12 }}
       >
         <Combobox

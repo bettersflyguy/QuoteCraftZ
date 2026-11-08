@@ -43,7 +43,7 @@ describe("writeQuestionKnowledge", () => {
     expect(api.executeBatch).not.toHaveBeenCalled();
   });
 
-  it("upserts via read-then-write on iacrm_questionid — never amsexternalid", async () => {
+  it("upserts via read-then-write on iacrm_questionid - never amsexternalid", async () => {
     const batch = vi.fn(async (_e: unknown, ops: { key: string; method: string; url: string; body?: Record<string, unknown> }[]) =>
       ops.map((o, i) => ({ key: o.key, status: 204, error: null, entityId: o.method === "POST" ? `guid-${i}` : null }))
     );

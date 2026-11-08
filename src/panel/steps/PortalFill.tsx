@@ -200,7 +200,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
       const n = Object.keys(map).length;
       setMapNote(n
         ? `Saved ${n} mapping${n === 1 ? "" : "s"} for ${mapScan.origin}. Fill uses them on this site from now on.`
-        : `Cleared the saved mappings for ${mapScan.origin} — Fill is back to automatic matching.`);
+        : `Cleared the saved mappings for ${mapScan.origin}. Fill is back to automatic matching.`);
       setMapScan(null);
     } catch (e) {
       setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
@@ -256,7 +256,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
       <div className={styles.title}>Carrier portal</div>
       {app
         ? <div className={styles.ready}>
-            {name ?? "Application ready"} — {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held
+            {name ?? "Application ready"}: {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held
             {crmLink && env && (
               <>
                 {" · "}
@@ -270,7 +270,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
           </div>}
       {awaitingGrant && (
         <Text size={200} style={{ display: "block", marginTop: 6, fontWeight: 600 }}>
-          Waiting for browser approval to access {awaitingGrant} — look for the permission
+          Waiting for browser approval to access {awaitingGrant}. Look for the permission
           prompt (in Edge it is under the Extensions puzzle-piece icon next to the address bar) and click Allow.
         </Text>
       )}
@@ -330,7 +330,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
           {crmRows?.map(r => (
             <div key={`${r.kind}:${r.id}`} className={styles.match}>
               <span className={styles.matchText}>
-                <b>{r.kind === "account" ? "Account" : "Contact"}</b> — {r.name}
+                <b>{r.kind === "account" ? "Account" : "Contact"}</b>: {r.name}
                 {r.city ? `, ${r.city}` : ""}{r.postalCode ? ` ${r.postalCode}` : ""}
               </span>
               <Button size="small" disabled={busy !== null} onClick={() => crmPull(r)}>
@@ -344,11 +344,11 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
       {crmNote && <div className={styles.result}>{crmNote}</div>}
       {autoCap && (
         <div className={styles.result}>
-          Auto-capturing this tab — every page you visit is read and merged
+          Auto-capturing this tab: every page you visit is read and merged
           automatically (still never clicks or types).
           {live && (
             <> {live.replaced
-              ? " New person detected — started a fresh capture."
+              ? " New person detected, started a fresh capture."
               : ` Last page added ${live.added} field${live.added === 1 ? "" : "s"} (${live.total} held).`}</>
           )}
         </div>
@@ -366,14 +366,14 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
                   rel="noreferrer"
                   title="Open this insured's CRM record in a new tab"
                 >
-                  {section} — open in CRM ↗
+                  {section}: open in CRM ↗
                 </a>
               ) : (
                 <div className={styles.fieldSection}>{section}</div>
               )}
               {app.fields.filter(f => f.section === section).map((f, i) => (
                 <div key={`${f.label}:${i}`} className={styles.fieldRow}>
-                  <span className={styles.fieldLabel}>{f.group ? `${f.group} — ` : ""}{f.label}</span>
+                  <span className={styles.fieldLabel}>{f.group ? `${f.group}: ` : ""}{f.label}</span>
                   <span className={styles.fieldValue}>{f.value}</span>
                 </div>
               ))}
@@ -392,13 +392,13 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
         <Checkbox
           checked={autoAdvance}
           onChange={(_, d) => toggleAdvance(Boolean(d.checked))}
-          label="Auto-advance after fill (Next/Continue only — never submit, bind, or pay)"
+          label="Auto-advance after fill (Next/Continue only; never submit, bind, or pay)"
         />
       )}
       {ingestResult && (
         <div className={styles.result}>
           {ingestResult.replaced && (
-            <>This page belongs to a <b>different person</b> than the previous capture — started a fresh one (the old capture was discarded, not mixed in). </>
+            <>This page belongs to a <b>different person</b> than the previous capture, so a fresh one was started (the old capture was discarded, not mixed in). </>
           )}
           Ingested {ingestResult.added} new field{ingestResult.added === 1 ? "" : "s"} from this page
           ({ingestResult.total} held in total). Switch to the next portal or rater and fill from it.

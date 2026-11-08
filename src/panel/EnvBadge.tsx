@@ -44,7 +44,7 @@ export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) =
 
   useEffect(() => {
     refresh();
-    // Environments are edited on the Options page while the panel stays open —
+    // Environments are edited on the Options page while the panel stays open -
     // without this, a newly saved environment never appears in the menu.
     const onChanged = (changes: Record<string, unknown>, area: string) => {
       if (area !== "local") return;

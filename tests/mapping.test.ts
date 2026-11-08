@@ -91,8 +91,8 @@ describe("buildQuoteOps", () => {
   });
 
   it("names quotes {Carrier} - {LOB} - {EffectiveDate}, alternates suffixed", () => {
-    expect(ops.find(o => o.key === "ezlynx:1:req")!.body["iacrm_quote_name"]).toBe("Travelers – Auto – 2026-09-01");
-    expect(ops.find(o => o.key === "ezlynx:1:alt0")!.body["iacrm_quote_name"]).toBe("Travelers – Auto – 2026-09-01 – Alt");
+    expect(ops.find(o => o.key === "ezlynx:1:req")!.body["iacrm_quote_name"]).toBe("Travelers - Auto - 2026-09-01");
+    expect(ops.find(o => o.key === "ezlynx:1:alt0")!.body["iacrm_quote_name"]).toBe("Travelers - Auto - 2026-09-01 - Alt");
   });
 
   it("6-month term maps to 738590203; unmatched carrier omits the bind", () => {

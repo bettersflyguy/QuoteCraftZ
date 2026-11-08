@@ -71,7 +71,7 @@ export interface EnrichResult {
   primaryContactSet: boolean;
   /** The contact representing the captured applicant (matched or created). */
   applicantContactId: string | null;
-  /** Related people that matched EXISTING contacts — their captured column
+  /** Related people that matched EXISTING contacts - their captured column
    * values still need a fill-if-empty pass (created ones got them on create). */
   matchedCoContacts: { contactId: string; extra: Record<string, unknown> }[];
 }

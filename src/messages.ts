@@ -5,7 +5,7 @@ import type { CapturedApplication, PortalFillResult } from "@/boldpenguin/types"
 
 export type { CommitPayload, CapturedApplication, PortalFillResult };
 
-/** What kind of page the active tab is showing — drives the panel's mode.
+/** What kind of page the active tab is showing - drives the panel's mode.
  * "crm" (Dynamics / Microsoft sign-in) renders the default wizard, never the
  * portal card. "other" is a candidate carrier portal (ingest/fill). */
 export type PageKind = "ezlynx" | "boldpenguin" | "crm" | "other";

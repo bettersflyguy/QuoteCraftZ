@@ -28,7 +28,7 @@
   }
 
   /* SPA portals (e.g. GEICO's quote workspace) put the visible label in an
-   * ancestor container instead of label[for]/aria — mirror the harvester's
+   * ancestor container instead of label[for]/aria - mirror the harvester's
    * fallback so those fields are matchable too. */
   function containerLabel(control) {
     let node = control;
@@ -81,7 +81,7 @@
   }
 
   /* stable identity for a control, shared by the mapping editor's scan and the
-   * fill pass — agent-taught mappings are stored against these keys */
+   * fill pass - agent-taught mappings are stored against these keys */
   function controlKey(element) {
     if ((element.type || "").toLowerCase() === "radio") {
       return "radio:" + (clean(element.name) || mapper.canonical(primaryLabel(element)).slice(0, 60));
@@ -91,7 +91,7 @@
     return (tag + ":" + base).slice(0, 120);
   }
 
-  /* banking, payment and card fields are NEVER auto-filled — an insurance
+  /* banking, payment and card fields are NEVER auto-filled - an insurance
    * application holds nothing that belongs in them */
   const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|billing|payment|pay\s*method|method\s*of\s*payment|pay\s*plan|auto\s*pay|autopay|amount\s*due|paid\s*to\s*date|balance|eft|ach)\b/i;
 
@@ -216,7 +216,7 @@
     const tag = element.tagName;
     const type = (element.type || "").toLowerCase();
     /* an existing value that is INVALID for this field (a phone holding the
-     * TYPE like "Cell") does not count as filled — replace it */
+     * TYPE like "Cell") does not count as filled - replace it */
     if (!overwrite && !blank(element) && mapper.validForField(fieldNameHint || "", element.value)) return { status: "existing" };
 
     if (type === "radio") {
@@ -299,7 +299,7 @@
   }
 
   /* the candidate an agent-taught mapping points at: a normalized rule path,
-   * or "label:<canonical captured label>" — the label form reaches ANY held
+   * or "label:<canonical captured label>" - the label form reaches ANY held
    * field (2nd driver, vehicle 2 VIN, garaging address...), explicit user
    * intent bypassing the generic-label drop */
   function overrideCandidate(overrides, key, candidates, payloadFields) {
@@ -358,7 +358,7 @@
 
     /* address-verification dialogs ("We found an alternate address ... Select
      * address"): confirm ONLY when the dialog's suggested address carries the
-     * captured street number AND the captured ZIP or city — a value
+     * captured street number AND the captured ZIP or city - a value
      * confirmation, not blind navigation. */
     try {
       await new Promise((r) => setTimeout(r, 1200));
@@ -454,8 +454,8 @@
       try { el = document.querySelector(key.slice(5)); } catch (_e) { /* stale selector */ }
       const snippet = el ? clean(el.innerText).slice(0, 60) : "";
       const label = el
-        ? (inferTextLabel(el) ? inferTextLabel(el) + " — " : "") + (snippet || "(empty)")
-        : "(taught text — not on this page)";
+        ? (inferTextLabel(el) ? inferTextLabel(el) + ": " : "") + (snippet || "(empty)")
+        : "(taught text, not on this page)";
       rows.push({ key, label, type: "text", payment: false, autoPath: null, mapped: typeof ov[key] === "string" ? ov[key] : null });
     }
     return rows;
@@ -465,13 +465,13 @@
    * The frame whose field is clicked resolves with that control's row and
    * broadcasts a cancel so every other frame's instance resolves too
    * (allFrames executeScript waits for all of them). Esc cancels (null);
-   * the short timeout resolves "timeout" so the panel can re-arm — one long
+   * the short timeout resolves "timeout" so the panel can re-arm - one long
    * wait would outlive the panel's message timeout and the worker's life. */
   var activePickCancel = null;
 
   /* identification is NOT filling: readonly/disabled controls (Kendo and
    * other widget suites render their visible input readonly) are still
-   * identifiable — only control-less types are rejected */
+   * identifiable - only control-less types are rejected */
   function pickable(node) {
     if (!node || !node.tagName) return null;
     var tag = node.tagName.toLowerCase();
@@ -557,7 +557,7 @@
 
   /* composedPath reaches inside shadow roots (web-component carrier pages),
    * so a pick can identify fields the flat query scan cannot see. Returns
-   * { control, box }: box is the element to outline — for composite widgets
+   * { control, box }: box is the element to outline - for composite widgets
    * (Kendo dropdowns, styled date pickers) the user clicks a wrapper span
    * while the real control sits CSS-hidden inside it, so the smallest
    * wrapper on the click path holding a couple of controls resolves too. */
@@ -581,7 +581,7 @@
       );
       if (inner.length >= 1 && inner.length <= 3) return { control: inner[0], box: node };
     }
-    /* no control anywhere near — read-only text (AMS details pages):
+    /* no control anywhere near - read-only text (AMS details pages):
      * teachable as a capture source */
     for (i = 0; i < path.length; i += 1) {
       var textEl = textPickable(path[i]);
@@ -669,7 +669,7 @@
           var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
           finish({
             key: "pick:" + cssPath(tx),
-            label: (inferred ? inferred + " — " : "") + snippet,
+            label: (inferred ? inferred + ": " : "") + snippet,
             type: "text",
             payment: PAYMENT_FIELD.test(inferred),
             autoPath: null,
@@ -702,7 +702,7 @@
     });
   }
 
-  /* invoked per frame by the worker via chrome.scripting.executeScript func —
+  /* invoked per frame by the worker via chrome.scripting.executeScript func -
    * each frame (agent portals often put the form in an iframe) fills its own
    * fields and returns its own counts for the worker to aggregate */
   /* --- peek: outline every element the current mapping covers, so the agent
@@ -743,7 +743,7 @@
     peekMarks.push(mark);
   }
 
-  /* items: [{key, label, kind, array}] — control keys resolve through the
+  /* items: [{key, label, kind, array}] - control keys resolve through the
    * same controlKey the fill uses; "pick:" keys through their selector, and
    * array teachings through the capture's own row expansion */
   function peek(items) {

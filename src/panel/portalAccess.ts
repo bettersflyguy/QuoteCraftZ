@@ -1,6 +1,6 @@
 import { PanelError } from "./api";
 
-/** Requests access to the active tab's origin (user gesture required — that's
+/** Requests access to the active tab's origin (user gesture required - that's
  * why this lives in the panel) and returns the tab. Portals aren't in the
  * manifest's host list; each site is granted individually at click time. */
 export async function grantActiveTab(onAwaitingGrant?: (origin: string | null) => void): Promise<{ id: number; url: string }> {
@@ -12,7 +12,7 @@ export async function grantActiveTab(onAwaitingGrant?: (origin: string | null) =
   const already = await chrome.permissions.contains({ origins: [`${origin}/*`] }).catch(() => false);
   if (already) return { id: tab.id, url: tab.url };
   // first visit to this site: the browser shows a permission prompt (in Edge it
-  // hides under the Extensions puzzle-piece icon) and this promise WAITS on it —
+  // hides under the Extensions puzzle-piece icon) and this promise WAITS on it -
   // without the hint + timeout the panel looks dead until the prompt is found
   onAwaitingGrant?.(origin);
   try {
@@ -20,11 +20,11 @@ export async function grantActiveTab(onAwaitingGrant?: (origin: string | null) =
       chrome.permissions.request({ origins: [`${origin}/*`] }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new PanelError(
         "session",
-        `The browser is waiting for you to allow access to ${origin}. Find the permission prompt — in Edge it is under the Extensions (puzzle-piece) icon next to the address bar — click Allow, then retry.`
+        `The browser is waiting for you to allow access to ${origin}. Click Allow on the permission prompt (in Edge it is under the Extensions puzzle-piece icon next to the address bar), then retry.`
       )), 25000))
     ]);
     if (!granted) {
-      throw new PanelError("session", "Access to this site was declined — nothing was read or filled.");
+      throw new PanelError("session", "Access to this site was declined. Nothing was read or filled.");
     }
   } finally {
     onAwaitingGrant?.(null);

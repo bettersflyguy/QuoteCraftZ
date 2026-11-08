@@ -56,7 +56,7 @@ const DENY = new Set([
   "teamsfollowed", "slaid", "slainvokedid", "stepname", "subscriptionid", "msdyn_gdproptout",
   // identifier-class (national ID / SSN store)
   "governmentid",
-  // AMS sync state is owned by the sync — writing synctoams could trigger a push
+  // AMS sync state is owned by the sync - writing synctoams could trigger a push
   "iacrm_synctoams", "iacrm_lastsyncon",
   // social/portal plumbing, never agent data
   "primarysatoriid", "primarytwitterid"
@@ -192,7 +192,7 @@ async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogAp
       if (c) c.options = opts.map(o => ({ value: o.Value, label: clean(o.Label?.UserLocalizedLabel?.Label ?? "") })).filter(o => o.label);
     }
   } catch { /* picklists without options can't be coerced; they simply won't write */ }
-  // a picklist with no resolvable options can never take a value — hide it
+  // a picklist with no resolvable options can never take a value - hide it
   return cols.filter(c => c.type !== "Picklist" || (c.options?.length ?? 0) > 0);
 }
 
@@ -210,7 +210,7 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
 const CACHE_PREFIX = "crm/fieldCatalog/";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Cached per environment for a day — metadata changes only with a solution
+/** Cached per environment for a day - metadata changes only with a solution
  * import; `refresh` forces a re-read. */
 export async function getFieldCatalog(env: CrmEnvironment, api: CatalogApi, refresh = false): Promise<FieldCatalog> {
   const key = CACHE_PREFIX + env.id;

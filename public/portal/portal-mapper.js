@@ -118,7 +118,7 @@
       if (comparable(value) && clean(value)) candidates.push({ path, aliases, value: clean(value), source: "normalized" });
     });
     /* a capture holding only a glued full name still fills First/Last: split
-     * on the fly (middle names dropped — mirrors the identity rules) */
+     * on the fly (middle names dropped - mirrors the identity rules) */
     const contact = normalized.contact || {};
     if (clean(contact.fullName) && !clean(contact.firstName)) {
       const parts = clean(contact.fullName).split(" ");
@@ -159,7 +159,7 @@
     if (!field || !wanted) return 0;
     if (field === wanted) return 120;
     if (field.startsWith(`${wanted} `) || field.endsWith(` ${wanted}`)) return 100;
-    /* substring matches need a distinctive alias — a short single word inside
+    /* substring matches need a distinctive alias - a short single word inside
      * a longer field name ("name" in "named insured city") proves nothing */
     if (field.includes(wanted) && (wanted.length >= 8 || wanted.indexOf(" ") > 0)) return 90;
     if (wanted.length >= 8 && wanted.includes(field)) return 78;

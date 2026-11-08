@@ -16,7 +16,7 @@ export default defineManifest({
   ],
   // Carrier portals can live on any domain; the portal filler asks for each
   // origin at click time (chrome.permissions.request) instead of demanding
-  // blanket access up front — keeps the store listing and install prompt lean.
+  // blanket access up front - keeps the store listing and install prompt lean.
   optional_host_permissions: ["https://*/*"],
   background: { service_worker: "src/worker.ts", type: "module" },
   content_scripts: [

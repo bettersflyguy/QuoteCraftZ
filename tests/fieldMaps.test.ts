@@ -69,7 +69,7 @@ describe("field-map share files", () => {
       }
     });
     const parsed = parseFieldMapImport(JSON.stringify(doc));
-    // FEIN/EIN/tax-id are standard commercial-quoting data — fillable by request
+    // FEIN/EIN/tax-id are standard commercial-quoting data - fillable by request
     expect(Object.values(parsed.maps["https://ok.example.com"]!).sort()).toEqual([
       "label:business name", "label:driver 2 date of birth", "label:driver 2 license number",
       "label:fein", "label:taxid number"
@@ -89,16 +89,16 @@ describe("field-map share files", () => {
     const tooLong = "pick:" + "div:nth-of-type(2) > ".repeat(25) + "span:nth-of-type(1)"; // >500
     const doc = buildFieldMapExport({
       "https://ams.example.com": {
-        [longSel]: "contact.email",            // deep selector within the pick cap — kept
+        [longSel]: "contact.email",            // deep selector within the pick cap - kept
         "pick:#summary > span": "business.fein", // kept
         "pick:#x > em": "skip",                  // kept (suppression)
-        "pick:#y > i": "label:email",            // capture keys can't take fill-direction targets — dropped
-        [tooLong]: "contact.phone",              // over the 500-char pick cap — dropped
-        "pick:input[value]": "contact.email",    // outside the cssPath grammar — dropped
-        "pick:div:has(a)": "contact.phone",      // outside the cssPath grammar — dropped
-        "pick:#x,div": "contact.email",          // selector LIST smuggled through the id branch — dropped
-        "pick:#a[onclick]": "contact.phone",     // attribute selector in the id branch — dropped
-        "pick:#esc\\.aped > span": "contact.email" // escaped metachar, as CSS.escape emits — kept
+        "pick:#y > i": "label:email",            // capture keys can't take fill-direction targets - dropped
+        [tooLong]: "contact.phone",              // over the 500-char pick cap - dropped
+        "pick:input[value]": "contact.email",    // outside the cssPath grammar - dropped
+        "pick:div:has(a)": "contact.phone",      // outside the cssPath grammar - dropped
+        "pick:#x,div": "contact.email",          // selector LIST smuggled through the id branch - dropped
+        "pick:#a[onclick]": "contact.phone",     // attribute selector in the id branch - dropped
+        "pick:#esc\\.aped > span": "contact.email" // escaped metachar, as CSS.escape emits - kept
       }
     });
     const parsed = parseFieldMapImport(JSON.stringify(doc));
@@ -120,12 +120,12 @@ describe("field-map share files", () => {
         "pick:#b > span": "crm:contacts[].address1_city",        // kept (array)
         "pick:#c > span": "crm:policies[].iacrm_policynumber",   // kept (array)
         "pick:#d > span": "crm:account.iacrm_fein",              // kept (FEIN allowed)
-        "pick:#e > span": "crm:account.iacrm_amsexternalid",     // AMS-reserved — dropped
-        "pick:#f > span": "crm:primarycontact.iacrm_ssn",        // identifier-class — dropped
-        "pick:#g > span": "crm:systemuser.fullname",             // not a capture entity — dropped
-        "pick:#h > span": "crm:account.Address1_City",           // not a logical name — dropped
-        "pick:#i > span": "crm:policies[].iacrm_synctoams",      // AMS-owned sync flag — dropped
-        "text:city": "crm:account.address1_city"                 // fill keys can't take CRM columns — dropped
+        "pick:#e > span": "crm:account.iacrm_amsexternalid",     // AMS-reserved - dropped
+        "pick:#f > span": "crm:primarycontact.iacrm_ssn",        // identifier-class - dropped
+        "pick:#g > span": "crm:systemuser.fullname",             // not a capture entity - dropped
+        "pick:#h > span": "crm:account.Address1_City",           // not a logical name - dropped
+        "pick:#i > span": "crm:policies[].iacrm_synctoams",      // AMS-owned sync flag - dropped
+        "text:city": "crm:account.address1_city"                 // fill keys can't take CRM columns - dropped
       }
     })));
     expect(Object.keys(parsed.maps["https://ams.example.com"]!).sort()).toEqual(["pick:#a > span", "pick:#b > span", "pick:#c > span", "pick:#d > span"]);

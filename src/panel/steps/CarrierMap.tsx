@@ -78,7 +78,7 @@ export function CarrierMap({
             </Dropdown>
             {!mapped && (
               <Text size={200} style={{ fontStyle: "italic" }}>
-                Unmapped — will import without a carrier link
+                Unmapped: will import without a carrier link
               </Text>
             )}
           </div>

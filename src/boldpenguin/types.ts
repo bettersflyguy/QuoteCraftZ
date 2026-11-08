@@ -10,7 +10,7 @@ export interface CapturedAppField {
   section: string;
   group: string;
   source: "control" | "choice-group" | "definition-list" | "table" | "review-row" | "entity-card" | "money-line" | "sale" | "taught";
-  /** Explicit rule path for agent-taught captures ("contact2.email") — the
+  /** Explicit rule path for agent-taught captures ("contact2.email") - the
    * normalizer routes it directly, bypassing label-alias scoring, so entity
    * slots with identical-looking values (account email vs contact 2 email)
    * can never collide. Validated against MAP_PATHS before use. */
@@ -45,7 +45,7 @@ export interface PortalScanRow {
   key: string;
   label: string;
   type: string;
-  /** Banking/payment field — displayed locked, never mappable or fillable. */
+  /** Banking/payment field - displayed locked, never mappable or fillable. */
   payment: boolean;
   /** What auto-matching would pick for this control right now (rule paths only). */
   autoPath: string | null;
@@ -60,7 +60,7 @@ export interface PeekItem {
   key: string;
   label: string;
   kind: "mapped" | "auto" | "skip";
-  /** Array teaching — highlight every row the capture would pull. */
+  /** Array teaching - highlight every row the capture would pull. */
   array?: boolean;
 }
 export interface PeekResult { shown: number; missing: number }

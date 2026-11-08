@@ -1,7 +1,7 @@
 /** Merges fields harvested from an arbitrary carrier page into the held
  * captured application (or starts one). Ingest is the inverse of portal fill:
  * any eligible carrier site can contribute insured data, which then fills the
- * next portal. Existing data always wins — ingest only adds. */
+ * next portal. Existing data always wins - ingest only adds. */
 import { canonical, clean, normalize } from "./normalize";
 import type { CapturedApplication, CapturedAppField, NormalizedApplication } from "./types";
 
@@ -39,7 +39,7 @@ function signalsOf(n: NormalizedApplication): IdentitySignals {
   };
 }
 
-/** True when the page belongs to a DIFFERENT person/lead — merging would
+/** True when the page belongs to a DIFFERENT person/lead - merging would
  * cross-wire customers. An agreeing strong signal (same email or phone)
  * confirms the same person regardless of name variants; otherwise any signal
  * present on both sides that disagrees is a different person. A page with no
@@ -73,7 +73,7 @@ function sanitize(fields: CapturedAppField[]): CapturedAppField[] {
 }
 
 /** Recompute the normalized projection from all fields, but let values the
- * existing capture already normalized win — agent-reviewed data never gets
+ * existing capture already normalized win - agent-reviewed data never gets
  * silently replaced by a later page's guess. */
 function mergeNormalized(existing: NormalizedApplication, allFields: CapturedAppField[]): NormalizedApplication {
   const fresh = normalize(allFields);
@@ -97,7 +97,7 @@ export function mergeIngestedFields(
       schemaVersion: "1.1",
       capturedAt: new Date().toISOString(),
       source: { system: site.system, url: site.url, title: site.title },
-      // an ingested page is a snapshot, not an application workflow — no
+      // an ingested page is a snapshot, not an application workflow - no
       // completion heuristics apply
       completion: { likelyCompleted: true, matchedPhrases: [], hasReviewStep: false },
       scannedSections: Array.from(new Set(incoming.map(f => f.section))),

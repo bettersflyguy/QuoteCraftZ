@@ -32,7 +32,7 @@ const useStyles = makeStyles({
 
 function lookup(app: CapturedApplication, path: string): string {
   const value = path.split(".").reduce<unknown>((v, key) => (v as Record<string, unknown> | undefined)?.[key], app.normalized);
-  return typeof value === "string" && value ? value : "—";
+  return typeof value === "string" && value ? value : "-";
 }
 
 /** Commercial-lines mode: the active tab is a Bold Penguin application.
@@ -72,14 +72,14 @@ export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () =
 
   return (
     <div className={styles.root}>
-      <div className={styles.title}>Bold Penguin — commercial application</div>
+      <div className={styles.title}>Bold Penguin: commercial application</div>
       {error && <ErrorBar error={error} onRetry={capture} />}
       {!app && (
         <>
           <div className={styles.hint}>
             Open the completed application, then capture it. The scan visits each
             question set (including vehicle editors for VINs) and returns to where
-            you were — it reads only, never saves or submits.
+            you were. It reads only, never saves or submits.
           </div>
           <Button appearance="primary" disabled={busy} onClick={capture}>
             {busy ? <Spinner size="tiny" /> : "Capture application"}
@@ -107,7 +107,7 @@ export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () =
           </dl>
           <div className={styles.hint}>
             Captured {new Date(app.capturedAt).toLocaleString()}. Switch to a carrier
-            portal tab — this panel offers "Fill this page" there.
+            portal tab; this panel offers "Fill this page" there.
           </div>
           <LoadToCrm key={app.capturedAt} app={app} onFlowActive={onFlowActive} />
           <div className={styles.buttons}>

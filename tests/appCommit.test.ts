@@ -306,7 +306,9 @@ describe("buildSupplementalNote", () => {
     expect(note.body).toContain("  Payment Plan: 6 Pay TMPP");
     expect(note.body).toContain("  Employment Status: Employed");
     expect(note.body).toContain("  Bodily Injury Liability (BI): $30,000/$60,000");
-    expect(note.subject).toBe("Quote Connector — captured application data (sales.geico.com)");
+    expect(note.subject).toBe("Quote Connector: captured application data (sales.geico.com)");
+    // notes written by earlier versions are still found (and renamed) on re-load
+    expect(note.legacyMatch).toEqual({ prefix: "Quote Connector ", suffix: " captured application data (sales.geico.com)" });
   });
 
   it("returns null when everything mapped", async () => {

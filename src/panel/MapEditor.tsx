@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CursorClickRegular, EyeFilled, EyeRegular, StopRegular } from "@fluentui/react-icons";
 import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
@@ -22,7 +23,7 @@ function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
   return [...crm, ...riskData];
 }
 
-/** Array targets ("Related contacts — all rows") are capture-only: a fill
+/** Array targets ("Related contacts - all rows") are capture-only: a fill
  * can't know which row a single control belongs to. */
 const FILL_GROUPS = MAP_PATH_GROUPS
   .map(g => ({ ...g, paths: g.paths.filter(p => !isArrayPath(p.path)) }))
@@ -49,7 +50,7 @@ const useStyles = makeStyles({
 });
 
 /** One captured-field target: binds a control to whatever the capture holds
- * under that label — this is how 2nd drivers, extra vehicles, garaging
+ * under that label - this is how 2nd drivers, extra vehicles, garaging
  * addresses and any other repeated record reach a quote form. */
 export interface CapturedTarget { value: string; label: string }
 
@@ -72,7 +73,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   onSave: () => void;
   onCancel: () => void;
   /** Arms the on-page click-to-identify picker for one ~20s round; resolves
-   * with the clicked field's row, "timeout" (nothing yet — re-arm), or null
+   * with the clicked field's row, "timeout" (nothing yet - re-arm), or null
    * (user cancelled on the page with Esc). */
   onPick?: () => Promise<PortalScanRow | "timeout" | null>;
   /** Resolves a pending pick immediately (the Stop button). */
@@ -97,9 +98,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     try {
       const c = await send<FieldCatalog>({ type: "panel/crmFieldCatalog", refresh });
       setCatalog(c);
-      setCatalogNote(c.entities.length ? null : "CRM fields unavailable — showing built-in targets.");
+      setCatalogNote(c.entities.length ? null : "CRM fields unavailable. Showing built-in targets.");
     } catch {
-      setCatalogNote("CRM fields unavailable (sign in to the CRM) — showing built-in targets.");
+      setCatalogNote("CRM fields unavailable (sign in to the CRM). Showing built-in targets.");
     }
   };
   useEffect(() => { void loadCatalog(false); }, []);
@@ -132,7 +133,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     stopRequested.current = false;
     try {
       // each page-side round lasts ~20s (kept under the message timeout);
-      // "timeout" means nothing happened yet, so re-arm — up to ~3 minutes
+      // "timeout" means nothing happened yet, so re-arm - up to ~3 minutes
       for (let round = 0; round < 9; round += 1) {
         const row = await onPick();
         if (row === "timeout") {
@@ -144,10 +145,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
         if (!known) setExtraRows(x => [...x, row]);
         reveal(row.key);
         setFocusKey(row.key);
-        setPickNote(`Selected: ${row.label}`);
         return;
       }
-      setPickNote("No field was picked. Try again and click a field on the page.");
+      setPickNote("Nothing picked.");
     } catch (e) {
       setPickNote(String((e as Error).message ?? e));
     } finally {
@@ -163,14 +163,14 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   const allRows = [...scan.rows, ...extraRows.filter(x => !scan.rows.some(r => r.key === x.key))];
   // Only rows that mean something are listed: auto-matched, already mapped,
   // or picked/edited this session. Unknown page fields stay hidden until the
-  // agent clicks them on the page — building a map beats scrolling a list
+  // agent clicks them on the page - building a map beats scrolling a list
   // of anonymous "Select Row" checkboxes.
   const rows = allRows.filter(r =>
     showAll || revealed.has(r.key) || Boolean(r.autoPath) || Boolean(r.mapped) || Boolean(draft[r.key]));
   const hiddenCount = allRows.length - rows.length;
 
   /* peek: what the current (unsaved) draft covers, including hidden rows that
-   * auto-match — so the page shows exactly what still needs mapping */
+   * auto-match - so the page shows exactly what still needs mapping */
   const targetText = (v: string) =>
     PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ??
     (v.startsWith("label:") ? (captured.find(c => c.value === v)?.label ?? v.slice(6)) : v);
@@ -191,8 +191,8 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     void onPeek(peekItems).then(r => {
       if (!live) return;
       setPeekNote(r.shown || r.missing
-        ? `${r.shown} mapped field${r.shown === 1 ? "" : "s"} highlighted on the page${r.missing ? ` · ${r.missing} not on this page` : ""}.`
-        : "Nothing is mapped yet — click a field on the page to start.");
+        ? `${r.shown} highlighted${r.missing ? `, ${r.missing} not on this page` : ""}.`
+        : "Nothing mapped yet.");
     }).catch(e => { if (live) setPeekNote(String((e as Error).message ?? e)); });
     return () => { live = false; };
     // re-highlight whenever the draft's coverage changes
@@ -209,31 +209,23 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   };
   return (
     <div className={styles.root}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>
-        Field mapping for {scan.origin} — teach once, used on every fill of this site.
+      <div className={styles.row} style={{ fontWeight: 600 }}>
+        <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>Field mapping for {scan.origin}</span>
+        {onPick && (
+          <Button
+            size="small"
+            appearance={picking ? "primary" : "subtle"}
+            icon={picking ? <StopRegular /> : <CursorClickRegular />}
+            disabled={busy}
+            onClick={() => (picking ? stopPick() : void pick())}
+            title={picking ? "Stop picking" : "Click a field on the page to map it"}
+            aria-label={picking ? "Stop picking" : "Click a field on the page to map it"}
+          />
+        )}
       </div>
-      {onPick && (
-        <div className={styles.row}>
-          <Button size="small" disabled={busy} onClick={() => (picking ? stopPick() : void pick())}>
-            {picking ? "Stop picking" : "Click a field on the page…"}
-          </Button>
-          {onPeek && (
-            <Button size="small" appearance={peeking ? "primary" : "secondary"} disabled={busy} onClick={togglePeek}
-              title="Outline every mapped field on the page: green = mapped, blue dashed = auto-match, grey = never fill">
-              {peeking ? "Hide peek" : "Peek"}
-            </Button>
-          )}
-          {picking && <Spinner size="tiny" />}
-          <span className={styles.label} style={{ maxWidth: "none" }}>
-            {picking
-              ? "Now click a field OR a plain-text value in the page (Esc or Stop cancels)."
-              : pickNote ?? "Fields jump to their row; read-only text becomes a capture teaching."}
-          </span>
-        </div>
-      )}
-      {peeking && peekNote && (
+      {(picking || pickNote) && (
         <div className={styles.label} style={{ maxWidth: "none", marginBottom: 4 }}>
-          {peekNote} <span style={{ color: "#13a10e" }}>■ mapped</span> <span style={{ color: "#0f6cbd" }}>▫ auto</span> <span style={{ color: "#8a8886" }}>▫ never fill</span>
+          {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
       {rows.map(r => {
@@ -248,7 +240,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           >
             <span className={styles.label} title={r.key}>{r.label}</span>
             {r.payment
-              ? <span>payment field — never filled</span>
+              ? <span>Payment field, never filled</span>
               : r.key.startsWith("pick:") ? (
                 /* read-only text teaching: capture direction, CRM fields only */
                 <TargetPicker
@@ -259,7 +251,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                   currentText={current && !groupValues.has(current)
                     ? `${PATH_LABEL.get(current) ?? catalogLabel(catalog, current) ?? current} (saved)`
                     : undefined}
-                  groupPrefix="Capture as — "
+                  groupPrefix="Capture as: "
                 />
               ) : (
                 <TargetPicker
@@ -279,18 +271,16 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
       {(hiddenCount > 0 || showAll) && (
         <div className={styles.label} style={{ maxWidth: "none", marginTop: 4 }}>
           {showAll
-            ? <>Showing every field on the page. <a href="#" onClick={e => { e.preventDefault(); setShowAll(false); }}>Show only mapped fields</a></>
+            ? <a href="#" onClick={e => { e.preventDefault(); setShowAll(false); }}>Show only mapped fields</a>
             : <>
-                {rows.length === 0 ? "No fields auto-matched on this page. " : ""}
-                {hiddenCount} unmapped field{hiddenCount === 1 ? "" : "s"} hidden — click a field on the page to map it.{" "}
+                {hiddenCount} unmapped field{hiddenCount === 1 ? "" : "s"} hidden.{" "}
                 <a href="#" onClick={e => { e.preventDefault(); setShowAll(true); }}>Show all</a>
               </>}
         </div>
       )}
       <div className={styles.label} style={{ maxWidth: "none", marginTop: 4 }}>
         {catalogNote ?? (catalog
-          ? <>Capture targets list every CRM column ({catalog.entities.reduce((n, e) => n + e.columns.length, 0)}).{" "}
-              <a href="#" onClick={e => { e.preventDefault(); void loadCatalog(true); }}>Refresh CRM fields</a></>
+          ? <a href="#" onClick={e => { e.preventDefault(); void loadCatalog(true); }}>Refresh CRM fields</a>
           : "Loading CRM fields…")}
       </div>
       <div className={styles.actions}>
@@ -298,6 +288,21 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           {busy ? <Spinner size="tiny" /> : "Save mapping"}
         </Button>
         <Button size="small" disabled={busy} onClick={onCancel}>Cancel</Button>
+        {onPeek && (
+          <Button
+            size="small"
+            appearance="subtle"
+            style={{ marginLeft: "auto", color: peeking ? "#13a10e" : tokens.colorBrandForeground1 }}
+            icon={peeking ? <EyeFilled /> : <EyeRegular />}
+            disabled={busy}
+            onClick={togglePeek}
+            aria-pressed={peeking}
+            aria-label={peeking ? "Hide mapped fields on the page" : "Show mapped fields on the page"}
+            title={peeking
+              ? `${peekNote ?? "Highlighting mapped fields."} Green: mapped. Blue dashed: auto-match. Grey: never fill.`
+              : "Show mapped fields on the page"}
+          />
+        )}
       </div>
     </div>
   );

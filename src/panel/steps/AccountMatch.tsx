@@ -125,7 +125,7 @@ export function AccountMatch({
               header={<Text weight="semibold">{a.name}</Text>}
               description={
                 <Text size={200}>
-                  {a.city ?? "—"} {a.postalCode ?? ""} · {a.openOppCount} open opps
+                  {a.city ?? "-"} {a.postalCode ?? ""} · {a.openOppCount} open opps
                 </Text>
               }
             />

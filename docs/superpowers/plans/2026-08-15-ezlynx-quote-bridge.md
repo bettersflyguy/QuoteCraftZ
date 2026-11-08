@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript (strict), Vite 5 + `@crxjs/vite-plugin`, React 18, Fluent UI v9, zod, Vitest. Node 22 / npm.
 
-**Spec:** `docs/superpowers/specs/2026-08-15-ezlynx-quote-bridge-design.md` — read it before starting any task.
+**Spec:** `docs/superpowers/specs/2026-08-15-ezlynx-quote-bridge-design.md` - read it before starting any task.
 
 ## Global Constraints
 
@@ -18,16 +18,16 @@
 - **Key formats:** requested → `ezlynx:{execId}:req`; alternate *n* (0-based) → `ezlynx:{execId}:alt{n}`.
 - **Choice values:** `iacrm_sourcetype`=100000002 (Comparative Rater); `iacrm_status`=738590002 (Quote Received); `iacrm_term`: 6→738590203, 12→738590205, anything else → omit field.
 - **Entity set names:** `iacrm_quotes`, `iacrm_carriers`, `iacrm_lineofbusinesses`, `iacrm_quotingmethods`, `accounts`, `opportunities`.
-- **Never** write `iacrm_submissionid` / `iacrm_submissionlineid` — always null.
+- **Never** write `iacrm_submissionid` / `iacrm_submissionlineid` - always null.
 - **Read-only against EZLynx.** GET/POST-list endpoints only; no mutation calls, ever.
 - **EZLynx knowledge lives only in** `src/ezlynx/` + `src/config/endpoints.json`. Panel and Dataverse code never see a raw EZLynx object.
-- **Auth note (deviation from spec, flagged for review):** spec names MSAL Browser, but MSAL requires DOM/`sessionStorage`, which MV3 service workers lack. Plan hand-rolls the OAuth2 authorization-code + PKCE flow (~120 lines) via `chrome.identity.launchWebAuthFlow`. **Spike-verified 2026-08-15:** the app must be registered under the **SPA** platform — service-worker fetches DO send `Origin: chrome-extension://…`, and Entra rejects cross-origin redemption for public clients with `AADSTS9002326`, which names SPA as the required client-type. The redirect URI lives in `spa.redirectUris`; `publicClient.redirectUris` is empty.
-- **CORS note:** MV3 fetches from the service worker to hosts listed in `host_permissions` bypass CORS entirely. `https://*.crm.dynamics.com/*` and `https://login.microsoftonline.com/*` are in `host_permissions`, so the spec's CORS risk is expected to be moot — Task 1 confirms.
+- **Auth note (deviation from spec, flagged for review):** spec names MSAL Browser, but MSAL requires DOM/`sessionStorage`, which MV3 service workers lack. Plan hand-rolls the OAuth2 authorization-code + PKCE flow (~120 lines) via `chrome.identity.launchWebAuthFlow`. **Spike-verified 2026-08-15:** the app must be registered under the **SPA** platform - service-worker fetches DO send `Origin: chrome-extension://…`, and Entra rejects cross-origin redemption for public clients with `AADSTS9002326`, which names SPA as the required client-type. The redirect URI lives in `spa.redirectUris`; `publicClient.redirectUris` is empty.
+- **CORS note:** MV3 fetches from the service worker to hosts listed in `host_permissions` bypass CORS entirely. `https://*.crm.dynamics.com/*` and `https://login.microsoftonline.com/*` are in `host_permissions`, so the spec's CORS risk is expected to be moot - Task 1 confirms.
 - Commit after every task. Messages use conventional prefixes (`feat:`, `test:`, `chore:`, `docs:`).
 
 ---
 
-### Task 1: Phase 0 spike — Entra app registration + token + Dataverse GET
+### Task 1: Phase 0 spike - Entra app registration + token + Dataverse GET
 
 Throwaway code; lives in `spike/`, never imported by `src/`. Its output is **answers**, recorded in the spike README.
 
@@ -142,8 +142,8 @@ chrome.action.onClicked.addListener(async () => {
 1. Chrome → `chrome://extensions` → Developer mode → Load unpacked → `spike/`. Copy the extension ID; update the Entra redirect URI to `https://<extension-id>.chromiumapp.org/` (Step 1 command). Paste the client ID into `worker.js`, reload.
 2. Click the toolbar icon; inspect the service worker console.
 3. Record in `spike/README.md`, each as PASS/FAIL with the observed output:
-   - **Q1 (gate):** Dataverse GET returns 200 with a JSON body. If this fails after the auth succeeded, capture status + `www-authenticate` header — the design returns for revision (relay needed).
-   - **Q2:** Was the sign-in silent (existing profile Entra session, no credential entry)? Test in Chrome and Edge (load the same unpacked dir in Edge, update redirect URI if Edge assigns a different extension ID — record both IDs).
+   - **Q1 (gate):** Dataverse GET returns 200 with a JSON body. If this fails after the auth succeeded, capture status + `www-authenticate` header - the design returns for revision (relay needed).
+   - **Q2:** Was the sign-in silent (existing profile Entra session, no credential entry)? Test in Chrome and Edge (load the same unpacked dir in Edge, update redirect URI if Edge assigns a different extension ID - record both IDs).
    - **Q3:** Change `org` to any second org URL (even a nonexistent one proves the *authorize* round-trip) and confirm a second token request for a different resource succeeds in the same session without full re-auth.
 4. Also record: the final client ID, both extension IDs, and whether `prompt: "select_account"` was needed or harmful.
 
@@ -154,7 +154,7 @@ git add spike/
 git commit -m "chore: phase 0 spike - PKCE + Dataverse CORS verified from extension origin"
 ```
 
-**STOP if Q1 failed** — report to Nathan; the design needs revision before Tasks 2+.
+**STOP if Q1 failed** - report to Nathan; the design needs revision before Tasks 2+.
 
 ---
 
@@ -614,7 +614,7 @@ describe("renderCoverageSummary", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `npm test` → Expected: FAIL, module not found.
+- [ ] **Step 2: Run to verify failure** - `npm test` → Expected: FAIL, module not found.
 
 - [ ] **Step 3: Implement**
 
@@ -652,7 +652,7 @@ function capOnLineBoundary(lines: string[], max: number): string {
 }
 ```
 
-- [ ] **Step 4: Run to verify pass** — `npm test` → Expected: PASS (5 tests).
+- [ ] **Step 4: Run to verify pass** - `npm test` → Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -672,8 +672,8 @@ git commit -m "feat: coverage summary renderer - verbatim values, line-boundary 
 **Interfaces:**
 - Consumes: `renderCoverageSummary` (Task 4), types (Task 3), fixtures (Task 3).
 - Produces:
-  - `normalizeQuoteResult(raw: unknown, applicantQuoteIdByLob: Record<string, number>): { blocks: CapturedLobBlock[] }` — throws `NormalizeError` on shape violation.
-  - `normalizeApplicant(raw: unknown): CapturedApplicant` — throws `NormalizeError`.
+  - `normalizeQuoteResult(raw: unknown, applicantQuoteIdByLob: Record<string, number>): { blocks: CapturedLobBlock[] }` - throws `NormalizeError` on shape violation.
+  - `normalizeApplicant(raw: unknown): CapturedApplicant` - throws `NormalizeError`.
   - `normalizeRunList(raw: unknown): RunListItem[]`
   - `class NormalizeError extends Error { payloadSnippet: string }`
 
@@ -771,7 +771,7 @@ describe("normalizeRunList", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `npm test` → Expected: FAIL, module not found.
+- [ ] **Step 2: Run to verify failure** - `npm test` → Expected: FAIL, module not found.
 
 - [ ] **Step 3: Implement**
 
@@ -932,7 +932,7 @@ export function normalizeRunList(raw: unknown): RunListItem[] {
 }
 ```
 
-- [ ] **Step 4: Run to verify pass** — `npm test` → Expected: all normalize + renderCoverage tests PASS.
+- [ ] **Step 4: Run to verify pass** - `npm test` → Expected: all normalize + renderCoverage tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -955,7 +955,7 @@ git commit -m "feat: EZLynx normalizers - quote-result, applicant, run list"
 **Interfaces:**
 - Consumes: normalizers (Task 5).
 - Produces:
-  - `src/messages.ts` message contract (used by worker Task 11 and panel Tasks 12–15):
+  - `src/messages.ts` message contract (used by worker Task 11 and panel Tasks 12-15):
 
 ```ts
 export type BridgeRequest =
@@ -1102,7 +1102,7 @@ export function applicantIdFromUrl(href: string): number | null {
 }
 ```
 
-`src/messages.ts`: exactly the Interfaces block above (with `CommitPayload` imported from `@/crm/mapping` — add `import type { CommitPayload } from "@/crm/mapping";` **after Task 10 defines it; until then declare** `export interface CommitPayload { placeholder?: never }` **and replace in Task 10**).
+`src/messages.ts`: exactly the Interfaces block above (with `CommitPayload` imported from `@/crm/mapping` - add `import type { CommitPayload } from "@/crm/mapping";` **after Task 10 defines it; until then declare** `export interface CommitPayload { placeholder?: never }` **and replace in Task 10**).
 
 `src/ezlynx/content.ts`:
 
@@ -1123,8 +1123,8 @@ chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse:
           return sendResponse({ ok: true, data: await fetchCapturedRun(msg.applicantId, msg.run) });
       }
     } catch (e) {
-      if (e instanceof EzlynxSessionError) return sendResponse({ ok: false, error: "EZLynx session expired — sign in on the EZLynx tab and retry.", kind: "session" });
-      if (e instanceof NormalizeError) return sendResponse({ ok: false, error: "Couldn't read EZLynx results — the extension needs an update.", kind: "normalize", detail: e.payloadSnippet });
+      if (e instanceof EzlynxSessionError) return sendResponse({ ok: false, error: "EZLynx session expired - sign in on the EZLynx tab and retry.", kind: "session" });
+      if (e instanceof NormalizeError) return sendResponse({ ok: false, error: "Couldn't read EZLynx results - the extension needs an update.", kind: "normalize", detail: e.payloadSnippet });
       return sendResponse({ ok: false, error: String(e), kind: "unknown" });
     }
   })();
@@ -1132,7 +1132,7 @@ chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse:
 });
 ```
 
-- [ ] **Step 4: Run tests + build** — `npm test && npm run build` → Expected: PASS / clean.
+- [ ] **Step 4: Run tests + build** - `npm test && npm run build` → Expected: PASS / clean.
 
 - [ ] **Step 5: Commit**
 
@@ -1163,7 +1163,7 @@ export async function setActiveEnvironment(id: string): Promise<void>  // ALSO c
 
 - `src/config/appConfig.ts`: `export const APP_CONFIG = { clientId: "<from Task 1 README>", authority: "https://login.microsoftonline.com/organizations" }`.
 
-- [ ] **Step 1: Write the failing test.** chrome.storage is absent in Node — stub it:
+- [ ] **Step 1: Write the failing test.** chrome.storage is absent in Node - stub it:
 
 ```ts
 // tests/environments.test.ts
@@ -1241,7 +1241,7 @@ export async function setActiveEnvironment(id: string): Promise<void> {
 
 `src/config/appConfig.ts` as in Interfaces (paste the real client ID from `spike/README.md`).
 
-- [ ] **Step 3: Run to verify pass** — `npm test`.
+- [ ] **Step 3: Run to verify pass** - `npm test`.
 
 - [ ] **Step 4: Commit**
 
@@ -1271,7 +1271,7 @@ export function pkcePair(): Promise<{ verifier: string; challenge: string }>   /
 export function buildAuthorizeUrl(orgUrl: string, redirectUri: string, challenge: string): string
 ```
 
-- [ ] **Step 1: Write the failing tests** (pure parts + cache/refresh logic with mocked fetch; reuse the chrome stub pattern from Task 7 — extract it to `tests/helpers/chromeStub.ts` and import in both)
+- [ ] **Step 1: Write the failing tests** (pure parts + cache/refresh logic with mocked fetch; reuse the chrome stub pattern from Task 7 - extract it to `tests/helpers/chromeStub.ts` and import in both)
 
 ```ts
 // tests/auth.test.ts
@@ -1422,9 +1422,9 @@ export async function getAccessToken(orgUrl: string, opts: { interactive?: boole
 }
 ```
 
-For the test helper, make `__store.clear()` actually clear the stubbed backing map (the chrome stub from Task 7 shares state; simplest: `clear` iterates `chrome.storage.session.remove` over known keys, or the stub exposes a reset — either is fine as long as the test passes deterministically).
+For the test helper, make `__store.clear()` actually clear the stubbed backing map (the chrome stub from Task 7 shares state; simplest: `clear` iterates `chrome.storage.session.remove` over known keys, or the stub exposes a reset - either is fine as long as the test passes deterministically).
 
-- [ ] **Step 3: Run to verify pass** — `npm test`.
+- [ ] **Step 3: Run to verify pass** - `npm test`.
 
 - [ ] **Step 4: Commit**
 
@@ -1695,7 +1695,7 @@ export async function executeBatch(
 }
 ```
 
-- [ ] **Step 3: Run to verify pass** — `npm test`.
+- [ ] **Step 3: Run to verify pass** - `npm test`.
 
 - [ ] **Step 4: Commit**
 
@@ -1814,8 +1814,8 @@ describe("buildQuoteOps", () => {
   });
 
   it("names quotes {Carrier} - {LOB} - {EffectiveDate}, alternates suffixed", () => {
-    expect(ops.find(o => o.key === "ezlynx:1:req")!.body["iacrm_quote_name"]).toBe("Travelers – Auto – 2026-09-01");
-    expect(ops.find(o => o.key === "ezlynx:1:alt0")!.body["iacrm_quote_name"]).toBe("Travelers – Auto – 2026-09-01 – Alt");
+    expect(ops.find(o => o.key === "ezlynx:1:req")!.body["iacrm_quote_name"]).toBe("Travelers - Auto - 2026-09-01");
+    expect(ops.find(o => o.key === "ezlynx:1:alt0")!.body["iacrm_quote_name"]).toBe("Travelers - Auto - 2026-09-01 - Alt");
   });
 
   it("6-month term maps to 738590203; unmatched carrier omits the bind", () => {
@@ -1902,8 +1902,8 @@ export function buildQuoteOps(
 
       const effective = sel.desiredEffectiveDate; // EZLynx results carry no effective date (recon); opportunity's is the fallback and primary
       const name =
-        `${q.carrierName} – ${block.lob}${effective ? ` – ${effective}` : ""}` +
-        (q.kind === "alternate" ? " – Alt" : "");
+        `${q.carrierName} - ${block.lob}${effective ? ` - ${effective}` : ""}` +
+        (q.kind === "alternate" ? " - Alt" : "");
 
       const body: Record<string, unknown> = {
         iacrm_quote_name: name,
@@ -1944,7 +1944,7 @@ export function buildQuoteOps(
 
 Update `src/messages.ts`: delete the placeholder `CommitPayload` and `import type { CommitPayload } from "@/crm/mapping"` instead (re-export it).
 
-- [ ] **Step 3: Run to verify pass** — `npm test`.
+- [ ] **Step 3: Run to verify pass** - `npm test`.
 
 - [ ] **Step 4: Commit**
 
@@ -1963,11 +1963,11 @@ git commit -m "feat: quote field mapping with Firm-protection and skip-unpinned-
 - Test: `tests/worker.test.ts`
 
 **Interfaces:**
-- Consumes: everything from Tasks 6–10.
+- Consumes: everything from Tasks 6-10.
 - Produces: the worker answers every `PanelRequest` from `src/messages.ts`. Also:
 
 ```ts
-// carrierAliases.ts — persistent ezlynx-id → CRM-carrier map (chrome.storage.local "carrier/aliases")
+// carrierAliases.ts - persistent ezlynx-id → CRM-carrier map (chrome.storage.local "carrier/aliases")
 export async function getCarrierAliases(): Promise<Record<number, string>>
 export async function saveCarrierAlias(ezlynxId: number, crmCarrierId: string): Promise<void>
 ```
@@ -1997,7 +1997,7 @@ describe("routeMessage", () => {
 });
 ```
 
-- [ ] **Step 2: Implement.** Create `src/workerRouter.ts` — a `routeMessage(msg, deps)` function with a deps object (environment fns, dataverse fns, tab lookup) so tests inject fakes; `src/worker.ts` binds the real deps:
+- [ ] **Step 2: Implement.** Create `src/workerRouter.ts` - a `routeMessage(msg, deps)` function with a deps object (environment fns, dataverse fns, tab lookup) so tests inject fakes; `src/worker.ts` binds the real deps:
 
 ```ts
 // src/workerRouter.ts (shape; full switch over PanelRequest)
@@ -2040,7 +2040,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 ```
 
-`panel/commit` handler detail (the one nontrivial handler — implement exactly):
+`panel/commit` handler detail (the one nontrivial handler - implement exactly):
 
 ```ts
 const env = await deps.getActiveEnvironment();
@@ -2064,7 +2064,7 @@ export async function saveCarrierAlias(ezlynxId: number, crmCarrierId: string): 
 }
 ```
 
-- [ ] **Step 3: Run tests + build** — `npm test && npm run build` → PASS/clean.
+- [ ] **Step 3: Run tests + build** - `npm test && npm run build` → PASS/clean.
 
 - [ ] **Step 4: Commit**
 
@@ -2083,7 +2083,7 @@ git commit -m "feat: worker message router + persistent carrier alias map"
 
 **Interfaces:**
 - Produces:
-  - `src/panel/api.ts`: `send<T>(msg: PanelRequest): Promise<T>` — wraps `chrome.runtime.sendMessage`, throws `PanelError(kind, message, detail?)` on `ok:false`.
+  - `src/panel/api.ts`: `send<T>(msg: PanelRequest): Promise<T>` - wraps `chrome.runtime.sendMessage`, throws `PanelError(kind, message, detail?)` on `ok:false`.
   - `src/panel/state.ts`: `useImportState()` reducer hook:
 
 ```ts
@@ -2107,8 +2107,8 @@ type Action =
   | { t: "reset" } | { t: "goto"; step: ImportState["step"] };
 ```
 
-  - On `captured`: `selectedKeys` initializes to ALL quote keys; `carrierMap` initializes from stored aliases (worker includes aliases in the `captureRun` response envelope — extend that response to `{ run: CapturedRun; aliases: Record<number, string> }` in the Task 11 handler).
-  - `EnvBadge`: always-visible header pill showing active env name in its color; clicking opens a Menu listing environments; selection calls `env/setActive` then dispatches `reset` for CRM selections (captured run survives — re-derive `selectedKeys` from `captured`).
+  - On `captured`: `selectedKeys` initializes to ALL quote keys; `carrierMap` initializes from stored aliases (worker includes aliases in the `captureRun` response envelope - extend that response to `{ run: CapturedRun; aliases: Record<number, string> }` in the Task 11 handler).
+  - `EnvBadge`: always-visible header pill showing active env name in its color; clicking opens a Menu listing environments; selection calls `env/setActive` then dispatches `reset` for CRM selections (captured run survives - re-derive `selectedKeys` from `captured`).
 
 - [ ] **Step 1: Implement shell**
 
@@ -2124,11 +2124,11 @@ createRoot(document.getElementById("root")!).render(
 );
 ```
 
-`src/panel/App.tsx` skeleton: header (`<EnvBadge />` + title), then a `switch (state.step)` rendering the step components (Tasks 13–14 fill them; render `<div>TODO {state.step}</div>` placeholders for now — placeholders here are acceptable ONLY because Tasks 13–14 replace them within this plan).
+`src/panel/App.tsx` skeleton: header (`<EnvBadge />` + title), then a `switch (state.step)` rendering the step components (Tasks 13-14 fill them; render `<div>TODO {state.step}</div>` placeholders for now - placeholders here are acceptable ONLY because Tasks 13-14 replace them within this plan).
 
 Color mapping for `EnvBadge`: green→`colorPaletteGreenBackground2`, red→`colorPaletteRedBackground2`, blue→`colorPaletteBlueBackground2`, orange→`colorPaletteDarkOrangeBackground2` (Fluent tokens).
 
-- [ ] **Step 2: Verify** — `npm run build`, load `dist/`, open panel: header shows **DEV** badge in green; switching env (once a second is added via options in Task 15) clears selections.
+- [ ] **Step 2: Verify** - `npm run build`, load `dist/`, open panel: header shows **DEV** badge in green; switching env (once a second is added via options in Task 15) clears selections.
 
 - [ ] **Step 3: Commit**
 
@@ -2139,7 +2139,7 @@ git commit -m "feat: panel shell with environment badge and wizard state"
 
 ---
 
-### Task 13: Panel steps — run picker + account match
+### Task 13: Panel steps - run picker + account match
 
 **Files:**
 - Create: `src/panel/steps/RunPicker.tsx`, `src/panel/steps/AccountMatch.tsx`
@@ -2153,7 +2153,7 @@ git commit -m "feat: panel shell with environment badge and wizard state"
 
 Behavior (all states must render something actionable):
 - On mount: `send({type:"panel/getEzlynxContext"})`. If `applicantId` null → message "Open an EZLynx applicant page, then Refresh" + Refresh button.
-- With applicantId: `send({type:"panel/listRuns", applicantId})` → list newest-first: `{lobs} — {created as locale date} {description}`. Click → `send({type:"panel/captureRun", ...})` → dispatch `captured` → step `account`.
+- With applicantId: `send({type:"panel/listRuns", applicantId})` → list newest-first: `{lobs} - {created as locale date} {description}`. Click → `send({type:"panel/captureRun", ...})` → dispatch `captured` → step `account`.
 - `kind:"session"` error → warning bar with the error text. `kind:"normalize"` error → error bar + "Copy payload" button writing `detail` to clipboard (spec: fail loud, copyable).
 
 ```tsx
@@ -2173,10 +2173,10 @@ useEffect(() => { (async () => {
 
 - Search box prefilled with `captured.applicant.lastName`; Search button → `panel/searchAccounts` with the applicant's postalCode.
 - Result rows: name, city, postal, `{openOppCount} open opps`; postal-match rows first (already sorted by worker). Row click → dispatch `account` → step `opportunities`.
-- "Create new account…" is a `Button` (explicit, never automatic — spec) that for v1 opens the CRM's new-account form in a tab: `https://{activeOrgHost}/main.aspx?pagetype=entityrecord&etn=account` — the agent creates it there, returns, and re-searches. No silent creation path exists in code.
+- "Create new account…" is a `Button` (explicit, never automatic - spec) that for v1 opens the CRM's new-account form in a tab: `https://{activeOrgHost}/main.aspx?pagetype=entityrecord&etn=account` - the agent creates it there, returns, and re-searches. No silent creation path exists in code.
 - Show captured applicant summary (name, address line, DOB) above the search so the agent can eyeball the match.
 
-- [ ] **Step 3: Verify manually** — build, reload, walk: open EZLynx applicant → panel lists runs → capture → search account against DEV. (Requires Task 11 wired; EZLynx login present.)
+- [ ] **Step 3: Verify manually** - build, reload, walk: open EZLynx applicant → panel lists runs → capture → search account against DEV. (Requires Task 11 wired; EZLynx login present.)
 
 - [ ] **Step 4: Commit**
 
@@ -2187,7 +2187,7 @@ git commit -m "feat: run picker and account match steps"
 
 ---
 
-### Task 14: Panel steps — opportunity pin, carrier map, review/commit
+### Task 14: Panel steps - opportunity pin, carrier map, review/commit
 
 **Files:**
 - Create: `src/panel/steps/OpportunityPin.tsx`, `src/panel/steps/CarrierMap.tsx`, `src/panel/steps/ReviewCommit.tsx`
@@ -2200,23 +2200,23 @@ git commit -m "feat: run picker and account match steps"
 - [ ] **Step 1: `OpportunityPin`**
 
 - Loads `panel/getOpportunities` for the chosen account once.
-- One card per captured LOB block: block header `{lob} — {n} quotes`, a `Dropdown` of open opportunities sorted with LOB-name matches first (`opp.lobName?.toLowerCase().includes(block.lob.toLowerCase())`), plus explicit option "Skip this LOB". Selecting an opp dispatches `pinBlock` with `{opportunityId, lineOfBusinessId: opp.lobId, desiredEffectiveDate: opp.desiredEffectiveDate?.slice(0,10) ?? null}`; skip dispatches `pinBlock` with `null`.
+- One card per captured LOB block: block header `{lob} - {n} quotes`, a `Dropdown` of open opportunities sorted with LOB-name matches first (`opp.lobName?.toLowerCase().includes(block.lob.toLowerCase())`), plus explicit option "Skip this LOB". Selecting an opp dispatches `pinBlock` with `{opportunityId, lineOfBusinessId: opp.lobId, desiredEffectiveDate: opp.desiredEffectiveDate?.slice(0,10) ?? null}`; skip dispatches `pinBlock` with `null`.
 - Footer: "Continue" enabled when every block has an explicit pin-or-skip decision; blocks pinned count shown ("Auto pinned, Home skipped").
 
 - [ ] **Step 2: `CarrierMap`**
 
 - Distinct carriers across selected blocks: rows of `{carrierName} (EZLynx #{id})` → `Dropdown` of CRM carriers (`panel/getCarriers`) preselected from `carrierMap` (aliases). Unmapped rows show a warning icon + "will import without carrier link".
-- On Continue: for every newly mapped pair, `send` a `saveCarrierAlias` via commit payload? No — persist immediately: add message `{ type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }` to `PanelRequest` (and handle in the Task 11 router — one-line handler calling `saveCarrierAlias`). Dispatch `mapCarrier` locally either way.
+- On Continue: for every newly mapped pair, `send` a `saveCarrierAlias` via commit payload? No - persist immediately: add message `{ type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }` to `PanelRequest` (and handle in the Task 11 router - one-line handler calling `saveCarrierAlias`). Dispatch `mapCarrier` locally either way.
 
 - [ ] **Step 3: `ReviewCommit`**
 
 - Table: checkbox | carrier | LOB | kind (Req/Alt) | premium | term | first line of coverage summary. Checkbox toggles `toggleKey`.
 - Errored-carriers notice per block: "N carriers returned no quote" + expandable list of `{carrierName}: {message}` (spec: not lossy).
-- Commit button label: `Write {selectedCount} quotes to {envName}` — env name bolded, badge-colored.
+- Commit button label: `Write {selectedCount} quotes to {envName}` - env name bolded, badge-colored.
 - On commit: build `CommitPayload` from state, `send({type:"panel/commit", payload})`, dispatch `results`, step `done`.
-- `done` view: per-row status — 204/201 → success icon "Created/updated"; ≥400 → error icon + message; failed rows remain listed with a "Retry failed" button that re-commits with only failed keys (spec: failed rows stay selected for retry). "Start over" → `reset`.
+- `done` view: per-row status - 204/201 → success icon "Created/updated"; ≥400 → error icon + message; failed rows remain listed with a "Retry failed" button that re-commits with only failed keys (spec: failed rows stay selected for retry). "Start over" → `reset`.
 
-- [ ] **Step 4: End-to-end manual pass against DEV** — full walk with a real EZLynx run; verify in the CRM (Quotes Quick Compare on the Opportunity) that rows landed with coverage text, premium, carrier, link; re-run the same import and confirm update-not-duplicate (row count stable).
+- [ ] **Step 4: End-to-end manual pass against DEV** - full walk with a real EZLynx run; verify in the CRM (Quotes Quick Compare on the Opportunity) that rows landed with coverage text, premium, carrier, link; re-run the same import and confirm update-not-duplicate (row count stable).
 
 - [ ] **Step 5: Commit**
 
@@ -2227,14 +2227,14 @@ git commit -m "feat: opportunity pin, carrier map, review/commit with per-row re
 
 ---
 
-### Task 15: Options page — environment editor
+### Task 15: Options page - environment editor
 
 **Files:**
 - Modify: `src/options/main.tsx`
 - Create: `src/options/OptionsApp.tsx`
 
 **Interfaces:**
-- Consumes: `getEnvironments`/`saveEnvironments`/`getActiveEnvironment`/`setActiveEnvironment` (Task 7) — options page calls them directly (same extension origin; no worker round-trip needed for storage).
+- Consumes: `getEnvironments`/`saveEnvironments`/`getActiveEnvironment`/`setActiveEnvironment` (Task 7) - options page calls them directly (same extension origin; no worker round-trip needed for storage).
 
 - [ ] **Step 1: Implement**
 
@@ -2243,7 +2243,7 @@ git commit -m "feat: opportunity pin, carrier map, review/commit with per-row re
 - Footer note: "Each environment requires your account to have a Dataverse security role in that org."
 - Prefilled from defaults on first open: DEV row present; a blank "Production" row is NOT pre-created (add-on-demand keeps the list honest).
 
-- [ ] **Step 2: Verify** — build, open options, add a second env with a fake org URL, set active, confirm panel badge changes and pinned selections cleared; switch back to DEV.
+- [ ] **Step 2: Verify** - build, open options, add a second env with a fake org URL, set active, confirm panel badge changes and pinned selections cleared; switch back to DEV.
 
 - [ ] **Step 3: Commit**
 
@@ -2254,15 +2254,15 @@ git commit -m "feat: options page environment editor"
 
 ---
 
-### Task 16: Release collateral — e2e script, install docs, README
+### Task 16: Release collateral - e2e script, install docs, README
 
 **Files:**
 - Create: `docs/e2e-checklist.md`
 - Create: `README.md`
 
-**Interfaces:** none — documentation.
+**Interfaces:** none - documentation.
 
-- [ ] **Step 1: Write `docs/e2e-checklist.md`** — the manual pre-release Playwright-style walk (spec: one e2e, manual, not CI). Numbered steps with expected results:
+- [ ] **Step 1: Write `docs/e2e-checklist.md`** - the manual pre-release Playwright-style walk (spec: one e2e, manual, not CI). Numbered steps with expected results:
 
 1. `npm run build`; load `dist/` unpacked in Chrome AND Edge.
 2. Sign into EZLynx; open an applicant with a completed Auto/Home rate.
@@ -2276,7 +2276,7 @@ git commit -m "feat: options page environment editor"
 10. Options → switch environment → panel selections cleared, badge updates; switch back.
 11. Sign-out test: clear `chrome.storage.session` (worker devtools) → next CRM call prompts sign-in; captured run survived.
 
-- [ ] **Step 2: Write `README.md`** — what it is, install-unpacked steps for agents (Chrome + Edge), the Entra app consent note (first run per user), environment setup, troubleshooting table mapping the panel's error messages to causes (session expired / no access to env / extension needs update), and a pointer to the spec + this plan.
+- [ ] **Step 2: Write `README.md`** - what it is, install-unpacked steps for agents (Chrome + Edge), the Entra app consent note (first run per user), environment setup, troubleshooting table mapping the panel's error messages to causes (session expired / no access to env / extension needs update), and a pointer to the spec + this plan.
 
 - [ ] **Step 3: Run the full e2e checklist once yourself; fix anything it catches; commit**
 
@@ -2289,6 +2289,6 @@ git commit -m "docs: e2e checklist and install README"
 
 ## Self-review (completed at plan-writing time)
 
-- **Spec coverage:** panel five-step flow → Tasks 12–14; coverage rendering rules → Task 4; normalizer + fixture edge cases (null/dup quoteNumber, errors, mixed terms, multi-LOB) → Tasks 3/5; environment switching incl. selection-clearing → Tasks 7/12/15; Firm-protection pre-read → Tasks 9 (`getExistingQuoteStatuses`) + 10 (omission) + 11 (commit handler order); errored-carrier surfacing → Tasks 5 (errors[]) + 14 (notice); carrier alias persistence → Tasks 11/14; batch continue-on-error + 429 → Task 9; quote-link format → Task 10 test; Estimated invariant → Task 10 test; skip-unpinned-LOB → Task 10 test; store-readiness structure (config-not-code) → Tasks 6/7 (endpoints.json, appConfig, env list). Phase 6 (store listing) is out of plan scope by design.
+- **Spec coverage:** panel five-step flow → Tasks 12-14; coverage rendering rules → Task 4; normalizer + fixture edge cases (null/dup quoteNumber, errors, mixed terms, multi-LOB) → Tasks 3/5; environment switching incl. selection-clearing → Tasks 7/12/15; Firm-protection pre-read → Tasks 9 (`getExistingQuoteStatuses`) + 10 (omission) + 11 (commit handler order); errored-carrier surfacing → Tasks 5 (errors[]) + 14 (notice); carrier alias persistence → Tasks 11/14; batch continue-on-error + 429 → Task 9; quote-link format → Task 10 test; Estimated invariant → Task 10 test; skip-unpinned-LOB → Task 10 test; store-readiness structure (config-not-code) → Tasks 6/7 (endpoints.json, appConfig, env list). Phase 6 (store listing) is out of plan scope by design.
 - **Known deviations flagged for Nathan:** hand-rolled PKCE instead of MSAL (Global Constraints, validated by Task 1); public-client platform instead of SPA (same); effective date comes from the pinned Opportunity because EZLynx results carry none (Task 10 comment).
-- **Type consistency:** message contract defined once in Task 6 and extended explicitly in Tasks 12 (aliases in capture response) and 14 (`panel/saveCarrierAlias`) — executors must update `PanelRequest` in those tasks, not fork it.
+- **Type consistency:** message contract defined once in Task 6 and extended explicitly in Tasks 12 (aliases in capture response) and 14 (`panel/saveCarrierAlias`) - executors must update `PanelRequest` in those tasks, not fork it.

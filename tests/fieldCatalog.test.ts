@@ -90,7 +90,7 @@ describe("catalog build", () => {
     expect(catalog.entities.map(e => e.key)).toEqual(["account", "primarycontact", "contacts"]);
     const account = catalog.entities[0]!;
     expect(account.columns.find(c => c.name === "address1_city")?.maxLength).toBe(80);
-    // a picklist whose options can't be resolved can never take a value — hidden
+    // a picklist whose options can't be resolved can never take a value - hidden
     expect(account.columns.map(c => c.name)).not.toContain("statuscode2");
     expect(catalogLabel(catalog, "crm:contacts[].address1_city")).toBe("Related contacts: Address 1: City");
     expect(catalogLabel(catalog, "crm:account.nope")).toBeNull();

@@ -65,7 +65,7 @@ export const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
 
 /** Array relationship ("contacts[].email"): teaching ONE row's cell makes the
  * capture pull that cell from EVERY row of the repeated structure. Array
- * targets are capture-only — a fill can't know which row to write. */
+ * targets are capture-only - a fill can't know which row to write. */
 export const isArrayPath = (path: string): boolean => path.includes("[].");
 
 /** Concrete per-row slots an array capture fans out into ("contact2.email",
@@ -74,9 +74,9 @@ const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|emai
 
 /** CRM column targets taught in the capture editor ("crm:account.address1_city",
  * "crm:contacts[].address1_city"): the column list comes live from Dataverse
- * metadata, so the grammar is all that can be checked offline — the commit
+ * metadata, so the grammar is all that can be checked offline - the commit
  * re-validates every column against the live catalog before writing. */
-/** Columns owned by the AMS sync — never written by extension features. */
+/** Columns owned by the AMS sync - never written by extension features. */
 const AMS_OWNED = new Set(["iacrm_amsexternalid", "iacrm_synctoams", "iacrm_lastsyncon"]);
 const CRM_TARGET = /^crm:(account|primarycontact|quote|opportunity|contacts\[\]|policies\[\])\.([a-z][a-z0-9_]{0,99})$/;
 /** Concrete per-row forms array teachings fan out into. */
@@ -121,11 +121,11 @@ export async function setAllFieldMaps(maps: FieldMaps): Promise<void> {
 const EXPORT_TYPE = "iacrm-quote-connector-fieldmaps";
 
 /** Identifier-class captured labels a mapping may never pull: no quoting use.
- * DOB and driver's-license labels stay fillable — auto quotes require them
+ * DOB and driver's-license labels stay fillable - auto quotes require them
  * (Driver 2 DOB/DL# is the core multi-driver case). Mirrored in
  * public/portal/portal-fill.js (SENSITIVE_SOURCE), enforced at fill AND here
  * at import so a tampered share file sheds them before they reach storage. */
-// FEIN/EIN/tax-id is standard commercial-quoting data (Nathan, 2026-11-07) — not
+// FEIN/EIN/tax-id is standard commercial-quoting data (Nathan, 2026-11-07) - not
 // denied. This import-side check is hygiene; the AUTHORITATIVE enforcement runs
 // at fill time against each captured field's RAW label (separators intact), so
 // canonicalization differentials ("SSN/TIN" -> "ssntin") cannot slip through.
@@ -133,7 +133,7 @@ export const SENSITIVE_LABEL = /(?<![a-z])(ssns?|ss ?num(ber)?|soc(ial)? ?sec(ur
 
 /** Compact-form (letters-only) check catches labels whose separators were
  * stripped during canonicalization ("Tax-ID#" -> "taxid"). Only tokens that
- * cannot occur as substrings of ordinary labels — bare ssn/tin/ein/fein stay
+ * cannot occur as substrings of ordinary labels - bare ssn/tin/ein/fein stay
  * word-boundary-only because "busineSS Name", "wriTINg" and "liFE INsurance"
  * contain them compacted. Mirrored in portal-fill.js isSensitiveSource. */
 const SENSITIVE_COMPACT = /(socialsecurity|socsec|ssnum|passport)/;
@@ -165,22 +165,22 @@ export interface FieldMapImport {
    * the one place a tampered share file could redirect data. */
   labelTargets: string[];
   /** Per-site review summary: every origin the import would add or replace.
-   * picks counts taught read-only-text captures — like label targets, an
+   * picks counts taught read-only-text captures - like label targets, an
    * imported file deciding what gets captured needs the user's eyes. */
   perOrigin: { origin: string; fields: number; labels: string[]; picks: number }[];
 }
 
-/* Imported pick selectors must fit the grammar OUR cssPath emits — an
+/* Imported pick selectors must fit the grammar OUR cssPath emits - an
  * id-anchored chain of #id / tag:nth-of-type(n) segments. The id branch
  * admits only what CSS.escape produces for one identifier: unescaped
- * ident characters, hex escapes, or a backslash-escaped single char — so
+ * ident characters, hex escapes, or a backslash-escaped single char - so
  * selector metacharacters (, [ : ( * .) can never appear unescaped and
  * smuggle in a selector LIST or attribute/pseudo selector. */
 const PICK_SEG = String.raw`(?:#(?:[A-Za-z0-9_-]|[ -￿]|\\[0-9a-fA-F]{1,6} ?|\\[^0-9a-fA-F\s])+|[a-z][a-z0-9-]*(?::nth-of-type\(\d+\))?)`;
 const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
 
 /** Parses and validates a share file. Only https origins, known rule paths
- * and "skip" survive — a tampered or stale file degrades to fewer entries,
+ * and "skip" survive - a tampered or stale file degrades to fewer entries,
  * never to arbitrary data in storage. Throws on files that aren't ours. */
 export function parseFieldMapImport(text: string): FieldMapImport {
   let raw: unknown;
@@ -204,7 +204,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
         !isSensitiveLabel(path.slice(6));
       // "pick:<selector>" keys teach read-only-text CAPTURE: selectors run
       // deeper than control keys (hence the longer cap), must fit cssPath's
-      // own restricted grammar, and may only target known CRM fields — a
+      // own restricted grammar, and may only target known CRM fields - a
       // "label:" target would invert the data direction
       const pickKey = typeof key === "string" && key.startsWith("pick:");
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||

@@ -97,7 +97,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
     a.download = `quote-connector-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setNote("Share file downloaded — send it to the other user; they use Import here.");
+    setNote("Share file downloaded.");
     setProblem(null);
   };
 
@@ -136,24 +136,18 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
   return (
     <div className={styles.root}>
       <Text weight="semibold">Carrier field mappings</Text>
-      <Text size={200}>
-        Taught with "Map fields…" on a carrier page, saved per site. Export to share with other
-        users; importing a file adds its sites (same-site mappings are replaced).
-      </Text>
-      {origins.length === 0
-        ? <Text size={200}>No saved mappings yet — open a carrier page and use Map fields….</Text>
-        : origins.map(origin => (
+      {origins.map(origin => (
             <div key={origin} className={styles.row}>
               <Text size={200} className={styles.origin}>
-                {origin} — {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
+                {origin}: {Object.keys(maps[origin]!).length} field{Object.keys(maps[origin]!).length === 1 ? "" : "s"}
               </Text>
               <Button size="small" icon={<DeleteRegular />} onClick={() => removeSite(origin)} title="Remove this site's mapping" />
             </div>
           ))}
       {awaiting && (
         <Text size={200} weight="semibold">
-          Waiting for browser approval to access {awaiting} — look for the permission prompt
-          (in Edge it is under the Extensions puzzle-piece icon next to the address bar) and click Allow.
+          Waiting for browser approval to access {awaiting}. Click Allow on the permission prompt
+          (in Edge it is under the Extensions puzzle-piece icon next to the address bar).
         </Text>
       )}
       {scan && (
@@ -197,7 +191,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
           <div style={{ fontWeight: 600 }}>Review this import before applying:</div>
           {pendingImport.perOrigin.map(o => (
             <div key={o.origin} style={{ margin: "4px 0", overflowWrap: "anywhere" }}>
-              {o.origin} — {o.fields} field{o.fields === 1 ? "" : "s"} ({maps[o.origin] ? "replaces existing" : "new site"})
+              {o.origin}: {o.fields} field{o.fields === 1 ? "" : "s"} ({maps[o.origin] ? "replaces existing" : "new site"})
               {o.labels.length > 0 && <> · fills from captured: {o.labels.join(", ")}</>}
               {o.picks > 0 && <> · {o.picks} taught text capture{o.picks === 1 ? "" : "s"}</>}
             </div>

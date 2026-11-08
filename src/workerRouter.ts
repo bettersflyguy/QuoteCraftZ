@@ -123,7 +123,7 @@ function pageKindOf(url: string): import("@/messages").PageKind {
   if (/^https:\/\/([^/]+\.)*boldpenguin\.com\//i.test(url)) return "boldpenguin";
   if (/^https:\/\/[^/]+\.(crm[0-9]*\.)?dynamics\.com\//i.test(url) || /^https:\/\/login\.microsoftonline\.com\//i.test(url)) return "crm";
   if (/^https:/i.test(url)) return "other";
-  return "crm"; // chrome://, edge://, file:, http: — never a fillable/ingestable portal
+  return "crm"; // chrome://, edge://, file:, http: - never a fillable/ingestable portal
 }
 
 /** Raw captured column text for one record -> catalog-coerced values. Any
@@ -255,7 +255,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             if (en.filledFields.length) bits.push(`filled ${en.filledFields.length} field${en.filledFields.length === 1 ? "" : "s"}`);
             if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
             if (en.primaryContactSet) bits.push("set primary contact");
-            results.push({ key: `Insured profile — ${bits.join("; ")}`, status: 204, error: null, entityId: null });
+            results.push({ key: `Insured profile: ${bits.join("; ")}`, status: 204, error: null, entityId: null });
           }
         } catch (e) {
           results.push({ key: "Insured profile", status: 0, error: `Enrichment failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
@@ -277,7 +277,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
               const bits = [];
               if (sv.ownersAssigned) bits.push(`assigned ${payload.ownerName} as owner of ${sv.ownersAssigned} record${sv.ownersAssigned === 1 ? "" : "s"}`);
               if (sv.teamMemberCreated) bits.push(`added ${payload.ownerName} to the servicing team`);
-              results.push({ key: `Servicing — ${bits.join("; ")}`, status: 204, error: null, entityId: null });
+              results.push({ key: `Servicing: ${bits.join("; ")}`, status: 204, error: null, entityId: null });
             }
           } catch (e) {
             results.push({ key: "Servicing assignment", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
@@ -307,9 +307,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
               executeBatch: deps.executeBatch
             });
             if (cov.skipped === "no-columns") {
-              results.push({ key: "Coverage detail — waiting on CRM columns (iacrm_quotecoverage); summaries written, structured rows skipped", status: 204, error: null, entityId: null });
+              results.push({ key: "Coverage detail: waiting on CRM columns (iacrm_quotecoverage); summaries written, structured rows skipped", status: 204, error: null, entityId: null });
             } else if (cov.linesWritten) {
-              results.push({ key: `Coverage detail — logged ${cov.linesWritten} lines across ${cov.quotesCovered} quotes`, status: 204, error: null, entityId: null });
+              results.push({ key: `Coverage detail: logged ${cov.linesWritten} lines across ${cov.quotesCovered} quotes`, status: 204, error: null, entityId: null });
             }
           }
         } catch (e) {
@@ -325,9 +325,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             query: deps.dvQuery
           });
           if (know.skipped === "no-tables") {
-            results.push({ key: "Question knowledge — waiting on CRM tables (iacrm_carrierquestion); Q&A kept in rawpayload meanwhile", status: 204, error: null, entityId: null });
+            results.push({ key: "Question knowledge: waiting on CRM tables (iacrm_carrierquestion); Q&A kept in rawpayload meanwhile", status: 204, error: null, entityId: null });
           } else if (know.questionsUpserted || know.answersUpserted) {
-            results.push({ key: `Question knowledge — ${know.questionsUpserted} questions, ${know.answersUpserted} answers upserted`, status: 204, error: null, entityId: null });
+            results.push({ key: `Question knowledge: ${know.questionsUpserted} questions, ${know.answersUpserted} answers upserted`, status: 204, error: null, entityId: null });
           }
         } catch (e) {
           results.push({ key: "Question knowledge", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
@@ -436,7 +436,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         // same best-effort structure as the EZLynx commit: enrichment first,
         // then the knowledge write, each surfacing its own result row.
         // captured CRM-column values, coerced against the live catalog (a
-        // missing catalog just means no extra columns — never a failed load)
+        // missing catalog just means no extra columns - never a failed load)
         let catalog: FieldCatalog | null = null;
         try { catalog = await deps.getFieldCatalog(env); } catch { catalog = null; }
         const entityOf = (key: string) => catalog?.entities.find(e => e.key === key);
@@ -460,7 +460,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           if (en.filledFields.length) bits.push(`filled ${en.filledFields.length} field${en.filledFields.length === 1 ? "" : "s"}`);
           if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
           if (en.primaryContactSet) bits.push("set primary contact");
-          results.push({ key: `Insured profile — ${bits.length ? bits.join("; ") : "already complete"}`, status: 204, error: null, entityId: null });
+          results.push({ key: `Insured profile: ${bits.length ? bits.join("; ") : "already complete"}`, status: 204, error: null, entityId: null });
           // taught CRM columns, hierarchy order: account, primary contact,
           // then related contacts that matched existing records (created
           // ones received their columns on create). Fill-if-empty: agent-
@@ -474,7 +474,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             if (!w.id || !Object.keys(w.values).length) continue;
             try {
               const written = await deps.fillIfEmpty(env, w.set, w.id, w.values);
-              if (written.length) results.push({ key: `${w.label} — filled ${written.length} mapped column${written.length === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+              if (written.length) results.push({ key: `${w.label}: filled ${written.length} mapped column${written.length === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
             } catch (e) {
               results.push({ key: `${w.label} mapped columns`, status: 0, error: String((e as Error).message ?? e), entityId: null });
             }
@@ -485,7 +485,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         if (msg.insuredType != null) {
           try {
             await deps.updateAccount(env, msg.accountId, { iacrm_insuredtype: msg.insuredType });
-            results.push({ key: `Insured type — set to ${msg.insuredType === 2 ? "Commercial" : "Personal"}`, status: 204, error: null, entityId: null });
+            results.push({ key: `Insured type: set to ${msg.insuredType === 2 ? "Commercial" : "Personal"}`, status: 204, error: null, entityId: null });
           } catch (e) {
             results.push({ key: "Insured type", status: 0, error: String((e as Error).message ?? e), entityId: null });
           }
@@ -497,9 +497,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             query: deps.dvQuery
           });
           if (know.skipped === "no-tables") {
-            results.push({ key: "Application data — waiting on CRM tables (iacrm_carrierquestion); nothing logged", status: 204, error: null, entityId: null });
+            results.push({ key: "Application data: waiting on CRM tables (iacrm_carrierquestion); nothing logged", status: 204, error: null, entityId: null });
           } else {
-            results.push({ key: `Application data — ${know.answersUpserted} fields logged to the risk-data layer`, status: 204, error: null, entityId: null });
+            results.push({ key: `Application data: ${know.answersUpserted} fields logged to the risk-data layer`, status: 204, error: null, entityId: null });
           }
         } catch (e) {
           results.push({ key: "Application data", status: 0, error: String((e as Error).message ?? e), entityId: null });
@@ -510,8 +510,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         try {
           const note = buildSupplementalNote(app);
           if (note) {
-            const outcome = await deps.upsertAccountNote(env, msg.accountId, note.subject, note.body);
-            results.push({ key: `Supplemental data — timeline note ${outcome} with ${note.count} unmapped field${note.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+            const outcome = await deps.upsertAccountNote(env, msg.accountId, note.subject, note.body, note.legacyMatch);
+            results.push({ key: `Supplemental data: timeline note ${outcome} with ${note.count} unmapped field${note.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
           }
         } catch (e) {
           results.push({ key: "Supplemental data note", status: 0, error: String((e as Error).message ?? e), entityId: null });
@@ -585,8 +585,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       try { envName = (await deps.getActiveEnvironment()).name; } catch { /* keep fallback */ }
       const who = err.upn ? `The signed-in account ${err.upn}` : "Your account";
       const why = err.status === 403
-        ? "The account exists in CRM but is missing a security role for the connector's tables — or the wrong account was picked at sign-in."
-        : "This is usually the wrong account picked at sign-in — use Sign in and choose your work account.";
+        ? "The account exists in CRM but is missing a security role for the connector's tables, or the wrong account was picked at sign-in."
+        : "This is usually the wrong account picked at sign-in. Use Sign in and choose your work account.";
       return { ok: false, error: `${who} was rejected by ${envName} (${err.orgUrl}, HTTP ${err.status}). ${why}`, kind: "auth" };
     }
     if (err.name === "AuthRequiredError") return { ok: false, error: "Sign-in required", kind: "auth" };
@@ -606,7 +606,7 @@ async function ensureContentScriptAlive(tabId: number, probeType: string, hostFr
   try {
     await raceTimeout(chrome.tabs.sendMessage(tabId, { type: probeType }), 3_000);
     return;
-  } catch { /* dead or missing — revive below */ }
+  } catch { /* dead or missing - revive below */ }
   const entry = (chrome.runtime.getManifest().content_scripts ?? [])
     .find(c => (c.matches ?? []).some(m => m.includes(hostFrag)));
   if (entry?.js?.length) {
@@ -629,7 +629,7 @@ async function sendToEzlynxTab<T>(req: BridgeRequest): Promise<Res<T>> {
   } catch {
     return {
       ok: false,
-      error: "Couldn't reach the EZLynx tab — reload that tab, then retry.",
+      error: "Couldn't reach the EZLynx tab. Reload that tab, then retry.",
       kind: "session"
     };
   }
@@ -644,14 +644,14 @@ async function sendToBoldPenguinTab<T>(req: { type: string }): Promise<Res<T>> {
   try {
     await ensureContentScriptAlive(tab.id, "bp/getContext", "boldpenguin.com");
     // The capture walks every question set (including vehicle editors), so allow
-    // minutes — but still bound it so a hung page can't spin the panel forever.
+    // minutes - but still bound it so a hung page can't spin the panel forever.
     const reply = await raceTimeout(chrome.tabs.sendMessage(tab.id, req) as Promise<Res<T>>, 180_000);
     if (!reply) throw new Error("empty reply");
     return reply;
   } catch {
     return {
       ok: false,
-      error: "Couldn't reach the Bold Penguin tab — reload that tab, then retry.",
+      error: "Couldn't reach the Bold Penguin tab. Reload that tab, then retry.",
       kind: "session"
     };
   }
@@ -709,7 +709,7 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
   if (!rows.length) throw new Error("No fillable fields found on this page. Open the quote form, then retry.");
   // dedupe by key; a "pick:" teaching that resolved in SOME frame beats
   // another frame's "not on this page" placeholder for the same key
-  const unresolved = (r: import("@/boldpenguin/types").PortalScanRow) => r.label === "(taught text — not on this page)";
+  const unresolved = (r: import("@/boldpenguin/types").PortalScanRow) => r.label === "(taught text, not on this page)";
   const seen = new Set<string>();
   const deduped: import("@/boldpenguin/types").PortalScanRow[] = [];
   for (const r of [...rows.filter(x => !unresolved(x)), ...rows.filter(unresolved)]) {
@@ -722,7 +722,7 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
  * the clicked frame returns the control's row and cancels the rest. Each
  * round lasts ~20s: a frame that saw nothing resolves "timeout" and the
  * PANEL re-arms, keeping every worker round trip short. Precedence across
- * frames: a row wins; else any "timeout" (keep going — an Esc broadcast
+ * frames: a row wins; else any "timeout" (keep going - an Esc broadcast
  * can race one frame's timer); else null (user cancelled). */
 async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanRow | "timeout" | null> {
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
@@ -781,7 +781,7 @@ async function fillPortalTab(
   // On-demand injection: the filler ships as plain scripts (public/portal/) so it
   // can run on ANY carrier portal the user granted, without a declared match.
   // allFrames: agent portals (Progressive FAO among them) often render the quote
-  // form inside an iframe — every frame fills its own fields.
+  // form inside an iframe - every frame fills its own fields.
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
@@ -807,7 +807,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   type FrameHarvest = { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string };
   // agent-taught read-only-text extractions for this site: "pick:<selector>"
   // entries resolve to the taught CRM field's display label, which the
-  // normalizer recognizes — the page never chooses its own labels
+  // normalizer recognizes - the page never chooses its own labels
   const origin = await tabOrigin(tabId);
   const siteMap = origin ? await fieldMapFor(origin) : {};
   // CRM-column teachings label themselves from the cached catalog (falling
@@ -865,7 +865,7 @@ async function isAutoCapturing(tabId: number): Promise<boolean> {
 
 /** Handles a page harvest sent by the auto-capture driver: merges it into the
  * held application (identity guard included) and tells the panel. Called by
- * the worker's message listener with the SENDER'S tab id — a tab that is not
+ * the worker's message listener with the SENDER'S tab id - a tab that is not
  * auto-capture-enabled is ignored. */
 export async function handleAutoCaptured(
   msg: { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string },
@@ -885,7 +885,7 @@ export async function handleAutoCaptured(
   } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
 }
 
-/** Full page loads kill content scripts — re-arm auto-capture on enabled tabs
+/** Full page loads kill content scripts - re-arm auto-capture on enabled tabs
  * (the per-origin permission the user granted persists across navigations). */
 export function registerAutoCapReinjection(): void {
   chrome.tabs.onUpdated.addListener((tabId, info) => {
