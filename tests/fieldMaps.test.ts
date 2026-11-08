@@ -95,7 +95,10 @@ describe("field-map share files", () => {
         "pick:#y > i": "label:email",            // capture keys can't take fill-direction targets — dropped
         [tooLong]: "contact.phone",              // over the 500-char pick cap — dropped
         "pick:input[value]": "contact.email",    // outside the cssPath grammar — dropped
-        "pick:div:has(a)": "contact.phone"       // outside the cssPath grammar — dropped
+        "pick:div:has(a)": "contact.phone",      // outside the cssPath grammar — dropped
+        "pick:#x,div": "contact.email",          // selector LIST smuggled through the id branch — dropped
+        "pick:#a[onclick]": "contact.phone",     // attribute selector in the id branch — dropped
+        "pick:#esc\\.aped > span": "contact.email" // escaped metachar, as CSS.escape emits — kept
       }
     });
     const parsed = parseFieldMapImport(JSON.stringify(doc));
@@ -103,10 +106,11 @@ describe("field-map share files", () => {
     expect(kept[longSel]).toBe("contact.email");
     expect(kept["pick:#summary > span"]).toBe("business.fein");
     expect(kept["pick:#x > em"]).toBe("skip");
-    expect(Object.keys(kept)).toHaveLength(3);
-    expect(parsed.dropped).toBe(4);
+    expect(kept["pick:#esc\\.aped > span"]).toBe("contact.email");
+    expect(Object.keys(kept)).toHaveLength(4);
+    expect(parsed.dropped).toBe(6);
     // taught captures surface in the per-origin review (skip entries excluded)
-    expect(parsed.perOrigin[0]!.picks).toBe(2);
+    expect(parsed.perOrigin[0]!.picks).toBe(3);
   });
 
   it("rejects files that are not ours", () => {

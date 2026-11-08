@@ -109,9 +109,12 @@ export interface FieldMapImport {
 }
 
 /* Imported pick selectors must fit the grammar OUR cssPath emits — an
- * id-anchored chain of #id / tag:nth-of-type(n) segments. Anything fancier
- * (attribute selectors, :has(), commas) in a share file is dropped. */
-const PICK_SEG = String.raw`(?:#(?:[^ >\\]|\\.)+|[a-z][a-z0-9-]*(?::nth-of-type\(\d+\))?)`;
+ * id-anchored chain of #id / tag:nth-of-type(n) segments. The id branch
+ * admits only what CSS.escape produces for one identifier: unescaped
+ * ident characters, hex escapes, or a backslash-escaped single char — so
+ * selector metacharacters (, [ : ( * .) can never appear unescaped and
+ * smuggle in a selector LIST or attribute/pseudo selector. */
+const PICK_SEG = String.raw`(?:#(?:[A-Za-z0-9_-]|[ -￿]|\\[0-9a-fA-F]{1,6} ?|\\[^0-9a-fA-F\s])+|[a-z][a-z0-9-]*(?::nth-of-type\(\d+\))?)`;
 const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
 
 /** Parses and validates a share file. Only https origins, known rule paths

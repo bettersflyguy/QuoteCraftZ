@@ -369,21 +369,34 @@
   }
 
   /* a taught selector must not lift identifiers or payment data whatever
-   * the taught CRM label says: SSN shape, card-length Luhn-valid digit
-   * runs, and very long contiguous digit runs are refused by VALUE shape.
-   * FEIN (9 digits) and phones (10-11) stay capturable by design. */
+   * the taught CRM label says: separated-SSN shapes, Luhn-valid card
+   * windows in any separator style, and very long contiguous digit runs
+   * are refused by VALUE shape. FEIN (9 digits, "41-1234567" or bare) and
+   * phones (10-11) stay capturable by design. */
   function taughtValueSafe(el, value) {
-    /* camelCase ids/classes (txtCreditCardNumber) split into words so the
-     * boundary-anchored payment regex can see them */
-    const ctx = clean([el.id || "", typeof el.className === "string" ? el.className : "", el.getAttribute("aria-label") || ""].join(" "))
-      .replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
+    /* element + 3 ancestors' ids/classes, camelCase split into words so the
+     * boundary-anchored payment regex can see txtCreditCardNumber et al. */
+    let ctx = "";
+    let n = el;
+    for (let hop = 0; n && n.getAttribute && hop < 4; hop += 1) {
+      ctx += " " + (n.id || "") + " " + (typeof n.className === "string" ? n.className : "") + " " + (n.getAttribute("aria-label") || "");
+      n = n.parentElement;
+    }
+    ctx = clean(ctx).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
     if (PAYMENT_FIELD.test(ctx)) return false;
-    if (/\b\d{3}-\d{2}-\d{4}\b/.test(value)) return false;
+    /* SSN in any common separator style (FEIN's ##-####### shape differs) */
+    if (/\b\d{3}[\s.-]\d{2}[\s.-]\d{4}\b/.test(value)) return false;
     if (/\d{16,}/.test(value)) return false;
-    const runs = value.match(/(?:\d[ -]?){12,18}\d/g) || [];
+    /* card detection: digit clusters joined by single separators, every
+     * 13-19 digit window Luhn-checked (catches dotted/spaced groupings) */
+    const runs = value.match(/\d(?:[\s.-]?\d){11,24}/g) || [];
     for (const run of runs) {
       const digits = run.replace(/[^0-9]/g, "");
-      if (digits.length >= 13 && digits.length <= 19 && luhnOk(digits)) return false;
+      for (let win = 13; win <= 19; win += 1) {
+        for (let i = 0; i + win <= digits.length; i += 1) {
+          if (luhnOk(digits.slice(i, i + win))) return false;
+        }
+      }
     }
     return true;
   }
