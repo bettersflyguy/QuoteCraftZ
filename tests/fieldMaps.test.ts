@@ -135,7 +135,7 @@ describe("field-map share files", () => {
 
   it("rejects files that are not ours", () => {
     expect(() => parseFieldMapImport("not json")).toThrow(/valid JSON/);
-    expect(() => parseFieldMapImport(JSON.stringify({ type: "other", maps: {} }))).toThrow(/not a Quote Connector/);
+    expect(() => parseFieldMapImport(JSON.stringify({ type: "other", maps: {} }))).toThrow(/not a QuoteCraftZ/);
     expect(() => parseFieldMapImport(JSON.stringify({ type: "iacrm-quote-connector-fieldmaps", maps: { "https://a.com": { k: "bogus" } } }))).toThrow(/no usable mappings/);
   });
 

@@ -26,20 +26,11 @@ const useStyles = makeStyles({
     alignItems: "center",
     justifyContent: "space-between",
     gap: "8px",
-    padding: "8px 12px",
+    padding: "2px 12px",
     borderBottom: "2px solid #002f87",
     flexShrink: 0
   },
-  brand: { display: "flex", alignItems: "center", gap: "8px", minWidth: 0 },
-  logo: { width: "24px", height: "24px", flexShrink: 0 },
-  title: {
-    fontSize: "15px",
-    fontWeight: 600,
-    color: tokens.colorNeutralForeground1,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis"
-  },
+  logo: { width: "20px", height: "20px", flexShrink: 0 },
   body: {
     flex: 1,
     overflowY: "auto",
@@ -112,10 +103,9 @@ export function App() {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <div className={styles.brand}>
-          <img className={styles.logo} src="/icons/32.png" alt="" />
-          <span className={styles.title}>D365 Insurance Quote Connector</span>
-        </div>
+        {/* the browser's own side-panel header already shows the name
+            (manifest), so this strip carries only the logo and controls */}
+        <img className={styles.logo} src="/icons/32.png" alt="QuoteCraftZ" title="QuoteCraftZ" />
         <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
           <Button
             appearance="subtle"

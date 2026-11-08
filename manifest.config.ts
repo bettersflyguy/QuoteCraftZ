@@ -3,7 +3,7 @@ import pkg from "./package.json";
 
 export default defineManifest({
   manifest_version: 3,
-  name: "D365 Insurance Quote Connector",
+  name: "QuoteCraftZ",
   version: pkg.version,
   description: "Capture quotes and applications from your rating tools (EZLynx personal lines, Bold Penguin commercial), import them into the D365 Insurance CRM, and fill carrier portals.",
   key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk8unQsRrBQaoXnMmaSUe734iDVuH7x+JJFQ6keXKeJosNSc9j8j4YnNjQwz21Nd1HyrkxXDL4glKpw5RH3RqgsayH/x2jWvnGsohkGT9EqBdZjaXlm98QuGJ6AWs8nbcPMq11U5SA+lUMM4DfbsVFeXGkPS+x63RdtxMX9R1CULs1WXa+K8O/dct/mUpCJbh1YlG4IkFzsYiz4aN1G+1MEWTjFSssBH6YWpzljhsygMhhxWyL7TkarvkTLK4Bd7iZVMWLen6t5F24YML+s5NPyBOT2dqsWUCuTI+w2jEyO7XtqBe19NQDn+i5lhvQUnr1KUXoGMjlExIyklKlHWGywIDAQAB",
@@ -32,7 +32,7 @@ export default defineManifest({
     "128": "icons/128.png"
   },
   action: {
-    default_title: "D365 Insurance Quote Connector",
+    default_title: "QuoteCraftZ",
     default_icon: { "16": "icons/16.png", "32": "icons/32.png" }
   }
 });

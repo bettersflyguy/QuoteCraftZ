@@ -94,7 +94,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `quote-connector-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `quotecraftz-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setNote("Share file downloaded.");

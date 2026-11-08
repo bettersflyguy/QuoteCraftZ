@@ -386,8 +386,9 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
     ...[...bySection.entries()].flatMap(([section, lines]) => [section, ...lines, ""])
   ].join("\n").slice(0, 90000);
   return {
-    subject: `Quote Connector: captured application data (${app.source.system})`,
-    legacyMatch: { prefix: "Quote Connector ", suffix: ` captured application data (${app.source.system})` },
+    subject: `QuoteCraftZ: captured application data (${app.source.system})`,
+    // earlier versions wrote "Quote Connector: ..." and "Quote Connector <dash> ..."
+    legacyMatch: { prefix: "Quote Connector", suffix: ` captured application data (${app.source.system})` },
     body,
     count: extra.length
   };

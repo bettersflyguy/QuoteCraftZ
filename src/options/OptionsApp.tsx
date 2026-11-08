@@ -238,7 +238,7 @@ export function OptionsApp() {
     <div className={styles.root}>
       <img src="/icons/32.png" alt="" style={{ width: 28, height: 28, verticalAlign: "-6px", marginRight: 10 }} />
       <Text size={600} weight="semibold">
-        D365 Insurance Quote Connector: Environments
+        QuoteCraftZ: Environments
       </Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">

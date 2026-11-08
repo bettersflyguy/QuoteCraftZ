@@ -187,7 +187,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
   try { raw = JSON.parse(text); } catch { throw new Error("Not a valid JSON file."); }
   const doc = raw as Partial<FieldMapExport>;
   if (doc?.type !== EXPORT_TYPE || typeof doc.maps !== "object" || doc.maps === null) {
-    throw new Error("This file is not a Quote Connector field-mapping export.");
+    throw new Error("This file is not a QuoteCraftZ field-mapping export.");
   }
   const maps: FieldMaps = {};
   let fields = 0;
