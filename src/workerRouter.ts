@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, rowTargetOf } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -37,7 +37,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
-import { coveredPageLabels, ezlynxFields, getDataServiceMaps, mergeHeldQuotes, quotesFromRun } from "@/sources/ezlynxSource";
+import { EZLYNX_FIELDS, coveredPageLabels, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
@@ -201,11 +201,13 @@ async function ingestEzlynx(deps: Deps, url: string, tabId?: number): Promise<Re
     const aliases = await deps.getCarrierAliases(env.orgUrl);
     outcome.app.quotes = mergeHeldQuotes(outcome.app.quotes, quotesFromRun(run, aliases));
     outcome.app.quoteIssues = run.blocks.flatMap(b => b.errors.map(e => ({ lob: b.lob, carrierName: e.carrierName, message: e.message })));
-    outcome.app.dataService = { kind: "ezlynx", run };
+    // the stored run never carries an SSN (it went to the secured channel)
+    outcome.app.dataService = { kind: "ezlynx", run: { ...run, applicant: withoutSsn(run.applicant) } };
   }
   await deps.setCapturedApplication(outcome.app);
   if (outcome.replaced) { await chrome.storage.session.remove("bp/crmLink"); await clearPendingSecure(); }
-  const securedHeld = await addPendingSecure(pageSecure);
+  // SSN / DL# from the data service: secured pass-through only
+  const securedHeld = await addPendingSecure([...ezlynxSecure(applicant, maps["ezlynx"]), ...pageSecure]);
   return { ok: true, data: { ...outcome, securedHeld } };
 }
 
@@ -432,7 +434,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         if (!res.ok) return res;
         const env = await deps.getActiveEnvironment();
         const aliases = await deps.getCarrierAliases(env.orgUrl);
-        return { ok: true, data: { run: res.data, aliases } };
+        // the panel never receives an SSN
+        return { ok: true, data: { run: { ...res.data, applicant: withoutSsn(res.data.applicant) }, aliases } };
       }
 
       case "panel/searchAccounts": {
@@ -1135,58 +1138,89 @@ function arrayTableOf(path: string, catalog: FieldCatalog | null): { title: stri
 /** Peek: every frame outlines its own mapped elements; counts aggregate. A
  * key resolved in ANY frame counts as shown (frames that lack it report it
  * missing), so missing = items found nowhere. */
+/** A saved target as the peek's badge text. */
+function peekLabel(target: string, catalog: FieldCatalog | null): string {
+  if (target === "skip") return "Never fill";
+  const note = NOTE_TARGETS.find(t => t.value === target);
+  if (note) return note.label;
+  if (target.startsWith("label:")) return target.slice(6);
+  const direct = PATH_LABEL.get(target) ?? catalogLabel(catalog, target);
+  if (direct) return direct;
+  const row = rowTargetOf(target);
+  if (row) return `${PATH_LABEL.get(row.arrayPath) ?? catalogLabel(catalog, row.arrayPath) ?? row.arrayPath} (row ${row.row})`;
+  return target;
+}
+
+/** Fields a data service fills on its own site (EZLynx: Gender, DOB...),
+ * as labelled-field peek items with the CRM target they feed. */
+async function dataServicePeekItems(origin: string, catalog: FieldCatalog | null): Promise<import("@/boldpenguin/types").PeekItem[]> {
+  if (origin !== "https://app.ezlynx.com") return [];
+  const targets = effectiveTargets((await getDataServiceMaps())["ezlynx"]);
+  const out: import("@/boldpenguin/types").PeekItem[] = [];
+  for (const f of EZLYNX_FIELDS.filter(x => x.section === "Applicant" && targets[x.id])) {
+    for (const l of f.pageLabels ?? [f.label]) {
+      const key = fieldKeyOf("", l);
+      if (!out.some(o => o.key === key)) out.push({ key, label: peekLabel(targets[f.id]!, catalog), kind: "mapped" });
+    }
+  }
+  return out;
+}
+
+/** Green for mapped, red for what the capture reads that nothing covers -
+ * one view, from the mapping editor (its draft as items) or from intake
+ * (the saved mapping). null clears. */
 async function peekPortalTab(
   tabId: number,
   items: import("@/boldpenguin/types").PeekItem[] | null
 ): Promise<import("@/boldpenguin/types").PeekResult> {
+  let arg: unknown = null;
   if (items) {
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
       files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"]
     });
+    const origin = await tabOrigin(tabId);
+    let catalog: FieldCatalog | null = null;
+    try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
+    const service = origin ? await dataServicePeekItems(origin, catalog) : [];
+    arg = {
+      items: [...items, ...service.filter(s => !items.some(i => i.key === s.key))],
+      map: {},
+      payload: await getCapturedApplication(),
+      pageLabels: origin === "https://app.ezlynx.com" ? coveredPageLabels((await getDataServiceMaps())["ezlynx"]) : []
+    };
   }
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: (it: unknown) =>
-      (globalThis as { __bettersPortalPeek?: (it: unknown) => unknown }).__bettersPortalPeek?.(it) ?? null,
-    args: [items]
-  });
-  const results = frames
-    .map(f => f.result as import("@/boldpenguin/types").PeekResult | null)
-    .filter((r): r is import("@/boldpenguin/types").PeekResult => r !== null);
-  const shown = Math.min(items?.length ?? 0, results.reduce((n, r) => n + r.shown, 0));
-  return { shown, missing: Math.max(0, (items?.length ?? 0) - shown) };
-}
-
-async function peekUnmappedTab(tabId: number, on: boolean): Promise<import("@/boldpenguin/types").PeekResult> {
-  const origin = on ? await tabOrigin(tabId) : "";
-  // covered = saved page mapping, an auto-match against the held capture,
-  // or (data-service sites) a screen field a mapped service field covers
-  const arg = on
-    ? {
-        map: origin ? await fieldMapFor(origin) : {},
-        payload: await getCapturedApplication(),
-        pageLabels: origin === "https://app.ezlynx.com" ? coveredPageLabels((await getDataServiceMaps())["ezlynx"]) : []
-      }
-    : null;
-  if (on) {
-    await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"]
-    });
-  }
-  const frames = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
-    func: (m: unknown) =>
-      (globalThis as { __bettersPortalPeekUnmapped?: (m: unknown) => unknown }).__bettersPortalPeekUnmapped?.(m) ?? null,
+    func: (a: unknown) =>
+      (globalThis as { __bettersPortalPeekAll?: (a: unknown) => unknown }).__bettersPortalPeekAll?.(a) ?? null,
     args: [arg]
   });
-  const shown = frames
-    .map(f => f.result as import("@/boldpenguin/types").PeekResult | null)
-    .reduce((n, r) => n + (r?.shown ?? 0), 0);
-  return { shown, missing: 0 };
+  const results = frames
+    .map(f => f.result as (import("@/boldpenguin/types").PeekResult & { unmapped?: number }) | null)
+    .filter((r): r is import("@/boldpenguin/types").PeekResult & { unmapped?: number } => r !== null);
+  const total = items?.length ?? 0;
+  const shown = Math.min(total, results.reduce((n, r) => n + r.shown, 0));
+  return { shown, missing: Math.max(0, total - shown), unmapped: results.reduce((n, r) => n + (r.unmapped ?? 0), 0) };
 }
 
+/** Intake's peek: the SAVED mapping in green, the uncovered in red. */
+async function peekUnmappedTab(tabId: number, on: boolean): Promise<import("@/boldpenguin/types").PeekResult> {
+  if (!on) return peekPortalTab(tabId, null);
+  const origin = await tabOrigin(tabId);
+  const saved = origin ? await fieldMapFor(origin) : {};
+  let catalog: FieldCatalog | null = null;
+  try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
+  const items: import("@/boldpenguin/types").PeekItem[] = Object.entries(saved).map(([key, target]) => ({
+    key,
+    label: peekLabel(target, catalog),
+    kind: target === "skip" ? "skip" : "mapped",
+    array: isArrayPath(target) || isNoteTarget(target) || key.startsWith("field:")
+  }));
+  const r = await peekPortalTab(tabId, items);
+  // intake's eye reports the red count
+  return { shown: r.unmapped ?? 0, missing: 0, mapped: r.shown } as import("@/boldpenguin/types").PeekResult;
+}
 /** Writes this session's held secured values onto the loaded insured's
  * records. Only columns the live catalog lists as SECURED for that entity
  * are written; a related-contact value lands only on the contact whose name

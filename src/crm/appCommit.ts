@@ -1,3 +1,4 @@
+import { usDate } from "@/util/usDate";
 /** CRM load for a captured application (Bold Penguin or portal ingest) -
  * the non-EZLynx twin of the quote commit: insured enrichment from the
  * normalized projection, plus every captured field logged to the
@@ -24,7 +25,7 @@ function str(app: CapturedApplication, group: string, key: string): string | nul
  * write a guess into a birthdate). */
 export function toIsoDate(value: string | null): string | null {
   if (!value) return null;
-  const us = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const us = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (us) return `${us[3]}-${us[1]!.padStart(2, "0")}-${us[2]!.padStart(2, "0")}`;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   return null;
@@ -324,7 +325,7 @@ function fieldValue(app: CapturedApplication, labelRe: RegExp): string {
 }
 
 function addMonthsUs(usDate: string, months: number): string {
-  const m = usDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const m = usDate.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (!m) return "";
   const d = new Date(Number(m[3]), Number(m[1]) - 1 + months, Number(m[2]));
   return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
@@ -383,7 +384,7 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
   const bySection = new Map<string, string[]>();
   for (const f of extra) {
     const section = f.section || "Details";
-    const line = `  ${f.group ? `${f.group}: ` : ""}${f.label}: ${f.value}`;
+    const line = `  ${f.group ? `${f.group}: ` : ""}${f.label}: ${usDate(f.value)}`;
     (bySection.get(section) ?? bySection.set(section, []).get(section)!).push(line);
   }
   const body = [
@@ -424,13 +425,13 @@ export function buildTimelineNote(app: CapturedApplication, record: NoteRecord =
     const singles = inSection.filter(f => !isGridRow(f));
     if (singles.length) {
       parts.push(TABLE + "<tr><th>Field</th><th>Value</th></tr>" +
-        singles.map(f => `<tr><td>${html(f.label)}</td><td>${html(f.value)}</td></tr>`).join("") + "</table>");
+        singles.map(f => `<tr><td>${html(f.label)}</td><td>${html(usDate(f.value))}</td></tr>`).join("") + "</table>");
     }
     const rows = inSection.filter(isGridRow);
     if (rows.length) {
       const columns = [...new Set(rows.map(f => f.label))];
       const byRow = new Map<string, Record<string, string>>();
-      for (const f of rows) byRow.set(f.group, { ...(byRow.get(f.group) ?? {}), [f.label]: f.value });
+      for (const f of rows) byRow.set(f.group, { ...(byRow.get(f.group) ?? {}), [f.label]: usDate(f.value) });
       parts.push(TABLE + "<tr>" + columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
         [...byRow.values()].map(r => "<tr>" + columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
         "</table>");

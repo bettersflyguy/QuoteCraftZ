@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { CursorClickRegular, NotepadRegular, StopRegular, TextBulletListLtrRegular } from "@fluentui/react-icons";
 import { TargetPicker } from "./TargetPicker";
-import { captureGroups } from "./MapEditor";
+import { captureGroups, securedGroups } from "./MapEditor";
 import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { send } from "./api";
 import type { FieldCatalog } from "@/crm/fieldCatalog";
@@ -109,6 +109,8 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
     }
     return [...merged.entries()].map(([group, paths]) => ({ group, paths }));
   }, [catalog]);
+  // SSN / DL# map only to secured CRM columns
+  const secured = useMemo(() => securedGroups(catalog), [catalog]);
   const targets = effectiveTargets(saved);
   const choose = (id: string, value: string) => void setDataServiceMap(source, { ...(saved ?? {}), [id]: value });
   const specials = [
@@ -190,8 +192,8 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
                   <TargetPicker
                     value={target}
                     onChange={v => choose(f.id, v)}
-                    groups={groups}
-                    specials={specials}
+                    groups={f.secured ? secured : groups}
+                    specials={f.secured ? [{ value: "", label: "Not mapped (never captured)" }] : specials}
                     currentText={target || undefined}
                   />
                   {col && (

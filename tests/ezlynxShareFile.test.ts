@@ -27,7 +27,8 @@ describe("EZLynx share file", () => {
 
   it("imports every data-service field with a valid target, nothing dropped", () => {
     expect(parsed.dropped).toBe(0);
-    expect(Object.keys(ez).sort()).toEqual(EZLYNX_FIELDS.map(f => f.id).sort());
+    // secured fields (SSN, DL#) never travel in share files: defaults cover them
+    expect(Object.keys(ez).sort()).toEqual(EZLYNX_FIELDS.filter(f => !f.secured).map(f => f.id).sort());
     for (const t of Object.values(ez)) expect(isDataServiceTarget(t)).toBe(true);
     expect(Object.values(ez).some(t => t.startsWith("secure:"))).toBe(false);
     expect(Object.keys(parsed.options["dataservice:ezlynx"] ?? {})).toEqual(expect.arrayContaining(

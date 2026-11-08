@@ -155,11 +155,10 @@ export function MappingsManager() {
       await send({ type: "panel/saveFieldMap", origin: scan.origin, map, options: choices });
       setMaps(await getAllFieldMaps());
       const n = Object.keys(map).length;
-      setDsTabId(null);
+      // the editor stays open: Save just updates what is stored
       setNote(n
         ? `Saved ${n} mapping${n === 1 ? "" : "s"} for ${scan.origin}.`
         : `Cleared the saved mappings for ${scan.origin}.`);
-      setScan(null);
     } catch (e) {
       setProblem(String((e as Error).message ?? e));
     } finally {

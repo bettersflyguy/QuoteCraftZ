@@ -128,7 +128,8 @@ function text(v: unknown): string {
 }
 
 /** The person's other values (the data service returns far more than the
- * identity fields). SSN is never read; license NUMBERS are not included. */
+ * identity fields). SSN and license NUMBERS are not in here: they travel
+ * only on the secured channel (see sources/ezlynxSource ezlynxSecure). */
 function personDetails(r: Record<string, unknown>, address?: Record<string, unknown> | null): Record<string, string> {
   const d: Record<string, string> = {
     middleInitial: text(r["middleInitial"]),
@@ -177,6 +178,9 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
     dateOfBirth: a.dateOfBirth ? a.dateOfBirth.slice(0, 10) : null,
     dlNumber: ((a as Record<string, unknown>)["driversLicenseNumber"] as string) || null,
     dlState: ((a as Record<string, unknown>)["driversLicenseState"] as string) || null,
+    // secured pass-through only: the worker moves it to the session-memory
+    // holding area and strips it before anything is stored
+    ssn: text((a as Record<string, unknown>)["socialSecurityNumber"]) || null,
     address: a.primaryAddress
       ? { street: a.primaryAddress.address1, city: a.primaryAddress.city, state: a.primaryAddress.state, postalCode: a.primaryAddress.postalCode }
       : null,
@@ -197,6 +201,7 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
       dateOfBirth: c.dateOfBirth ? c.dateOfBirth.slice(0, 10) : null,
       dlNumber: ((c as Record<string, unknown>)["driversLicenseNumber"] as string) || null,
       dlState: ((c as Record<string, unknown>)["driversLicenseState"] as string) || null,
+      ssn: text((c as Record<string, unknown>)["socialSecurityNumber"]) || null,
       email: (c.emailAddresses ?? [])
         .map(e => (typeof e === "string" ? e : ("email" in e ? (e as { email: string }).email : (e as { emailAddress: string }).emailAddress)))
         .filter(Boolean)[0] ?? null

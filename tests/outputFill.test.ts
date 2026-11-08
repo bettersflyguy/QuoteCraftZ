@@ -121,11 +121,11 @@ describe("fill values", () => {
     const values = buildFillValues(appOf(fields));
     expect(values["crm:account.address1_county"]).toBe("Hennepin");
     expect(values["address.city"]).toBe("Champlin");                // bridged from the CRM column
-    expect(values["crm:contact2.birthdate"]).toBe("1/14/1999");
+    expect(values["crm:contact2.birthdate"]).toBe("01/14/1999");
     expect(values["crm:contact2.gendercode"]).toBe("Male");         // display value, not 1
     expect(values["contact2.firstName"]).toBe("Alexander");          // slot bridge
     expect(Object.keys(values).some(k => k.startsWith("secure:"))).toBe(false);
-    expect(displayDate("2026-03-11T05:00:00Z")).toBe("3/11/2026");
+    expect(displayDate("2026-03-11T05:00:00Z")).toBe("03/11/2026");
   });
 });
 

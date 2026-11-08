@@ -106,4 +106,11 @@ export interface PeekItem {
   /** Array teaching - highlight every row the capture would pull. */
   array?: boolean;
 }
-export interface PeekResult { shown: number; missing: number }
+export interface PeekResult {
+  shown: number;
+  missing: number;
+  /** Fields outlined red: read by the capture, covered by nothing. */
+  unmapped?: number;
+  /** Intake's peek: mapped fields outlined green. */
+  mapped?: number;
+}

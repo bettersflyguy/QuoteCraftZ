@@ -1,3 +1,4 @@
+import { usDate } from "@/util/usDate";
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Tab, TabList, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, LockClosedRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
@@ -91,7 +92,7 @@ function gridTables(fields: CapturedApplication["fields"]): GridTable[] {
     const t = out.get(f.section) ?? out.set(f.section, { columns: [], rows: new Map() }).get(f.section)!;
     if (!t.columns.includes(f.label)) t.columns.push(f.label);
     const row = t.rows.get(f.group) ?? t.rows.set(f.group, {}).get(f.group)!;
-    row[f.label] = f.value;
+    row[f.label] = usDate(f.value);
   }
   return [...out.entries()].map(([title, t]) => ({ title, columns: t.columns, rows: [...t.rows.values()] }));
 }
@@ -139,6 +140,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
   // "peek unmapped": red outlines on the page for what no mapping covers
   const [peekUnmapped, setPeekUnmapped] = useState(false);
   const [peekCount, setPeekCount] = useState<number | null>(null);
+  const [mappedCount, setMappedCount] = useState(0);
   const peekTabRef = useRef<number | null>(null);
   const togglePeekUnmapped = async () => {
     if (peekUnmapped) {
@@ -153,9 +155,10 @@ export function PortalFill({ onChanged, onFlowActive }: {
     setError(null);
     try {
       const tab = await grantActiveTab(setAwaitingGrant);
-      const r = await send<{ shown: number }>({ type: "panel/portalPeekUnmapped", tabId: tab.id, on: true });
+      const r = await send<{ shown: number; mapped?: number }>({ type: "panel/portalPeekUnmapped", tabId: tab.id, on: true });
       peekTabRef.current = tab.id;
       setPeekCount(r.shown);
+      setMappedCount(r.mapped ?? 0);
       setPeekUnmapped(true);
     } catch (e) {
       setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
@@ -357,8 +360,8 @@ export function PortalFill({ onChanged, onFlowActive }: {
         />
         <Tooltip
           content={peekUnmapped
-            ? `${peekCount ?? 0} unmapped field${peekCount === 1 ? "" : "s"} outlined in red. Click to hide.`
-            : "Peek unmapped fields: outline in red what no mapping covers"}
+            ? `${mappedCount} mapped in green, ${peekCount ?? 0} unmapped in red. Click to hide.`
+            : "Peek: mapped fields in green, unmapped in red"}
           relationship="label"
           withArrow
         >
@@ -456,7 +459,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
                       <td className={styles.td} title={f.group ? `${f.group}: ${f.label}` : f.label}>
                         {f.group ? `${f.group}: ` : ""}{f.label}
                       </td>
-                      <td className={styles.td} title={f.value}>{f.value}</td>
+                      <td className={styles.td} title={f.value}>{usDate(f.value)}</td>
                     </tr>
                   ))}
                 </Fragment>
@@ -483,7 +486,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
             return (
               <div key={t.value}>
                 <div className={styles.gridTitle}>On {t.label.replace(/^Notes: /, "")}</div>
-                {singles.length > 0 && renderGrid({ title: `${t.value}:singles`, label: "Notes", columns: ["Field", "Value"], rows: singles.map(f => ({ Field: f.label, Value: f.value })) })}
+                {singles.length > 0 && renderGrid({ title: `${t.value}:singles`, label: "Notes", columns: ["Field", "Value"], rows: singles.map(f => ({ Field: f.label, Value: usDate(f.value) })) })}
                 {gridTables(forRecord).map(renderGrid)}
               </div>
             );

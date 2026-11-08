@@ -247,9 +247,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     let live = true;
     void onPeek(peekItems).then(r => {
       if (!live) return;
-      setPeekNote(r.shown || r.missing
-        ? `${r.shown} highlighted${r.missing ? `, ${r.missing} not on this page` : ""}.`
-        : "Nothing mapped yet.");
+      setPeekNote(`${r.shown} mapped in green${r.unmapped ? `, ${r.unmapped} unmapped in red` : ""}${r.missing ? `, ${r.missing} not on this page` : ""}.`);
     }).catch(e => { if (live) setPeekNote(String((e as Error).message ?? e)); });
     return () => { live = false; };
     // re-highlight whenever the draft's coverage changes
@@ -419,7 +417,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
             aria-pressed={peeking}
             aria-label={peeking ? "Hide mapped fields on the page" : "Show mapped fields on the page"}
             title={peeking
-              ? `${peekNote ?? "Highlighting mapped fields."} Green: mapped. Blue dashed: auto-match. Grey: never fill.`
+              ? `${peekNote ?? "Highlighting fields."} Green: mapped (dashed: auto-match). Red: not mapped. Grey: never fill.`
               : "Show mapped fields on the page"}
           />
         )}

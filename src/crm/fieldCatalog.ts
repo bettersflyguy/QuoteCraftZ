@@ -7,6 +7,7 @@
 import { canonical, clean } from "@/boldpenguin/normalize";
 import { isSensitiveLabel } from "@/portal/fieldMaps";
 import { autoMatchOption } from "@/portal/optionMaps";
+import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
 import type { CrmEnvironment } from "./environments";
 
 export interface CatalogColumn {
@@ -129,7 +130,7 @@ const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function isoDate(value: string): string | null {
   const v = clean(value);
-  const us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/);
+  const us = v.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?!\d)/);
   if (us) return `${us[3]}-${us[1]!.padStart(2, "0")}-${us[2]!.padStart(2, "0")}`;
   const iso = v.match(/^(\d{4}-\d{2}-\d{2})(?!\d)/);
   return iso ? iso[1]! : null;
@@ -248,6 +249,28 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
 const CACHE_PREFIX = "crm/fieldCatalog/v2/";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
+/** How many CRM columns the saved mappings (page sites and data services,
+ * defaults included) name that the catalog doesn't list. */
+async function missingMappedColumns(catalog: FieldCatalog): Promise<number> {
+  const s = await chrome.storage.local.get(["portal/fieldMap", DATA_SERVICE_STORAGE_KEY]);
+  const pages = (s["portal/fieldMap"] ?? {}) as Record<string, Record<string, string>>;
+  const services = (s[DATA_SERVICE_STORAGE_KEY] ?? {}) as Record<string, Record<string, string>>;
+  const targets = [
+    ...Object.values(pages).flatMap(m => Object.values(m)),
+    ...Object.values(effectiveTargets(services["ezlynx"]))
+  ];
+  let missing = 0;
+  for (const t of new Set(targets)) {
+    const m = /^(crm|secure):([a-z]+?)(\d*)(?:\[\])?\.([a-z0-9_]+)$/.exec(t);
+    if (!m) continue;
+    const key = m[3] ? (m[2] === "contact" ? "contacts" : m[2] === "policy" ? "policies" : m[2]) : m[2];
+    const entity = catalog.entities.find(e => e.key === key);
+    const cols = m[1] === "secure" ? entity?.secured : entity?.columns;
+    if (!cols?.some(c => c.name === m[4])) missing += 1;
+  }
+  return missing;
+}
+
 /** Cached per environment for a day - metadata changes only with a solution
  * import; `refresh` forces a re-read. */
 export async function getFieldCatalog(env: CrmEnvironment, api: CatalogApi, refresh = false): Promise<FieldCatalog> {
@@ -255,7 +278,10 @@ export async function getFieldCatalog(env: CrmEnvironment, api: CatalogApi, refr
   if (!refresh) {
     const s = await chrome.storage.local.get(key);
     const hit = s[key] as FieldCatalog | undefined;
-    if (hit && Date.now() - hit.fetchedAt < TTL_MS && hit.entities.length) return hit;
+    // a saved mapping naming a column the cached list lacks means the CRM
+    // gained columns since (a solution import): re-read, at most every 10 min
+    const stale = hit && Date.now() - hit.fetchedAt > 10 * 60 * 1000 && (await missingMappedColumns(hit)) > 0;
+    if (hit && !stale && Date.now() - hit.fetchedAt < TTL_MS && hit.entities.length) return hit;
   }
   const fresh = await buildFieldCatalog(env, api);
   if (fresh.entities.length) await chrome.storage.local.set({ [key]: fresh });

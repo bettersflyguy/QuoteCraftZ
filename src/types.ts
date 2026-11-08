@@ -5,6 +5,9 @@ export interface CapturedApplicant {
   dateOfBirth: string | null;          // "1949-11-18"
   dlNumber: string | null;             // secured PII - written only to field-secured columns
   dlState: string | null;
+  /** Secured pass-through only: moved to the session holding area and
+   * stripped by the worker before the capture is stored. */
+  ssn?: string | null;
   address: { street: string; city: string; state: string; postalCode: string } | null;
   phones: { type: string | null; number: string }[];
   emails: string[];
@@ -15,6 +18,7 @@ export interface CapturedApplicant {
   coApplicants: {
     firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null;
     dateOfBirth: string | null; dlNumber: string | null; dlState: string | null;
+    ssn?: string | null;
     details?: Record<string, string>;
     /** Captured CRM-column values for this person (raw text from the panel;
      * the worker replaces them with catalog-coerced values before writing). */

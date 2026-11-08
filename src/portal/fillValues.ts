@@ -11,7 +11,8 @@ import { CRM_BRIDGE } from "@/boldpenguin/normalize";
  * filler turns M/D/YYYY into whatever a date input wants. */
 export function displayDate(v: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:T[\d:.]+Z?)?$/.exec(v.trim());
-  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : v;
+  // forms take MM/DD/YYYY (masked inputs keep the digits; date inputs get ISO)
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : v;
 }
 
 export function buildFillValues(app: CapturedApplication | null): Record<string, string> {

@@ -1,3 +1,4 @@
+import { usDate } from "@/util/usDate";
 /** A held capture laid out as workbook tabs, mirroring the panel: single
  * values, every array as its own table, and the "Non Mapped Timeline
  * Entries" (with the record each lands on). */
@@ -16,7 +17,7 @@ function arrayTables(fields: Field[]): { title: string; columns: string[]; rows:
     const t = out.get(f.section) ?? out.set(f.section, { columns: [], rows: new Map() }).get(f.section)!;
     if (!t.columns.includes(f.label)) t.columns.push(f.label);
     const row = t.rows.get(f.group) ?? t.rows.set(f.group, {}).get(f.group)!;
-    row[f.label] = f.value;
+    row[f.label] = usDate(f.value);
   }
   return [...out.entries()].map(([title, t]) => ({ title, columns: t.columns, rows: [...t.rows.values()] }));
 }
@@ -39,7 +40,7 @@ export function captureSheets(app: CapturedApplication): Sheet[] {
   }];
   const singles = regular.filter(f => !isGridRow(f));
   if (singles.length) {
-    sheets.push({ name: "Captured Fields", columns: ["Section", "Field", "Value"], rows: singles.map(f => [f.section, f.label, f.value]) });
+    sheets.push({ name: "Captured Fields", columns: ["Section", "Field", "Value"], rows: singles.map(f => [f.section, f.label, usDate(f.value)]) });
   }
   for (const t of arrayTables(regular)) {
     sheets.push({ name: t.title, columns: t.columns, rows: t.rows.map(r => t.columns.map(c => r[c] ?? "")) });
@@ -57,7 +58,7 @@ export function captureSheets(app: CapturedApplication): Sheet[] {
   }
   const noteSingles = notes.filter(f => !isGridRow(f));
   if (noteSingles.length) {
-    sheets.push({ name: "Timeline Notes", columns: ["Record", "Section", "Field", "Value"], rows: noteSingles.map(f => [recordLabel(f.mapped), f.section, f.label, f.value]) });
+    sheets.push({ name: "Timeline Notes", columns: ["Record", "Section", "Field", "Value"], rows: noteSingles.map(f => [recordLabel(f.mapped), f.section, f.label, usDate(f.value)]) });
   }
   for (const target of NOTE_TARGETS) {
     for (const t of arrayTables(notes.filter(f => f.mapped === target.value))) {

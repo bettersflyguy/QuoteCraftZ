@@ -15,6 +15,9 @@ export interface DataServiceField {
   /** How the source's own screens label it (canonical), so the page peek
    * knows which on-screen fields the data service already covers. */
   pageLabels?: string[];
+  /** Identifier (SSN, DL#): secured pass-through only - never a capture
+   * field, a note or a share file; mapped only to a secured CRM column. */
+  secured?: boolean;
 }
 
 /** EVERYTHING the EZLynx data service returns for a person (SSN never; the
@@ -28,6 +31,8 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "applicant.nickName", label: "Nickname", section: "Applicant", defaultTarget: "crm:primarycontact.nickname", pageLabels: ["nickname"] },
   { id: "applicant.maidenName", label: "Maiden name", section: "Applicant", defaultTarget: "", pageLabels: ["maiden name"] },
   { id: "applicant.dateOfBirth", label: "Date of birth", section: "Applicant", defaultTarget: "contact.dateOfBirth", pageLabels: ["dob", "date of birth"] },
+  { id: "applicant.ssn", label: "SSN", section: "Applicant", defaultTarget: "secure:primarycontact.iacrm_socialsecuritynumber", pageLabels: ["ssn"], secured: true },
+  { id: "applicant.dlNumber", label: "DL#", section: "Applicant", defaultTarget: "secure:primarycontact.iacrm_driverslicense", pageLabels: ["dl"], secured: true },
   { id: "applicant.gender", label: "Gender", section: "Applicant", defaultTarget: "crm:primarycontact.gendercode", pageLabels: ["gender"] },
   { id: "applicant.maritalStatus", label: "Marital status", section: "Applicant", defaultTarget: "crm:primarycontact.familystatuscode", pageLabels: ["marital status"] },
   { id: "applicant.education", label: "Education", section: "Applicant", defaultTarget: "crm:primarycontact.educationcode", pageLabels: ["education"] },
@@ -64,6 +69,8 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "coApplicant.lastName", label: "Last name", section: "Co-applicants", defaultTarget: "contacts[].lastName" },
   { id: "coApplicant.relationship", label: "Relationship", section: "Co-applicants", defaultTarget: "" },
   { id: "coApplicant.dateOfBirth", label: "Date of birth", section: "Co-applicants", defaultTarget: "contacts[].dateOfBirth" },
+  { id: "coApplicant.ssn", label: "SSN", section: "Co-applicants", defaultTarget: "secure:contacts[].iacrm_socialsecuritynumber", secured: true },
+  { id: "coApplicant.dlNumber", label: "DL#", section: "Co-applicants", defaultTarget: "secure:contacts[].iacrm_driverslicense", secured: true },
   { id: "coApplicant.gender", label: "Gender", section: "Co-applicants", defaultTarget: "crm:contacts[].gendercode" },
   { id: "coApplicant.maritalStatus", label: "Marital status", section: "Co-applicants", defaultTarget: "crm:contacts[].familystatuscode" },
   { id: "coApplicant.education", label: "Education", section: "Co-applicants", defaultTarget: "crm:contacts[].educationcode" },
@@ -139,7 +146,8 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
   const targets = effectiveTargets(saved);
   const out: CapturedAppField[] = [];
   const values = applicantValues(a);
-  for (const f of EZLYNX_FIELDS.filter(x => x.section === "Applicant")) {
+  // secured fields never become capture fields, whatever they map to
+  for (const f of EZLYNX_FIELDS.filter(x => x.section === "Applicant" && !x.secured)) {
     const value = (values[f.id] ?? "").trim();
     if (!value) continue;
     out.push({ label: f.label, value, section: "Applicant", group: "", source: "dataservice", mapped: routeFor(targets[f.id]!, null) });
@@ -154,13 +162,39 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
       "coApplicant.phone": c.phone ?? ""
     };
     for (const [k, v] of Object.entries(c.details ?? {})) if (!(`coApplicant.${k}` in row)) row[`coApplicant.${k}`] = v;
-    for (const f of EZLYNX_FIELDS.filter(x => x.section === "Co-applicants")) {
+    for (const f of EZLYNX_FIELDS.filter(x => x.section === "Co-applicants" && !x.secured)) {
       const value = (row[f.id] ?? "").trim();
       if (!value) continue;
       out.push({ label: f.label, value, section: "Co-applicants", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
     }
   });
   return out;
+}
+
+/** The secured values (SSN, DL#) for the pass-through channel, by their
+ * mapped secured targets: the applicant's concrete, each co-applicant's
+ * row slot (contact2 = first co-applicant). Unmapped ones are dropped. */
+export function ezlynxSecure(a: CapturedApplicant, saved: Record<string, string> | undefined): { path: string; value: string }[] {
+  const targets = effectiveTargets(saved);
+  const out: { path: string; value: string }[] = [];
+  const add = (target: string | undefined, value: string | null | undefined, row: number | null) => {
+    const v = (value ?? "").trim();
+    if (!v || !target || !target.startsWith("secure:")) return;
+    const path = row === null ? target : target.replace("secure:contacts[]", `secure:contact${row + 2}`);
+    if (!path.includes("[]")) out.push({ path, value: v });
+  };
+  add(targets["applicant.ssn"], a.ssn, null);
+  add(targets["applicant.dlNumber"], a.dlNumber, null);
+  a.coApplicants.forEach((c, i) => {
+    add(targets["coApplicant.ssn"], c.ssn, i);
+    add(targets["coApplicant.dlNumber"], c.dlNumber, i);
+  });
+  return out;
+}
+
+/** The applicant with its SSNs removed: what may be stored with the capture. */
+export function withoutSsn<T extends CapturedApplicant>(a: T): T {
+  return { ...a, ssn: null, coApplicants: a.coApplicants.map(c => ({ ...c, ssn: null })) };
 }
 
 /** The rating run's quotes as held quotes (all selected, Estimated - EZLynx

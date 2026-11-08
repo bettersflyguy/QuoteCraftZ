@@ -481,7 +481,7 @@ describe("timeline note (Add to notes)", () => {
     expect(note.html.startsWith("<h2>Non Mapped Timeline Entries</h2>")).toBe(true);
     expect(note.count).toBe(4);
     expect(note.html).toContain("<h3>Notes</h3>");
-    expect(note.html).toContain("<td>Customer since</td><td>11/04/2019</td>");
+    expect(note.html).toContain("<td>Customer since</td><td>11-04-2019</td>");
     expect(note.html).toContain("<h3>Vehicles list</h3>");
     expect(note.html).toContain("<tr><th>VIN</th></tr><tr><td>JTMBF4DV4A5030644</td></tr><tr><td>5TDDKRFH9FS121015</td></tr>");
     expect(note.html).toContain("&lt;script&gt;x&lt;/script&gt; &amp; more");

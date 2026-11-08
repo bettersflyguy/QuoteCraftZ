@@ -109,7 +109,7 @@
   }
 
   function dateValue(value) {
-    const match = clean(value).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const match = clean(value).match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
     if (!match) return value;
     return `${match[3]}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
   }
@@ -898,7 +898,8 @@
   var peekMarks = [];
   var PEEK_STYLE = {
     mapped: { outline: "3px solid #13a10e", badge: "#13a10e" },
-    auto: { outline: "2px dashed #0f6cbd", badge: "#0f6cbd" },
+    /* auto-matched IS mapped: green, dashed so it reads as a guess */
+    auto: { outline: "2px dashed #13a10e", badge: "#13a10e" },
     skip: { outline: "2px dashed #8a8886", badge: "#8a8886" },
     unmapped: { outline: "2px solid #d13438", badge: "#d13438" }
   };
@@ -966,8 +967,8 @@
   /* items: [{key, label, kind, array}] - control keys resolve through the
    * same controlKey the fill uses; "pick:" keys through their selector, and
    * array teachings through the capture's own row expansion */
-  function peek(items) {
-    clearPeek();
+  function peek(items, keep) {
+    if (!keep) clearPeek();
     if (!Array.isArray(items) || !items.length) return { shown: 0, missing: 0 };
     var byKey = {};
     Array.prototype.forEach.call(document.querySelectorAll("input, select, textarea"), function (el) {
@@ -1004,14 +1005,30 @@
     return { shown: shown, missing: missing };
   }
 
+  /* ONE view of the page: mapped fields in green (with what they feed),
+   * everything the capture reads that nothing covers in red. Covered for
+   * red = the items shown plus the saved map, auto-matches and (data-service
+   * sites) fields the service fills. */
+  function peekAll(arg) {
+    clearPeek();
+    var items = (arg && Array.isArray(arg.items)) ? arg.items : [];
+    var r = peek(items, true);
+    var map = {};
+    Object.keys((arg && arg.map) || {}).forEach(function (k) { map[k] = arg.map[k]; });
+    items.forEach(function (it) { if (it && typeof it.key === "string") map[it.key] = map[it.key] || "shown"; });
+    var u = peekUnmapped({ map: map, payload: arg && arg.payload, pageLabels: arg && arg.pageLabels }, true);
+    watchBadges(true);
+    return { shown: r.shown, missing: r.missing, unmapped: u.shown };
+  }
+
   /* "peek unmapped": outline in RED every element the capture reads that
    * nothing covers. Covered = a control with a saved mapping (incl. "Never
    * fill" - a deliberate decision) or an auto-match against the held
    * capture; a taught text location (every row for array/note teachings) or
    * anything inside/around one; or, on data-service sites (EZLynx), a screen
    * field whose label a MAPPED data-service field covers. */
-  function peekUnmapped(arg) {
-    clearPeek();
+  function peekUnmapped(arg, keep) {
+    if (!keep) clearPeek();
     const all = typeof globalThis.__bettersCaptureElements === "function" ? globalThis.__bettersCaptureElements() : [];
     if (!all.length) return { shown: 0, missing: 0 };
     const covered = [];
@@ -1050,6 +1067,7 @@
 
   globalThis.__bettersPortalPeekUnmapped = (arg) => (arg ? peekUnmapped(arg) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalPeek = (items) => (items ? peek(items) : (clearPeek(), { shown: 0, missing: 0 }));
+  globalThis.__bettersPortalPeekAll = (arg) => (arg ? peekAll(arg) : (clearPeek(), { shown: 0, missing: 0, unmapped: 0 }));
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalFillSecure = (values, overwrite, overrides) => fillSecure(values, Boolean(overwrite), overrides || {});
   globalThis.__bettersPortalAdvance = () => advance(activeModal() || document);
