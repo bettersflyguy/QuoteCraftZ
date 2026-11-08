@@ -99,8 +99,15 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
 
   // built-in targets (they also drive identity, dedupe and fill) plus every CRM column
   const groups = useMemo(() => {
-    const crm = captureGroups(catalog).filter(g => !MAP_PATH_GROUPS.some(m => m.group === g.group));
-    return [...MAP_PATH_GROUPS, ...crm];
+    // groups can share a name ("Related contacts (all rows)" is both the
+    // built-in list and the CRM table): merge their paths, never drop one
+    const merged = new Map<string, { path: string; label: string }[]>();
+    for (const g of [...MAP_PATH_GROUPS, ...(catalog ? captureGroups(catalog) : [])]) {
+      const paths = merged.get(g.group) ?? [];
+      for (const p of g.paths) if (!paths.some(x => x.path === p.path)) paths.push(p);
+      merged.set(g.group, paths);
+    }
+    return [...merged.entries()].map(([group, paths]) => ({ group, paths }));
   }, [catalog]);
   const targets = effectiveTargets(saved);
   const choose = (id: string, value: string) => void setDataServiceMap(source, { ...(saved ?? {}), [id]: value });

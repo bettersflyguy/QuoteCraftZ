@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DATA_SERVICE_STORAGE_KEY, EZLYNX_FIELDS, effectiveTargets, getDataServiceMaps } from "@/sources/ezlynxSource";
 import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import { FIELDMAP_STORAGE_KEY, getAllFieldMaps, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
+import { FIELDMAP_STORAGE_KEY, fieldKeyOf, getAllFieldMaps, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
 import type { ChoicesRead } from "./OptionMapEditor";
@@ -95,6 +96,27 @@ export function MappingsManager() {
   // the data-service editor belongs to the page it opened on
   useEffect(() => { setDsTabId(null); }, [currentOrigin]);
   const dsMode = dsTabId !== null && Boolean(currentOrigin && DATA_SERVICE_ORIGINS[currentOrigin]);
+  // what the data service already covers ON this page (Gender, Education...):
+  // the peek outlines those fields with the CRM target they feed
+  const [dsMaps, setDsMaps] = useState<Record<string, string> | undefined>(undefined);
+  useEffect(() => {
+    const load = () => void getDataServiceMaps().then(m => setDsMaps(m["ezlynx"]));
+    load();
+    const onChanged = (changes: Record<string, unknown>, area: string) => { if (area === "local" && DATA_SERVICE_STORAGE_KEY in changes) load(); };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
+  const dsPeek = useMemo(() => {
+    const targets = effectiveTargets(dsMaps);
+    const out: { key: string; target: string }[] = [];
+    for (const f of EZLYNX_FIELDS.filter(x => x.section === "Applicant" && targets[x.id])) {
+      for (const l of f.pageLabels ?? [f.label]) {
+        const key = fieldKeyOf("", l);
+        if (!out.some(o => o.key === key)) out.push({ key, target: targets[f.id]! });
+      }
+    }
+    return out;
+  }, [dsMaps]);
   const rowOrigins = [
     ...(currentOrigin ? [currentOrigin] : []),
     ...Object.keys(maps).sort().filter(o => o !== currentOrigin)
@@ -240,6 +262,7 @@ export function MappingsManager() {
           title={dsMode ? "Page fields (not in the data service)" : undefined}
           hideAuto={dsMode}
           inject={dsMode ? injected : null}
+          extraPeek={dsMode ? dsPeek : undefined}
           onPick={scanTabId === null || dsMode
             ? undefined
             : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: scanTabId })}

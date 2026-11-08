@@ -176,7 +176,8 @@
   const PATH_FIELD_EXCLUDE = {
     "address.street1": /line\s*2|address\s*2\b|suite|\bapt\b|apartment|\bunit\b/,
     "address.street2": /line\s*1|address\s*1\b/,
-    "contact.fullName": /\bfirst\b|\blast\b|\bmiddle\b/
+    /* other people's / other kinds of names are never the insured's name */
+    "contact.fullName": /\bfirst\b|\blast\b|\bmiddle\b|\bmaiden\b|\bnick ?name\b|\baccount\b|\bbusiness\b|\bcompany\b|\bproducer\b|\bagent\b|\bcsr\b|\bemployer\b|\bspouse\b|\bowner\b|\buser ?name\b/
   };
 
   function matchField(fieldName, candidates) {

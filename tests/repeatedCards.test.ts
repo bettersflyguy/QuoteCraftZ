@@ -64,6 +64,18 @@ describe("labelled-field keys (EZLynx steps)", () => {
   });
 });
 
+describe("auto-matching names", () => {
+  it("other kinds of names never take the insured's full name", () => {
+    const mapper = (globalThis as unknown as { BettersPortalMapper: {
+      buildCandidates: (p: unknown) => unknown[]; matchField: (n: string, c: unknown[]) => { path: string } | null } }).BettersPortalMapper;
+    const candidates = mapper.buildCandidates({ normalized: { contact: { fullName: "Tracy Dittrich" } }, fields: [] });
+    for (const label of ["Maiden Name", "Account Name", "Nickname", "Assigned Producer Name", "Business Name"]) {
+      expect(mapper.matchField(label, candidates)?.path, label).not.toBe("contact.fullName");
+    }
+    expect(mapper.matchField("Full Name", candidates)?.path).toBe("contact.fullName");
+  });
+});
+
 describe("click-to-map on any site", () => {
   type Row = { key: string; label: string };
   const pickAfterClick = async (target: () => Element) => {

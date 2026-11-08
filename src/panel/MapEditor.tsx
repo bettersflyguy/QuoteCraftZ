@@ -88,13 +88,16 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, extraPeek }: {
   /** Header text (defaults to "Field mapping for <origin>"). */
   title?: string;
   /** List only mapped/picked rows, not auto-matches (data-service sites). */
   hideAuto?: boolean;
   /** A field picked elsewhere (the data-service editor) to add and focus. */
   inject?: PortalScanRow | null;
+  /** On-screen fields another mapping covers (a data service): outlined by
+   * the peek with the CRM target they feed. */
+  extraPeek?: { key: string; target: string }[];
   scan: PortalScanResult;
   /** This site's one-for-one choice mappings ({table.column: {text: value}}). */
   choices?: Record<string, ColumnOptionMap>;
@@ -233,9 +236,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     if (v === "skip") return [{ key: r.key, label: "Never fill", kind: "skip" }];
     if (isNoteTarget(v)) return [{ key: r.key, label: NOTE_TARGETS.find(t => t.value === v)!.label, kind: "mapped", array: true }];
     if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v) }];
-    if (r.autoPath) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
+    if (r.autoPath && !hideAuto) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
     return [];
-  });
+  }).concat((extraPeek ?? []).map(x => ({ key: x.key, label: targetText(x.target), kind: "mapped" as const })));
   const peekSignature = JSON.stringify(peekItems);
   const [peeking, setPeeking] = useState(false);
   const [peekNote, setPeekNote] = useState<string | null>(null);
