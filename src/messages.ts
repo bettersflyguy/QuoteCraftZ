@@ -93,7 +93,7 @@ export type PanelRequest =
   | { type: "panel/createQuote"; fields: import("@/crm/dataverse").NewQuoteFields }
   | { type: "panel/crmPull"; kind: "account" | "contact"; id: string; name: string }
   | { type: "panel/securePending" }
-  | { type: "panel/portalChoices"; tabId: number; key: string }
+  | { type: "panel/portalChoices"; tabId: number; key?: string; labels?: string[] }
   | { type: "panel/getCrmLink" }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }

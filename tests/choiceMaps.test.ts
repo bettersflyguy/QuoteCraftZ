@@ -124,6 +124,17 @@ describe("page scan lists a selection field's choices", () => {
     expect(document.getElementById("shown")!.textContent).toBe("Bachelors"); // nothing selected
   });
 
+  it("finds a data-service field on the page by its label", async () => {
+    document.body.innerHTML = `
+      <label id="lbl">Education</label>
+      <mat-select id="edu" role="combobox" aria-labelledby="lbl"><span>Bachelors</span></mat-select>
+      <label for="occ">Occupation</label><input id="occ" name="occ" value="Nurse">`;
+    const call = (labels: string[]) =>
+      (globalThis as unknown as { __bettersPortalChoices: (k: string, l: string[]) => Promise<Choices> }).__bettersPortalChoices("", labels);
+    expect((await call(["Education", "education"]))?.current).toBe("Bachelors");
+    expect(await call(["Marital status"])).toBeNull();
+  });
+
   it("reads a native select without opening it, and refuses identifier fields", async () => {
     document.body.innerHTML = `
       <label for="edu">Education</label>

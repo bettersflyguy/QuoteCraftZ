@@ -508,12 +508,25 @@
   function choiceHost(el) {
     return el.closest("select, [role='combobox'], mat-select, [aria-haspopup='listbox'], .k-dropdown, .k-dropdownlist, .k-picker, .mat-mdc-select, .mat-select") || el;
   }
-  async function readChoices(key) {
+  /* a field found by its visible label (data-service sources: the mapping
+   * names the service's field, the page shows the same field by label) */
+  const LABELLED_FIELDS = "input, select, textarea, [role='combobox'], mat-select, [aria-haspopup='listbox'], .k-dropdownlist, .k-picker";
+  function fieldByLabels(labels) {
+    const wanted = new Set((labels || []).map((l) => mapper.canonical(l)).filter(Boolean));
+    if (!wanted.size) return null;
+    return Array.from(document.querySelectorAll(LABELLED_FIELDS))
+      .filter((el) => visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0))
+      .find((el) => wanted.has(mapper.canonical(primaryLabel(el)))) || null;
+  }
+
+  async function readChoices(key, labels) {
     let el = null;
-    if (key.indexOf("pick:") === 0) {
+    if (key && key.indexOf("pick:") === 0) {
       try { el = document.querySelector(key.slice(5)); } catch (_e) { el = null; }
-    } else {
+    } else if (key) {
       el = Array.from(document.querySelectorAll("input, select, textarea")).find((c) => controlKey(c) === key) || null;
+    } else {
+      el = fieldByLabels(labels);
     }
     if (!el) return null;
     const host = choiceHost(el);
@@ -807,11 +820,15 @@
           /* read-only text: key is a re-locatable selector, so the taught
            * binding extracts this element's text on every future capture */
           var tx = t.textEl;
-          var inferred = inferTextLabel(tx);
+          /* inside a styled dropdown, the field's own label names it
+           * ("Education"), not the value it shows ("Bachelors") */
+          var host = choiceHost(tx);
+          var hostLabel = host !== tx ? primaryLabel(host) : "";
+          var inferred = hostLabel || inferTextLabel(tx);
           var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
           finish({
             key: "pick:" + cssPath(tx),
-            label: (inferred ? inferred + ": " : "") + snippet,
+            label: hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             type: "text",
             payment: PAYMENT_FIELD.test(inferred),
             autoPath: null,
@@ -1000,7 +1017,8 @@
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalFillSecure = (values, overwrite, overrides) => fillSecure(values, Boolean(overwrite), overrides || {});
   globalThis.__bettersPortalAdvance = () => advance(activeModal() || document);
-  globalThis.__bettersPortalChoices = (key) => (typeof key === "string" && key ? readChoices(key) : null);
+  globalThis.__bettersPortalChoices = (key, labels) =>
+    (typeof key === "string" && key) || Array.isArray(labels) ? readChoices(typeof key === "string" ? key : "", labels) : null;
   /* shared with the ingester, so a control's saved mapping routes its value
    * on capture exactly as it does on fill */
   globalThis.__bettersControlKey = controlKey;

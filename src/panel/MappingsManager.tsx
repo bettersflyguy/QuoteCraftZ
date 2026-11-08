@@ -6,6 +6,7 @@ import { FIELDMAP_STORAGE_KEY, getAllFieldMaps, setAllFieldMaps, type FieldMaps 
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
 import type { ChoicesRead } from "./OptionMapEditor";
+import { DATA_SERVICE_ORIGINS, DataServiceMapEditor } from "./DataServiceMapEditor";
 import { send } from "./api";
 import { getOptionMaps, type ColumnOptionMap } from "@/portal/optionMaps";
 
@@ -37,6 +38,16 @@ export function MappingsManager() {
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [awaiting, setAwaiting] = useState<string | null>(null);
+  // data-service sites (EZLynx): the editor maps the service's fields
+  const [dsTabId, setDsTabId] = useState<number | null>(null);
+  const openDataService = async () => {
+    if (dsTabId !== null) { setDsTabId(null); return; }
+    setBusy("scan");
+    setProblem(null);
+    try { setDsTabId((await grantActiveTab(setAwaiting)).id); }
+    catch (e) { setProblem(String((e as Error).message ?? e)); }
+    finally { setBusy(null); }
+  };
 
   useEffect(() => {
     void getAllFieldMaps().then(setMaps);
@@ -67,6 +78,8 @@ export function MappingsManager() {
       chrome.tabs.onUpdated.removeListener(onUpdated);
     };
   }, []);
+  // the data-service editor belongs to the page it opened on
+  useEffect(() => { setDsTabId(null); }, [currentOrigin]);
   const rowOrigins = [
     ...(currentOrigin ? [currentOrigin] : []),
     ...Object.keys(maps).sort().filter(o => o !== currentOrigin)
@@ -128,6 +141,23 @@ export function MappingsManager() {
       {rowOrigins.map(origin => {
         const count = maps[origin] ? Object.keys(maps[origin]!).length : 0;
         const here = origin === currentOrigin;
+        const ds = DATA_SERVICE_ORIGINS[origin];
+        if (ds && here) {
+          return (
+            <div key={origin} className={styles.row}>
+              <Text size={200} className={styles.origin} weight="semibold">{origin}: {ds.name} data service</Text>
+              <Tooltip content="Edit the data service mapping" relationship="label" withArrow>
+                <Button
+                  size="small"
+                  appearance={dsTabId !== null ? "primary" : "secondary"}
+                  icon={busy === "scan" ? <Spinner size="tiny" /> : <EditRegular />}
+                  disabledFocusable={busy !== null}
+                  onClick={busy !== null ? undefined : () => void openDataService()}
+                />
+              </Tooltip>
+            </div>
+          );
+        }
         return (
           <div key={origin} className={styles.row}>
             <Text size={200} className={styles.origin} weight={here ? "semibold" : "regular"}>
@@ -157,6 +187,16 @@ export function MappingsManager() {
           Waiting for browser approval to access {awaiting}. Click Allow on the permission prompt
           (in Edge it is under the Extensions puzzle-piece icon next to the address bar).
         </Text>
+      )}
+      {dsTabId !== null && currentOrigin && DATA_SERVICE_ORIGINS[currentOrigin] && (
+        <DataServiceMapEditor
+          source={DATA_SERVICE_ORIGINS[currentOrigin]!.source}
+          page={{
+            onPick: () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: dsTabId }),
+            onPickCancel: () => send<null>({ type: "panel/portalPickCancel", tabId: dsTabId }),
+            onRead: labels => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: dsTabId, labels })
+          }}
+        />
       )}
       {scan && (
         <MapEditor
