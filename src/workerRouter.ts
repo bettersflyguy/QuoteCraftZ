@@ -37,7 +37,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
-import { ezlynxFields, getDataServiceMaps, mergeHeldQuotes, quotesFromRun } from "@/sources/ezlynxSource";
+import { coveredPageLabels, ezlynxFields, getDataServiceMaps, mergeHeldQuotes, quotesFromRun } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
@@ -1079,7 +1079,15 @@ async function peekPortalTab(
 
 async function peekUnmappedTab(tabId: number, on: boolean): Promise<import("@/boldpenguin/types").PeekResult> {
   const origin = on ? await tabOrigin(tabId) : "";
-  const map = on && origin ? await fieldMapFor(origin) : {};
+  // covered = saved page mapping, an auto-match against the held capture,
+  // or (data-service sites) a screen field a mapped service field covers
+  const arg = on
+    ? {
+        map: origin ? await fieldMapFor(origin) : {},
+        payload: await getCapturedApplication(),
+        pageLabels: origin === "https://app.ezlynx.com" ? coveredPageLabels((await getDataServiceMaps())["ezlynx"]) : []
+      }
+    : null;
   if (on) {
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
@@ -1090,7 +1098,7 @@ async function peekUnmappedTab(tabId: number, on: boolean): Promise<import("@/bo
     target: { tabId, allFrames: true },
     func: (m: unknown) =>
       (globalThis as { __bettersPortalPeekUnmapped?: (m: unknown) => unknown }).__bettersPortalPeekUnmapped?.(m) ?? null,
-    args: [on ? map : null]
+    args: [arg]
   });
   const shown = frames
     .map(f => f.result as import("@/boldpenguin/types").PeekResult | null)

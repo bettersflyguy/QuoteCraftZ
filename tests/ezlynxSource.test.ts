@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ezlynxFields, mergeHeldQuotes, quotesFromRun, effectiveTargets } from "@/sources/ezlynxSource";
+import { coveredPageLabels, ezlynxFields, mergeHeldQuotes, quotesFromRun, effectiveTargets } from "@/sources/ezlynxSource";
 import { normalize } from "@/boldpenguin/normalize";
 import { buildQuoteOps, type CommitPayload } from "@/crm/mapping";
 import type { CapturedApplicant, CapturedRun } from "@/types";
@@ -7,6 +7,7 @@ import type { HeldQuote } from "@/boldpenguin/types";
 
 const applicant: CapturedApplicant = {
   ezlynxApplicantId: 72815548,
+  details: { gender: "Male", maritalStatus: "Separated", occupation: "Nurse - RN", leadSource: "Unknown", county: "Hennepin" },
   firstName: "Tracy", lastName: "Dittrich", dateOfBirth: "1972-03-11",
   dlNumber: "D123", dlState: "MN",
   address: { street: "7901 120TH AVE N", city: "CHAMPLIN", state: "MN", postalCode: "55316" },
@@ -100,5 +101,26 @@ describe("premium status on write", () => {
     expect(buildQuoteOps(payload("estimated"), new Map())[0]!.body["iacrm_premium_status"]).toBe(ESTIMATED);
     expect(buildQuoteOps(payload(), new Map())[0]!.body["iacrm_premium_status"]).toBe(ESTIMATED);
     expect(buildQuoteOps(payload("estimated"), new Map([["ezlynx:1:req", FIRM]]))[0]!.body).not.toHaveProperty("iacrm_premium_status");
+  });
+});
+
+describe("everything the data service returns is listed and captured", () => {
+  it("captures detail fields: gender/marital default to CRM, the rest kept unmapped", () => {
+    const fields = ezlynxFields(applicant, undefined);
+    const by = (label: string) => fields.find(f => f.section === "Applicant" && f.label === label);
+    expect(by("Gender")?.mapped).toBe("contact.gender");
+    expect(by("Marital status")?.mapped).toBe("contact.maritalStatus");
+    expect(by("Occupation")?.value).toBe("Nurse - RN");
+    expect(by("Occupation")?.mapped).toBeUndefined();
+    expect(by("County")?.value).toBe("Hennepin");
+    const n = normalize(fields);
+    expect(n["contact"]?.["gender"]).toBe("Male");
+  });
+
+  it("reports which on-screen labels mapped service fields cover", () => {
+    const labels = coveredPageLabels(undefined);
+    expect(labels).toEqual(expect.arrayContaining(["first name", "dob", "postal code", "gender"]));
+    expect(labels).not.toContain("occupation");
+    expect(coveredPageLabels({ "applicant.occupation": "note" })).toContain("occupation");
   });
 });

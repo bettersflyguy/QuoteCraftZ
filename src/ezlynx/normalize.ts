@@ -116,11 +116,61 @@ const RawApplicant = z.object({
   }).passthrough()).nullish()
 }).passthrough();
 
+/** A value as display text: coded fields ({value,name}) by name, booleans
+ * as Yes/No, numbers and strings as-is; empty -> "". */
+function text(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "object" && "name" in (v as Record<string, unknown>)) return text((v as Record<string, unknown>)["name"]);
+  return "";
+}
+
+/** The person's other values (the data service returns far more than the
+ * identity fields). SSN is never read; license NUMBERS are not included. */
+function personDetails(r: Record<string, unknown>, address?: Record<string, unknown> | null): Record<string, string> {
+  const d: Record<string, string> = {
+    middleInitial: text(r["middleInitial"]),
+    nickName: text(r["nickName"]),
+    maidenName: text(r["maidenName"]),
+    gender: text(r["gender"]),
+    maritalStatus: text(r["maritalStatus"]),
+    education: text(r["education"]),
+    industry: text(r["industry"]),
+    occupation: text(r["occupation"]),
+    yearsAtOccupation: text(r["yearsAtOccupation"]),
+    priorEmployerInYears: text(r["priorEmployerInYears"]),
+    driversLicenseStatus: text(r["driversLicenseStatus"]),
+    driversLicenseState: text(r["driversLicenseState"]),
+    applicantType: text(r["applicantType"]),
+    customerSince: text(r["customerSince"]).slice(0, 10),
+    accountName: text(r["accountName"]),
+    leadSource: text(r["leadSource"]),
+    assignedProducer: text((r["assignedTo"] as Record<string, unknown> | undefined)?.["name"]).replace(/\s+/g, " "),
+    isVip: text(r["isVip"]),
+    isDeceased: text(r["isDeceased"]),
+    ratingState: text(r["ratingState"]),
+    isCommercial: text(r["isCommercial"])
+  };
+  if (address) {
+    d["unit"] = text(address["unit"]);
+    d["address2"] = text(address["address2"]);
+    d["county"] = text(address["county"]);
+    d["postalCodeSuffix"] = text(address["postalCodeSuffix"]);
+    d["yearsAtAddress"] = text(address["yearsAtAddress"]);
+    d["monthsAtAddress"] = text(address["monthsAtAddress"]);
+  }
+  for (const k of Object.keys(d)) if (!d[k]) delete d[k];
+  return d;
+}
+
 export function normalizeApplicant(raw: unknown): CapturedApplicant {
   const p = RawApplicant.safeParse(raw);
   if (!p.success) throw new NormalizeError(`applicant shape: ${p.error.message}`, raw);
   const a = p.data;
   return {
+    details: personDetails(a as Record<string, unknown>, a.primaryAddress as Record<string, unknown> | null | undefined),
     ezlynxApplicantId: a.id,
     firstName: a.firstName,
     lastName: a.lastName,
@@ -139,6 +189,7 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
       })
       .filter(Boolean),
     coApplicants: (a.contacts ?? []).map(c => ({
+      details: personDetails(c as Record<string, unknown>),
       firstName: c.firstName,
       lastName: c.lastName,
       relationship: c.relationship?.name ?? "",

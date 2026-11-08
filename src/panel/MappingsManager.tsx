@@ -78,7 +78,9 @@ export function MappingsManager() {
       const tab = await grantActiveTab(setAwaiting);
       const s = await send<PortalScanResult>({ type: "panel/portalScan", tabId: tab.id });
       const d: Record<string, string> = {};
-      for (const r of s.rows) d[r.key] = r.mapped ?? "";
+      // auto-matches become real, visible entries: the agent confirms (or
+      // corrects) which CRM field each one feeds, and Save stores them
+      for (const r of s.rows) d[r.key] = r.mapped ?? (r.payment ? "" : r.autoPath ?? "");
       setDraft(d);
       setScan(s);
       setScanTabId(tab.id);

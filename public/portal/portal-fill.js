@@ -717,12 +717,46 @@
     unmapped: { outline: "2px solid #d13438", badge: "#d13438" }
   };
 
+  /* badges are FIXED and re-placed on every scroll (any scroller, captured)
+   * and resize: apps like EZLynx scroll an inner panel, not the window, so a
+   * one-time document position drifts. A badge hides while its field is
+   * scrolled out of view, including clipped inside a scrolling panel. */
+  var peekRaf = 0;
+  function placeBadges() {
+    peekMarks.forEach(function (m) {
+      if (!m.badge) return;
+      var r = m.el.getBoundingClientRect();
+      var inView = r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+      if (inView && typeof document.elementFromPoint === "function") {
+        var hit = document.elementFromPoint(Math.min(innerWidth - 1, Math.max(0, r.left + r.width / 2)), Math.min(innerHeight - 1, Math.max(0, r.top + r.height / 2)));
+        inView = !hit || hit === m.el || m.el.contains(hit) || hit.contains(m.el);
+      }
+      m.badge.style.display = inView ? "" : "none";
+      m.badge.style.left = Math.max(0, r.left) + "px";
+      m.badge.style.top = Math.max(0, r.top - 15) + "px";
+    });
+  }
+  function onPeekScroll() {
+    if (peekRaf) return;
+    peekRaf = requestAnimationFrame(function () { peekRaf = 0; placeBadges(); });
+  }
+  function watchBadges(on) {
+    document.removeEventListener("scroll", onPeekScroll, true);
+    window.removeEventListener("resize", onPeekScroll);
+    if (on) {
+      document.addEventListener("scroll", onPeekScroll, true);
+      window.addEventListener("resize", onPeekScroll);
+      placeBadges();
+    }
+  }
+
   function clearPeek() {
     peekMarks.forEach(function (m) {
       if (m.el) { m.el.style.outline = m.outline; m.el.style.outlineOffset = m.offset; }
       if (m.badge && m.badge.parentNode) m.badge.parentNode.removeChild(m.badge);
     });
     peekMarks = [];
+    watchBadges(false);
   }
 
   function markPeek(el, kind, label) {
@@ -731,13 +765,12 @@
     el.style.outline = s.outline;
     el.style.outlineOffset = "1px";
     if (label) {
-      var r = el.getBoundingClientRect();
       var b = document.createElement("div");
       b.textContent = label;
       b.setAttribute("data-betters-peek", "1");
-      b.style.cssText = "position:absolute;z-index:2147483647;pointer-events:none;font:600 10px/1.3 Segoe UI,Arial,sans-serif;" +
+      b.style.cssText = "position:fixed;z-index:2147483647;pointer-events:none;font:600 10px/1.3 Segoe UI,Arial,sans-serif;" +
         "color:#fff;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;" +
-        "background:" + s.badge + ";left:" + Math.max(0, r.left + window.scrollX) + "px;top:" + Math.max(0, r.top + window.scrollY - 15) + "px";
+        "background:" + s.badge;
       document.body.appendChild(b);
       mark.badge = b;
     }
@@ -777,19 +810,28 @@
         markPeek(el, it.kind, i === 0 ? String(it.label || "") + (it.array && els.length > 1 ? " (" + els.length + " rows)" : "") : "");
       });
     });
+    watchBadges(true);
     return { shown: shown, missing: missing };
   }
 
-  /* "peek unmapped": outline in RED every element the capture reads that no
-   * saved mapping covers. Covered = a control whose key is mapped (incl.
-   * "Never fill" - a deliberate decision), or a taught text location (every
-   * row for array/note teachings), or anything inside/around one. */
-  function peekUnmapped(map) {
+  /* "peek unmapped": outline in RED every element the capture reads that
+   * nothing covers. Covered = a control with a saved mapping (incl. "Never
+   * fill" - a deliberate decision) or an auto-match against the held
+   * capture; a taught text location (every row for array/note teachings) or
+   * anything inside/around one; or, on data-service sites (EZLynx), a screen
+   * field whose label a MAPPED data-service field covers. */
+  function peekUnmapped(arg) {
     clearPeek();
     const all = typeof globalThis.__bettersCaptureElements === "function" ? globalThis.__bettersCaptureElements() : [];
     if (!all.length) return { shown: 0, missing: 0 };
     const covered = [];
-    const keys = map && typeof map === "object" ? map : {};
+    const keys = arg && arg.map && typeof arg.map === "object" ? arg.map : {};
+    const coveredKeys = new Set(Object.keys(keys).filter(function (k) { return keys[k]; }));
+    try {
+      scanControls(arg && arg.payload ? arg.payload : null, keys).forEach(function (r) { if (r.autoPath) coveredKeys.add(r.key); });
+    } catch (_e) { /* auto-matching is best-effort here */ }
+    const canon = function (v) { return mapper && mapper.canonical ? mapper.canonical(v) : String(v || "").toLowerCase().trim(); };
+    const serviceLabels = new Set(((arg && arg.pageLabels) || []).map(canon));
     Object.keys(keys).forEach(function (k) {
       if (!keys[k] || k.indexOf("pick:") !== 0) return;
       const sel = k.slice(5);
@@ -802,7 +844,8 @@
     all.forEach(function (el) {
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
-      if (isControl && keys[controlKey(el)]) return;
+      if (isControl && coveredKeys.has(controlKey(el))) return;
+      if (isControl && serviceLabels.size && serviceLabels.has(canon(primaryLabel(el) || fieldName(el)))) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
       markPeek(el, "unmapped", "");
       shown += 1;
@@ -810,7 +853,7 @@
     return { shown: shown, missing: 0 };
   }
 
-  globalThis.__bettersPortalPeekUnmapped = (map) => (map ? peekUnmapped(map) : (clearPeek(), { shown: 0, missing: 0 }));
+  globalThis.__bettersPortalPeekUnmapped = (arg) => (arg ? peekUnmapped(arg) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalPeek = (items) => (items ? peek(items) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});

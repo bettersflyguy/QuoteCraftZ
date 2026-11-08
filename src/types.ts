@@ -8,9 +8,14 @@ export interface CapturedApplicant {
   address: { street: string; city: string; state: string; postalCode: string } | null;
   phones: { type: string | null; number: string }[];
   emails: string[];
+  /** Every other non-sensitive value the source returns (gender, marital
+   * status, occupation, lead source...), keyed by field id, as display text.
+   * Never SSN; license NUMBERS stay in dlNumber (secured columns only). */
+  details?: Record<string, string>;
   coApplicants: {
     firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null;
     dateOfBirth: string | null; dlNumber: string | null; dlState: string | null;
+    details?: Record<string, string>;
     /** Captured CRM-column values for this person (raw text from the panel;
      * the worker replaces them with catalog-coerced values before writing). */
     extra?: Record<string, unknown>;

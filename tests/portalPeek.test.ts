@@ -18,7 +18,8 @@ beforeAll(() => {
     const h = hidden ? 0 : 16;
     return { left: 10, top: 40, width: w, height: h, right: 10 + w, bottom: 40 + h, x: 10, y: 40, toJSON() { return {}; } } as DOMRect;
   };
-  for (const f of ["portal-ingest.js", "portal-fill.js"]) {
+  // injection order as the worker does it: matcher, harvester, filler
+  for (const f of ["portal-mapper.js", "portal-ingest.js", "portal-fill.js"]) {
     // eslint-disable-next-line no-new-func
     new Function(readFileSync(path.resolve(__dirname, "../public/portal", f), "utf8"))();
   }
@@ -90,11 +91,11 @@ describe("peek unmapped", () => {
         </table>
       </main>`;
     const unmapped = (globalThis as unknown as { __bettersPortalPeekUnmapped: (m: unknown) => { shown: number } }).__bettersPortalPeekUnmapped;
-    const r = unmapped({
+    const r = unmapped({ map: {
       "text:fn": "contact.firstName",                                            // mapped control
       "checkbox:nl": "skip",                                                     // deliberate "never fill"
       "pick:#veh > tbody > tr:nth-of-type(1) > td:nth-of-type(1)": "note"       // VIN column, every row
-    });
+    } });
     const red = (el: Element | null) => /solid/.test((el as HTMLElement).style.outline) && /(209, 52, 56)|#d13438/i.test((el as HTMLElement).style.outline);
     expect(red(document.getElementById("fn"))).toBe(false);
     expect(red(document.getElementById("nl"))).toBe(false);
@@ -105,5 +106,29 @@ describe("peek unmapped", () => {
     expect(r.shown).toBe(5);
     unmapped(null);
     expect(red(document.getElementById("ln"))).toBe(false);
+  });
+});
+
+describe("peek unmapped coverage", () => {
+  it("auto-matches and data-service-covered screen fields are not red; uncovered ones are", () => {
+
+    document.body.innerHTML = `
+      <main>
+        <label for="ln">Last Name</label><input id="ln" name="ln" value="Dittrich">
+        <label for="g">Gender</label><input id="g" name="g" value="Male">
+        <label for="occ">Occupation</label><input id="occ" name="occ" value="Nurse - RN">
+      </main>`;
+    const unmapped = (globalThis as unknown as { __bettersPortalPeekUnmapped: (m: unknown) => { shown: number } }).__bettersPortalPeekUnmapped;
+    const r = unmapped({
+      map: {},
+      payload: { normalized: { contact: { lastName: "Dittrich" } }, fields: [] },
+      pageLabels: ["gender"]
+    });
+    const red = (id: string) => /solid/.test(document.getElementById(id)!.style.outline);
+    expect(red("ln")).toBe(false);   // auto-matched to Last name
+    expect(red("g")).toBe(false);    // the data service brings Gender, mapped
+    expect(red("occ")).toBe(true);   // nothing captures Occupation
+    expect(r.shown).toBe(1);
+    unmapped(null);
   });
 });
