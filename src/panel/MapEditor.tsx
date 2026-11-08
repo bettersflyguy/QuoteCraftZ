@@ -113,6 +113,14 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   }, [focusKey]);
 
   const stopRequested = useRef(false);
+  const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
+  const [showAll, setShowAll] = useState(false);
+  const reveal = (key: string) => setRevealed(s => (s.has(key) ? s : new Set(s).add(key)));
+  /** Setting a target keeps the row listed even if it's reset to Auto. */
+  const setTarget = (key: string, value: string) => {
+    reveal(key);
+    setDraft(d => ({ ...d, [key]: value }));
+  };
 
   const pick = async () => {
     if (!onPick || picking) return;
@@ -132,6 +140,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
         if (!row) break; // Esc on the page, or Stop landed mid-round
         const known = scan.rows.some(r => r.key === row.key) || extraRows.some(r => r.key === row.key);
         if (!known) setExtraRows(x => [...x, row]);
+        reveal(row.key);
         setFocusKey(row.key);
         setPickNote(`Selected: ${row.label}`);
         return;
@@ -149,7 +158,14 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     void onPickCancel?.().catch(() => {});
   };
 
-  const rows = [...scan.rows, ...extraRows.filter(x => !scan.rows.some(r => r.key === x.key))];
+  const allRows = [...scan.rows, ...extraRows.filter(x => !scan.rows.some(r => r.key === x.key))];
+  // Only rows that mean something are listed: auto-matched, already mapped,
+  // or picked/edited this session. Unknown page fields stay hidden until the
+  // agent clicks them on the page — building a map beats scrolling a list
+  // of anonymous "Select Row" checkboxes.
+  const rows = allRows.filter(r =>
+    showAll || revealed.has(r.key) || Boolean(r.autoPath) || Boolean(r.mapped) || Boolean(draft[r.key]));
+  const hiddenCount = allRows.length - rows.length;
   return (
     <div className={styles.root}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>
@@ -185,7 +201,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                 /* read-only text teaching: capture direction, CRM fields only */
                 <TargetPicker
                   value={current}
-                  onChange={v => setDraft(d => ({ ...d, [r.key]: v }))}
+                  onChange={v => setTarget(r.key, v)}
                   groups={groups}
                   specials={[{ value: "", label: "Not captured" }]}
                   currentText={current && !groupValues.has(current)
@@ -196,7 +212,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
               ) : (
                 <TargetPicker
                   value={current}
-                  onChange={v => setDraft(d => ({ ...d, [r.key]: v }))}
+                  onChange={v => setTarget(r.key, v)}
                   groups={fillGroups}
                   specials={[
                     { value: "", label: r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)" },
@@ -208,6 +224,17 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           </div>
         );
       })}
+      {(hiddenCount > 0 || showAll) && (
+        <div className={styles.label} style={{ maxWidth: "none", marginTop: 4 }}>
+          {showAll
+            ? <>Showing every field on the page. <a href="#" onClick={e => { e.preventDefault(); setShowAll(false); }}>Show only mapped fields</a></>
+            : <>
+                {rows.length === 0 ? "No fields auto-matched on this page. " : ""}
+                {hiddenCount} unmapped field{hiddenCount === 1 ? "" : "s"} hidden — click a field on the page to map it.{" "}
+                <a href="#" onClick={e => { e.preventDefault(); setShowAll(true); }}>Show all</a>
+              </>}
+        </div>
+      )}
       <div className={styles.label} style={{ maxWidth: "none", marginTop: 4 }}>
         {catalogNote ?? (catalog
           ? <>Capture targets list every CRM column ({catalog.entities.reduce((n, e) => n + e.columns.length, 0)}).{" "}
