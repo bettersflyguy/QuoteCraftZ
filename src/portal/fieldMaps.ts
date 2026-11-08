@@ -102,9 +102,17 @@ export interface FieldMapImport {
    * applying: an imported file deciding which captured values land where is
    * the one place a tampered share file could redirect data. */
   labelTargets: string[];
-  /** Per-site review summary: every origin the import would add or replace. */
-  perOrigin: { origin: string; fields: number; labels: string[] }[];
+  /** Per-site review summary: every origin the import would add or replace.
+   * picks counts taught read-only-text captures — like label targets, an
+   * imported file deciding what gets captured needs the user's eyes. */
+  perOrigin: { origin: string; fields: number; labels: string[]; picks: number }[];
 }
+
+/* Imported pick selectors must fit the grammar OUR cssPath emits — an
+ * id-anchored chain of #id / tag:nth-of-type(n) segments. Anything fancier
+ * (attribute selectors, :has(), commas) in a share file is dropped. */
+const PICK_SEG = String.raw`(?:#(?:[^ >\\]|\\.)+|[a-z][a-z0-9-]*(?::nth-of-type\(\d+\))?)`;
+const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
 
 /** Parses and validates a share file. Only https origins, known rule paths
  * and "skip" survive — a tampered or stale file degrades to fewer entries,
@@ -120,31 +128,34 @@ export function parseFieldMapImport(text: string): FieldMapImport {
   let fields = 0;
   let dropped = 0;
   const labelTargets = new Set<string>();
-  const perOrigin: { origin: string; fields: number; labels: string[] }[] = [];
+  const perOrigin: { origin: string; fields: number; labels: string[]; picks: number }[] = [];
   for (const [origin, entries] of Object.entries(doc.maps as Record<string, unknown>)) {
     if (!/^https:\/\/[^/\s]+$/.test(origin) || typeof entries !== "object" || entries === null) { dropped += 1; continue; }
     const clean: Record<string, string> = {};
     const originLabels = new Set<string>();
+    let originPicks = 0;
     for (const [key, path] of Object.entries(entries as Record<string, unknown>)) {
       const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path) &&
         !isSensitiveLabel(path.slice(6));
       // "pick:<selector>" keys teach read-only-text CAPTURE: selectors run
-      // deeper than control keys (hence the longer cap) and may only target
-      // known CRM fields — a "label:" target would invert the data direction
+      // deeper than control keys (hence the longer cap), must fit cssPath's
+      // own restricted grammar, and may only target known CRM fields — a
+      // "label:" target would invert the data direction
       const pickKey = typeof key === "string" && key.startsWith("pick:");
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
           typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path)) ||
-          (pickKey && path !== "skip" && !PATH_LABEL.has(path))) {
+          (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !PATH_LABEL.has(path))))) {
         dropped += 1;
         continue;
       }
       if (labelTarget) { labelTargets.add(path.slice(6)); originLabels.add(path.slice(6)); }
+      if (pickKey && path !== "skip") originPicks += 1;
       clean[key] = path;
     }
     if (Object.keys(clean).length) {
       maps[origin] = clean;
       fields += Object.keys(clean).length;
-      perOrigin.push({ origin, fields: Object.keys(clean).length, labels: [...originLabels].sort() });
+      perOrigin.push({ origin, fields: Object.keys(clean).length, labels: [...originLabels].sort(), picks: originPicks });
     }
   }
   if (!Object.keys(maps).length) throw new Error("The file contained no usable mappings.");

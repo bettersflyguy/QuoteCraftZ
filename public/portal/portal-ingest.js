@@ -356,6 +356,38 @@
       !/^[•*xX.-]{4,}$/.test(field.value));
   }
 
+  function luhnOk(digits) {
+    let sum = 0;
+    let alt = false;
+    for (let i = digits.length - 1; i >= 0; i -= 1) {
+      let d = digits.charCodeAt(i) - 48;
+      if (alt) { d *= 2; if (d > 9) d -= 9; }
+      sum += d;
+      alt = !alt;
+    }
+    return sum % 10 === 0;
+  }
+
+  /* a taught selector must not lift identifiers or payment data whatever
+   * the taught CRM label says: SSN shape, card-length Luhn-valid digit
+   * runs, and very long contiguous digit runs are refused by VALUE shape.
+   * FEIN (9 digits) and phones (10-11) stay capturable by design. */
+  function taughtValueSafe(el, value) {
+    /* camelCase ids/classes (txtCreditCardNumber) split into words so the
+     * boundary-anchored payment regex can see them */
+    const ctx = clean([el.id || "", typeof el.className === "string" ? el.className : "", el.getAttribute("aria-label") || ""].join(" "))
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
+    if (PAYMENT_FIELD.test(ctx)) return false;
+    if (/\b\d{3}-\d{2}-\d{4}\b/.test(value)) return false;
+    if (/\d{16,}/.test(value)) return false;
+    const runs = value.match(/(?:\d[ -]?){12,18}\d/g) || [];
+    for (const run of runs) {
+      const digits = run.replace(/[^0-9]/g, "");
+      if (digits.length >= 13 && digits.length <= 19 && luhnOk(digits)) return false;
+    }
+    return true;
+  }
+
   /* agent-taught read-only-text extractions: {selector, label} pairs saved
    * via the mapping editor's picker ("this element's text IS the email").
    * Labels come from the worker's own CRM-field vocabulary, never the page. */
@@ -367,7 +399,7 @@
       try { el = document.querySelector(t.selector); } catch (_e) { return; }
       if (!el || !isVisible(el)) return;
       const value = clean(el.innerText).slice(0, 300);
-      if (!value || PAYMENT_FIELD.test(t.label)) return;
+      if (!value || PAYMENT_FIELD.test(t.label) || !taughtValueSafe(el, value)) return;
       out.push({ label: t.label, value, section: "", group: "", source: "taught" });
     });
     return out;

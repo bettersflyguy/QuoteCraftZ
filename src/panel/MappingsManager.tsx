@@ -196,6 +196,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
             <div key={o.origin} style={{ margin: "4px 0", overflowWrap: "anywhere" }}>
               {o.origin} — {o.fields} field{o.fields === 1 ? "" : "s"} ({maps[o.origin] ? "replaces existing" : "new site"})
               {o.labels.length > 0 && <> · fills from captured: {o.labels.join(", ")}</>}
+              {o.picks > 0 && <> · {o.picks} taught text capture{o.picks === 1 ? "" : "s"}</>}
             </div>
           ))}
           <div className={styles.row}>
