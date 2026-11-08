@@ -98,7 +98,7 @@ export function EnvBadge({ dispatch, onOpenMappings }: { dispatch: (a: Action) =
             </MenuItem>
           )}
           <MenuItem onClick={() => chrome.runtime.openOptionsPage()}>
-            Manage environments…
+            Settings
           </MenuItem>
         </MenuList>
       </MenuPopover>

@@ -47,7 +47,7 @@ function FieldMapsSection() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `quote-connector-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `quotecraftz-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -61,7 +61,7 @@ function FieldMapsSection() {
     setNote(
       `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
       (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") +
-      ". Imported sites replace any existing mapping for the same site."
+      "."
     );
   };
 
@@ -87,11 +87,7 @@ function FieldMapsSection() {
 
   return (
     <div style={{ marginTop: 32 }}>
-      <Text as="h2" size={500} weight="semibold" block>Carrier field mappings</Text>
-      <Text block style={{ marginTop: 4 }}>
-        Mappings taught with "Map fields…" in the panel, saved per carrier site. Export them to a
-        file to share with other users; importing a file adds its sites to this extension.
-      </Text>
+      <Text as="h2" size={500} weight="semibold" block>Pages Mapped</Text>
       {origins.length === 0
         ? <Text block style={{ marginTop: 12 }}>No saved mappings yet.</Text>
         : origins.map(origin => (
@@ -120,7 +116,8 @@ function FieldMapsSection() {
             Review before applying:{" "}
             {pendingImport.perOrigin.map(o =>
               `${o.origin}: ${o.fields} field${o.fields === 1 ? "" : "s"} (${maps[o.origin] ? "replaces existing" : "new site"})` +
-              (o.labels.length ? ` · fills from captured: ${o.labels.join(", ")}` : "")
+              (o.labels.length ? ` · fills from captured: ${o.labels.join(", ")}` : "") +
+              (o.picks ? ` · ${o.picks} taught text capture${o.picks === 1 ? "" : "s"}` : "")
             ).join("; ")}
             {" "}
             <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>{" "}
@@ -238,8 +235,9 @@ export function OptionsApp() {
     <div className={styles.root}>
       <img src="/icons/32.png" alt="" style={{ width: 28, height: 28, verticalAlign: "-6px", marginRight: 10 }} />
       <Text size={600} weight="semibold">
-        QuoteCraftZ: Environments
+        QuoteCraftZ Settings
       </Text>
+      <Text as="h2" size={500} weight="semibold" block style={{ marginTop: 24 }}>Environments</Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">
         <div className={styles.grid}>

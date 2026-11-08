@@ -2,14 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular } from "@fluentui/react-icons";
 import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import {
-  getAllFieldMaps,
-  setAllFieldMaps,
-  buildFieldMapExport,
-  parseFieldMapImport,
-  type FieldMaps,
-  type FieldMapImport
-} from "@/portal/fieldMaps";
+import { FIELDMAP_STORAGE_KEY, getAllFieldMaps, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
 import { send } from "./api";
@@ -26,9 +19,8 @@ const useStyles = makeStyles({
   }
 });
 
-/** In-panel manager for the per-site field mappings, reachable from the
- * environment menu so agents handle sharing without leaving their work:
- * list + remove sites, export the share file, import a teammate's. */
+/** In-panel "Pages Mapped": list/remove mapped sites and teach the current
+ * page. Sharing (export/import) lives on the Settings page. */
 export function MappingsManager({ onClose }: { onClose: () => void }) {
   const styles = useStyles();
   const [maps, setMaps] = useState<FieldMaps>({});
@@ -40,11 +32,16 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [awaiting, setAwaiting] = useState<string | null>(null);
-  const [pendingImport, setPendingImport] = useState<FieldMapImport | null>(null);
 
   useEffect(() => {
     void getAllFieldMaps().then(setMaps);
     void send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(setApp).catch(() => {});
+    // imports/removals on the Settings page show up here live
+    const onChanged = (changes: Record<string, unknown>, area: string) => {
+      if (area === "local" && FIELDMAP_STORAGE_KEY in changes) void getAllFieldMaps().then(setMaps);
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
   const origins = Object.keys(maps).sort();
 
@@ -89,43 +86,6 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const exportMaps = () => {
-    const blob = new Blob([JSON.stringify(buildFieldMapExport(maps), null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `quotecraftz-field-mappings-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setNote("Share file downloaded.");
-    setProblem(null);
-  };
-
-  const applyImport = async (parsed: FieldMapImport) => {
-    const merged = { ...await getAllFieldMaps() };
-    for (const [origin, entries] of Object.entries(parsed.maps)) merged[origin] = entries;
-    await setAllFieldMaps(merged);
-    setMaps(merged);
-    setPendingImport(null);
-    setNote(
-      `Imported ${parsed.sites} site${parsed.sites === 1 ? "" : "s"} (${parsed.fields} field mapping${parsed.fields === 1 ? "" : "s"})` +
-      (parsed.dropped ? `; ${parsed.dropped} invalid entr${parsed.dropped === 1 ? "y" : "ies"} skipped` : "") + "."
-    );
-  };
-
-  const importMaps = async (file: File) => {
-    setNote(null);
-    setProblem(null);
-    setPendingImport(null);
-    try {
-      // every import gets a review step: the file decides which sites' fills
-      // change, so the user sees each origin (new vs replaced) before it lands
-      setPendingImport(parseFieldMapImport(await file.text()));
-    } catch (e) {
-      setProblem(String((e as Error).message ?? e));
-    }
-  };
-
   const removeSite = async (origin: string) => {
     const next = { ...maps };
     delete next[origin];
@@ -135,7 +95,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
 
   return (
     <div className={styles.root}>
-      <Text weight="semibold">Carrier field mappings</Text>
+      <Text weight="semibold">Pages Mapped</Text>
       {origins.map(origin => (
             <div key={origin} className={styles.row}>
               <Text size={200} className={styles.origin}>
@@ -174,34 +134,8 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
         <Button size="small" appearance="primary" disabled={busy !== null} onClick={mapThisPage}>
           {busy === "scan" ? <Spinner size="tiny" /> : "Map this page…"}
         </Button>
-        <Button size="small" onClick={exportMaps} disabled={origins.length === 0}>Export…</Button>
-        <Button size="small" onClick={() => {
-          const input = document.createElement("input");
-          input.type = "file";
-          input.accept = "application/json,.json";
-          input.onchange = () => { const f = input.files?.[0]; if (f) void importMaps(f); };
-          input.click();
-        }}>
-          Import…
-        </Button>
         <Button size="small" appearance="primary" onClick={onClose}>Done</Button>
       </div>
-      {pendingImport && (
-        <div className={styles.note}>
-          <div style={{ fontWeight: 600 }}>Review this import before applying:</div>
-          {pendingImport.perOrigin.map(o => (
-            <div key={o.origin} style={{ margin: "4px 0", overflowWrap: "anywhere" }}>
-              {o.origin}: {o.fields} field{o.fields === 1 ? "" : "s"} ({maps[o.origin] ? "replaces existing" : "new site"})
-              {o.labels.length > 0 && <> · fills from captured: {o.labels.join(", ")}</>}
-              {o.picks > 0 && <> · {o.picks} taught text capture{o.picks === 1 ? "" : "s"}</>}
-            </div>
-          ))}
-          <div className={styles.row}>
-            <Button size="small" appearance="primary" onClick={() => void applyImport(pendingImport)}>Apply import</Button>
-            <Button size="small" onClick={() => setPendingImport(null)}>Cancel</Button>
-          </div>
-        </div>
-      )}
       {note && <div className={styles.note}>{note}</div>}
       {problem && <div className={styles.note}>{problem}</div>}
     </div>
