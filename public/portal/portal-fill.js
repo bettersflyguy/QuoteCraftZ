@@ -448,9 +448,130 @@
     return rows;
   }
 
+  /* "Click a field to map it": one-shot picker installed in EVERY frame.
+   * The frame whose field is clicked resolves with that control's row and
+   * broadcasts a cancel so every other frame's instance resolves too
+   * (allFrames executeScript waits for all of them). Esc cancels; the
+   * timeout is the backstop against an abandoned pick. */
+  var activePickCancel = null;
+
+  function pickable(node) {
+    if (!node || !node.tagName) return null;
+    var tag = node.tagName.toLowerCase();
+    if (tag === "label" && node.control) return pickable(node.control);
+    if (tag !== "input" && tag !== "select" && tag !== "textarea") return null;
+    if (node.disabled || node.readOnly) return null;
+    var type = (node.type || "").toLowerCase();
+    if (["hidden", "password", "file", "submit", "button", "reset"].indexOf(type) !== -1) return null;
+    return node;
+  }
+
+  /* composedPath reaches inside shadow roots (web-component carrier pages),
+   * so a pick can identify fields the flat query scan cannot see */
+  function pickTarget(event) {
+    var path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
+    for (var i = 0; i < path.length; i += 1) {
+      var hit = pickable(path[i]);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function pickField(timeoutMs) {
+    if (activePickCancel) activePickCancel();
+    return new Promise(function (resolve) {
+      var done = false;
+      var hovered = null;
+      var hoveredOutline = "";
+      var hoveredOffset = "";
+      var timer = null;
+
+      function clearHover() {
+        if (!hovered) return;
+        hovered.style.outline = hoveredOutline;
+        hovered.style.outlineOffset = hoveredOffset;
+        hovered = null;
+      }
+
+      function finish(result) {
+        if (done) return;
+        done = true;
+        activePickCancel = null;
+        clearHover();
+        document.removeEventListener("mouseover", onHover, true);
+        document.removeEventListener("click", onClick, true);
+        document.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("message", onMessage);
+        if (timer) clearTimeout(timer);
+        resolve(result);
+      }
+
+      /* walk the whole frame tree from the top; length/frames/postMessage are
+       * readable on cross-origin windows, so every instance gets the cancel */
+      function broadcastCancel() {
+        var queue = [window.top];
+        while (queue.length) {
+          var w = queue.shift();
+          try {
+            w.postMessage({ __bettersPick: "cancel" }, "*");
+            for (var i = 0; i < w.frames.length; i += 1) queue.push(w.frames[i]);
+          } catch (_e) { /* inaccessible frame - its own timeout ends it */ }
+        }
+      }
+
+      function onHover(event) {
+        var el = pickTarget(event);
+        if (el === hovered) return;
+        clearHover();
+        if (!el) return;
+        hovered = el;
+        hoveredOutline = el.style.outline;
+        hoveredOffset = el.style.outlineOffset;
+        el.style.outline = "2px solid #0f6cbd";
+        el.style.outlineOffset = "1px";
+      }
+
+      function onClick(event) {
+        var el = pickTarget(event);
+        if (!el) return;
+        event.preventDefault();
+        event.stopPropagation();
+        var name = fieldName(el) || "";
+        finish({
+          key: controlKey(el),
+          label: primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id) || controlKey(el),
+          type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
+          payment: PAYMENT_FIELD.test(name),
+          autoPath: null,
+          mapped: null
+        });
+        broadcastCancel();
+      }
+
+      function onKey(event) {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        finish(null);
+        broadcastCancel();
+      }
+
+      function onMessage(event) {
+        if (event.data && event.data.__bettersPick === "cancel") finish(null);
+      }
+
+      timer = setTimeout(function () { finish(null); }, timeoutMs || 25000);
+      activePickCancel = function () { finish(null); };
+      document.addEventListener("mouseover", onHover, true);
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("keydown", onKey, true);
+      window.addEventListener("message", onMessage);
+    });
+  }
+
   /* invoked per frame by the worker via chrome.scripting.executeScript func —
    * each frame (agent portals often put the form in an iframe) fills its own
    * fields and returns its own counts for the worker to aggregate */
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
+  globalThis.__bettersPortalPick = (timeoutMs) => pickField(timeoutMs);
 })();

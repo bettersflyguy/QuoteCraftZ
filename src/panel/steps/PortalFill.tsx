@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Input, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import type { InsuredSearchRow } from "@/crm/dataverse";
-import type { PortalScanResult } from "@/boldpenguin/types";
+import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { grantActiveTab } from "../portalAccess";
 import { MapEditor, capturedTargets } from "../MapEditor";
 import { send, PanelError } from "../api";
@@ -86,6 +86,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
   const [env, setEnv] = useState<CrmEnvironment | null>(null);
   const [loadFlow, setLoadFlow] = useState(false);
   const [mapScan, setMapScan] = useState<PortalScanResult | null>(null);
+  const [mapTabId, setMapTabId] = useState<number | null>(null);
   const [mapDraft, setMapDraft] = useState<Record<string, string>>({});
   const [mapNote, setMapNote] = useState<string | null>(null);
 
@@ -180,6 +181,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
       for (const r of scan.rows) draft[r.key] = r.mapped ?? "";
       setMapDraft(draft);
       setMapScan(scan);
+      setMapTabId(tab.id);
     } catch (e) {
       setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
     } finally {
@@ -299,6 +301,9 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
           busy={busy === "map-save"}
           onSave={saveMapping}
           onCancel={() => setMapScan(null)}
+          onPick={mapTabId === null
+            ? undefined
+            : () => send<PortalScanRow | null>({ type: "panel/portalPick", tabId: mapTabId })}
         />
       )}
       {mapNote && <div className={styles.result}>{mapNote}</div>}

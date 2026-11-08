@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular } from "@fluentui/react-icons";
-import type { CapturedApplication, PortalScanResult } from "@/boldpenguin/types";
+import type { CapturedApplication, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import {
   getAllFieldMaps,
   setAllFieldMaps,
@@ -35,6 +35,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
   const [note, setNote] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [scan, setScan] = useState<PortalScanResult | null>(null);
+  const [scanTabId, setScanTabId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
       for (const r of s.rows) d[r.key] = r.mapped ?? "";
       setDraft(d);
       setScan(s);
+      setScanTabId(tab.id);
     } catch (e) {
       setProblem(String((e as Error).message ?? e));
     } finally {
@@ -163,6 +165,9 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
           busy={busy === "save"}
           onSave={saveScan}
           onCancel={() => setScan(null)}
+          onPick={scanTabId === null
+            ? undefined
+            : () => send<PortalScanRow | null>({ type: "panel/portalPick", tabId: scanTabId })}
         />
       )}
       <div className={styles.row}>

@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
-import type { PortalScanResult } from "@/boldpenguin/types";
+import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { MAP_PATHS, PATH_LABEL } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
@@ -10,9 +11,16 @@ const useStyles = makeStyles({
     padding: "6px 8px"
   },
   row: { display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px", minWidth: 0 },
+  rowFocused: {
+    display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px", minWidth: 0,
+    backgroundColor: tokens.colorBrandBackground2,
+    outline: `1px solid ${tokens.colorBrandStroke1}`,
+    borderRadius: "3px",
+    padding: "2px"
+  },
   label: { color: tokens.colorNeutralForeground3, flexShrink: 0, maxWidth: "45%", overflowWrap: "anywhere" },
   select: { flex: 1, minWidth: 0 },
-  actions: { display: "flex", gap: "6px", marginTop: "6px" }
+  actions: { display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }
 });
 
 /** One captured-field target: binds a control to whatever the capture holds
@@ -30,7 +38,7 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick }: {
   scan: PortalScanResult;
   draft: Record<string, string>;
   setDraft: (updater: (d: Record<string, string>) => Record<string, string>) => void;
@@ -38,20 +46,73 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   busy: boolean;
   onSave: () => void;
   onCancel: () => void;
+  /** Arms the on-page click-to-identify picker; resolves with the clicked
+   * field's row (null on Esc/timeout). */
+  onPick?: () => Promise<PortalScanRow | null>;
 }) {
   const styles = useStyles();
   const capturedValues = new Set(captured.map(c => c.value));
+  const [picking, setPicking] = useState(false);
+  const [pickNote, setPickNote] = useState<string | null>(null);
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  // picked controls the scan missed (dynamically added fields, shadow DOM)
+  // still get a row so they can be mapped
+  const [extraRows, setExtraRows] = useState<PortalScanRow[]>([]);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+
+  useEffect(() => {
+    if (!focusKey) return;
+    rowRefs.current.get(focusKey)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusKey]);
+
+  const pick = async () => {
+    if (!onPick || picking) return;
+    setPicking(true);
+    setPickNote(null);
+    setFocusKey(null);
+    try {
+      const row = await onPick();
+      if (!row) {
+        setPickNote("No field was picked (Esc or timeout). Try again and click an input on the page.");
+        return;
+      }
+      const known = scan.rows.some(r => r.key === row.key) || extraRows.some(r => r.key === row.key);
+      if (!known) setExtraRows(x => [...x, row]);
+      setFocusKey(row.key);
+      setPickNote(`Selected: ${row.label}`);
+    } catch (e) {
+      setPickNote(String((e as Error).message ?? e));
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  const rows = [...scan.rows, ...extraRows.filter(x => !scan.rows.some(r => r.key === x.key))];
   return (
     <div className={styles.root}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>
         Field mapping for {scan.origin} — teach once, used on every fill of this site.
       </div>
-      {scan.rows.map(r => {
+      {onPick && (
+        <div className={styles.row}>
+          <Button size="small" disabled={picking || busy} onClick={() => void pick()}>
+            {picking ? <Spinner size="tiny" /> : "Click a field on the page…"}
+          </Button>
+          <span className={styles.label} style={{ maxWidth: "none" }}>
+            {picking ? "Now click the field in the page (Esc cancels)." : pickNote ?? "Jumps to that field's row below."}
+          </span>
+        </div>
+      )}
+      {rows.map(r => {
         const current = draft[r.key] ?? "";
         const orphanLabel = current.startsWith("label:") && !capturedValues.has(current)
           ? current.slice(6) : null;
         return (
-          <div key={r.key} className={styles.row}>
+          <div
+            key={r.key}
+            className={focusKey === r.key ? styles.rowFocused : styles.row}
+            ref={el => { if (el) rowRefs.current.set(r.key, el); else rowRefs.current.delete(r.key); }}
+          >
             <span className={styles.label} title={r.key}>{r.label}</span>
             {r.payment
               ? <span>payment field — never filled</span>

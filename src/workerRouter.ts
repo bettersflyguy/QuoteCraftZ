@@ -100,6 +100,8 @@ export interface Deps {
   ingestPortalTab: (tabId: number) => Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }>;
   /** Mapping editor: enumerates the page's fillable controls with auto/saved mappings. */
   scanPortalTab: (tabId: number) => Promise<import("@/boldpenguin/types").PortalScanResult>;
+  /** Waits for the user to click one field on the page and returns its identity. */
+  pickPortalTab: (tabId: number) => Promise<import("@/boldpenguin/types").PortalScanRow | null>;
   /** Persists the agent-taught per-site field map (empty map deletes the site). */
   saveFieldMap: (origin: string, map: Record<string, string>) => Promise<void>;
   /** Starts/stops passive auto-capture on the tab (observer scripts, no clicks). */
@@ -358,6 +360,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/portalScan":
         return { ok: true, data: await deps.scanPortalTab(msg.tabId) };
+
+      case "panel/portalPick":
+        return { ok: true, data: await deps.pickPortalTab(msg.tabId) };
 
       case "panel/saveFieldMap":
         await deps.saveFieldMap(msg.origin, msg.map);
@@ -628,6 +633,19 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
   return { origin, rows: rows.filter(r => !seen.has(r.key) && seen.add(r.key)) };
 }
 
+/** One-shot "click a field to identify it" pick. Every frame arms a picker;
+ * the clicked frame returns the control's row, the rest resolve null. */
+async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanRow | null> {
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+  const frames = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => (globalThis as { __bettersPortalPick?: () => unknown }).__bettersPortalPick?.() ?? null
+  });
+  return frames
+    .map(f => f.result as import("@/boldpenguin/types").PortalScanRow | null)
+    .find((r): r is import("@/boldpenguin/types").PortalScanRow => r !== null && r !== undefined) ?? null;
+}
+
 async function fillPortalTab(
   tabId: number,
   payload: import("@/boldpenguin/types").CapturedApplication,
@@ -785,6 +803,7 @@ export const realDeps: Deps = {
   fillPortalTab,
   ingestPortalTab,
   scanPortalTab,
+  pickPortalTab,
   saveFieldMap,
   setAutoCapture,
   isAutoCapturing
