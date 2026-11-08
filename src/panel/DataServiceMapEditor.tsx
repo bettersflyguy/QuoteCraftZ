@@ -34,7 +34,11 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorBrandBackground2, outline: `1px solid ${tokens.colorBrandStroke1}`, borderRadius: "3px", padding: "2px"
   },
   label: { width: "120px", flexShrink: 0, overflowWrap: "anywhere", color: tokens.colorNeutralForeground3 },
-  note: { color: tokens.colorNeutralForeground3, marginTop: "4px" }
+  note: { color: tokens.colorNeutralForeground3, marginTop: "4px" },
+  filters: {
+    position: "sticky", bottom: 0, display: "flex", gap: "6px", padding: "6px 0", marginTop: "6px",
+    backgroundColor: tokens.colorNeutralBackground1, borderTop: `1px solid ${tokens.colorNeutralStroke2}`
+  }
 });
 
 /** Page hooks when the editor runs beside the source's own page. */
@@ -56,6 +60,8 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
   const [focus, setFocus] = useState<string | null>(null);
   const [heldValues, setHeldValues] = useState<Record<string, string[]>>({});
   const [picking, setPicking] = useState(false);
+  // list filter: every field, only mapped ones, or only unmapped ones
+  const [show, setShow] = useState<"all" | "mapped" | "unmapped">("all");
   const [pickNote, setPickNote] = useState<string | null>(null);
   const stopRequested = useRef(false);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -150,10 +156,15 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
-      {(["Applicant", "Co-applicants"] as const).map(section => (
+      {(["Applicant", "Co-applicants"] as const).map(section => {
+        // a field picked on the page always shows, whatever the filter
+        const listed = EZLYNX_FIELDS.filter(f => f.section === section &&
+          (show === "all" || f.id === focus || (show === "mapped" ? Boolean(targets[f.id]) : !targets[f.id])));
+        if (!listed.length) return null;
+        return (
         <div key={section}>
           <Text size={200} className={styles.section} block>{section}{section === "Co-applicants" ? " (one row per person)" : ""}</Text>
-          {EZLYNX_FIELDS.filter(f => f.section === section).map(f => {
+          {listed.map(f => {
             const target = targets[f.id] ?? "";
             // co-applicant list targets resolve per row; the CRM column is the same
             const concrete = target.replace("crm:contacts[]", "crm:contact2");
@@ -198,7 +209,26 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
             );
           })}
         </div>
-      ))}
+        );
+      })}
+      <div className={styles.filters}>
+        <Button
+          size="small"
+          appearance={show === "mapped" ? "primary" : "secondary"}
+          aria-pressed={show === "mapped"}
+          onClick={() => setShow(s => (s === "mapped" ? "all" : "mapped"))}
+        >
+          Show mapped ({mappedCount})
+        </Button>
+        <Button
+          size="small"
+          appearance={show === "unmapped" ? "primary" : "secondary"}
+          aria-pressed={show === "unmapped"}
+          onClick={() => setShow(s => (s === "unmapped" ? "all" : "unmapped"))}
+        >
+          Show unmapped ({EZLYNX_FIELDS.length - mappedCount})
+        </Button>
+      </div>
     </div>
   );
 }
