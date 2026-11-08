@@ -72,3 +72,38 @@ describe("peek", () => {
     peek(null);
   });
 });
+
+describe("peek unmapped", () => {
+  it("outlines in red only what no saved mapping covers, then restores the page", () => {
+    (globalThis as { CSS?: { escape: (s: string) => string } }).CSS ??= { escape: (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "\$&") };
+    document.body.innerHTML = `
+      <main>
+        <label for="fn">First Name</label><input id="fn" name="fn" value="Tracey">
+        <label for="ln">Last Name</label><input id="ln" name="ln" value="Dittrich">
+        <label for="nl">Newsletter</label><input id="nl" name="nl" type="checkbox">
+        <table id="veh">
+          <thead><tr><th>VIN</th><th>Make</th><th>Year</th></tr></thead>
+          <tbody>
+            <tr><td>JTMBF4DV4A5030644</td><td>TOYOTA</td><td>2010</td></tr>
+            <tr><td>5TDDKRFH9FS121015</td><td>TOYOTA</td><td>2015</td></tr>
+          </tbody>
+        </table>
+      </main>`;
+    const unmapped = (globalThis as unknown as { __bettersPortalPeekUnmapped: (m: unknown) => { shown: number } }).__bettersPortalPeekUnmapped;
+    const r = unmapped({
+      "text:fn": "contact.firstName",                                            // mapped control
+      "checkbox:nl": "skip",                                                     // deliberate "never fill"
+      "pick:#veh > tbody > tr:nth-of-type(1) > td:nth-of-type(1)": "note"       // VIN column, every row
+    });
+    const red = (el: Element | null) => /solid/.test((el as HTMLElement).style.outline) && /(209, 52, 56)|#d13438/i.test((el as HTMLElement).style.outline);
+    expect(red(document.getElementById("fn"))).toBe(false);
+    expect(red(document.getElementById("nl"))).toBe(false);
+    expect(red(document.getElementById("ln"))).toBe(true);
+    const cells = Array.from(document.querySelectorAll("#veh tbody td"));
+    // VIN column covered on both rows; Make/Year unmapped
+    expect(cells.map(red)).toEqual([false, true, true, false, true, true]);
+    expect(r.shown).toBe(5);
+    unmapped(null);
+    expect(red(document.getElementById("ln"))).toBe(false);
+  });
+});

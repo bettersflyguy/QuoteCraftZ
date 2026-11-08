@@ -713,7 +713,8 @@
   var PEEK_STYLE = {
     mapped: { outline: "3px solid #13a10e", badge: "#13a10e" },
     auto: { outline: "2px dashed #0f6cbd", badge: "#0f6cbd" },
-    skip: { outline: "2px dashed #8a8886", badge: "#8a8886" }
+    skip: { outline: "2px dashed #8a8886", badge: "#8a8886" },
+    unmapped: { outline: "2px solid #d13438", badge: "#d13438" }
   };
 
   function clearPeek() {
@@ -779,6 +780,37 @@
     return { shown: shown, missing: missing };
   }
 
+  /* "peek unmapped": outline in RED every element the capture reads that no
+   * saved mapping covers. Covered = a control whose key is mapped (incl.
+   * "Never fill" - a deliberate decision), or a taught text location (every
+   * row for array/note teachings), or anything inside/around one. */
+  function peekUnmapped(map) {
+    clearPeek();
+    const all = typeof globalThis.__bettersCaptureElements === "function" ? globalThis.__bettersCaptureElements() : [];
+    if (!all.length) return { shown: 0, missing: 0 };
+    const covered = [];
+    const keys = map && typeof map === "object" ? map : {};
+    Object.keys(keys).forEach(function (k) {
+      if (!keys[k] || k.indexOf("pick:") !== 0) return;
+      const sel = k.slice(5);
+      const multi = /\[\]\.|^note/.test(String(keys[k]));
+      const rows = multi && typeof globalThis.__bettersExpandTaughtRows === "function" ? globalThis.__bettersExpandTaughtRows(sel) : null;
+      if (rows) rows.forEach(function (r) { covered.push(r.el); });
+      else { let one = null; try { one = document.querySelector(sel); } catch (_e) { /* stale */ } if (one) covered.push(one); }
+    });
+    let shown = 0;
+    all.forEach(function (el) {
+      const tag = el.tagName;
+      const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
+      if (isControl && keys[controlKey(el)]) return;
+      if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
+      markPeek(el, "unmapped", "");
+      shown += 1;
+    });
+    return { shown: shown, missing: 0 };
+  }
+
+  globalThis.__bettersPortalPeekUnmapped = (map) => (map ? peekUnmapped(map) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalPeek = (items) => (items ? peek(items) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});

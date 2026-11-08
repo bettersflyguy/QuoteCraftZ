@@ -301,12 +301,14 @@
     return "";
   }
 
-  function collectGrids(root, fields) {
+  /* every captured grid cell: {title, row (1-based), label, td, value} -
+   * shared by the capture and the "peek unmapped" overlay */
+  function gridCells(root) {
+    const out = [];
     let n = 0;
-    const seen = new Set();
     for (const table of root.querySelectorAll("table")) {
       if (n >= MAX_GRIDS) break;
-      if (!isVisible(table) || inConsentUi(table) || seen.has(table)) continue;
+      if (!isVisible(table) || inConsentUi(table)) continue;
       const head = gridHeaders(table);
       if (!head) continue;
       const headers = head.headers.map((h) => clean(h));
@@ -314,7 +316,6 @@
       const rows = Array.from(table.querySelectorAll(":scope > tbody > tr, :scope > tr"))
         .filter((r) => r !== head.row && isVisible(r) && r.querySelectorAll(":scope > td").length === headers.length);
       if (!rows.length) continue;
-      seen.add(table);
       n += 1;
       const title = gridTitle(table, n);
       rows.slice(0, MAX_GRID_ROWS).forEach((row, i) => {
@@ -322,10 +323,45 @@
         headers.forEach((label, c) => {
           if (!label || GRID_CHROME_LABEL.test(label) || PAYMENT_FIELD.test(label)) return;
           const value = cellValue(cells[c]).slice(0, 300);
-          if (value) fields.push({ label, value, section: title, group: "Row " + (i + 1), source: "table" });
+          if (value) out.push({ title, row: i + 1, label, td: cells[c], value });
         });
       });
     }
+    return out;
+  }
+
+  function collectGrids(root, fields) {
+    gridCells(root).forEach((g) => {
+      fields.push({ label: g.label, value: g.value, section: g.title, group: "Row " + g.row, source: "table" });
+    });
+  }
+
+  function captureRoot() {
+    return activeModal() || document.querySelector("main") || document;
+  }
+
+  const SKIP_TYPES = ["radio", "hidden", "password", "file", "submit", "button", "reset", "search"];
+
+  /* the on-page elements a capture reads structurally (form controls, grid
+   * cells, label/value rows, definition lists) - the "peek unmapped" overlay
+   * outlines the ones no saved mapping covers */
+  function captureElements() {
+    const root = captureRoot();
+    const els = [];
+    root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']").forEach((c) => {
+      if (!isVisible(c) || inConsentUi(c) || SKIP_TYPES.includes((c.getAttribute("type") || "").toLowerCase())) return;
+      const label = clean(labelFor(c));
+      if (PAYMENT_FIELD.test(label) || isGridChrome(c, label)) return;
+      els.push(c);
+    });
+    gridCells(root).forEach((g) => els.push(g.td));
+    root.querySelectorAll("tr").forEach((row) => {
+      if (!isVisible(row)) return;
+      const cells = Array.from(row.querySelectorAll(":scope > th, :scope > td"));
+      if (cells.length === 2 && text(cells[0]) && text(cells[1]) && text(cells[0]) !== text(cells[1])) els.push(cells[1]);
+    });
+    root.querySelectorAll("dd").forEach((dd) => { if (isVisible(dd) && text(dd)) els.push(dd); });
+    return Array.from(new Set(els));
   }
 
   function collect() {
@@ -673,5 +709,6 @@
   /* shared with the mapping editor's peek, so the highlighted rows are
    * exactly the rows a capture would pull */
   globalThis.__bettersExpandTaughtRows = expandTaughtRows;
+  globalThis.__bettersCaptureElements = captureElements;
   globalThis.__bettersPortalIngest = (taught) => ({ fields: taughtFields(taught).concat(collect()), title: document.title, url: location.href });
 })();

@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useState, type ReactElement } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
-import { ArrowDownloadRegular, DatabaseArrowDownRegular, FormRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
+import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { grantActiveTab } from "../portalAccess";
 import { send, PanelError } from "../api";
@@ -133,6 +133,38 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const [autoCap, setAutoCap] = useState(false);
   const [live, setLive] = useState<CaptureUpdatedBroadcast | null>(null);
   const [crmOpen, setCrmOpen] = useState(false);
+  // "peek unmapped": red outlines on the page for what no mapping covers
+  const [peekUnmapped, setPeekUnmapped] = useState(false);
+  const [peekCount, setPeekCount] = useState<number | null>(null);
+  const peekTabRef = useRef<number | null>(null);
+  const togglePeekUnmapped = async () => {
+    if (peekUnmapped) {
+      const tabId = peekTabRef.current;
+      setPeekUnmapped(false);
+      setPeekCount(null);
+      peekTabRef.current = null;
+      if (tabId !== null) await send({ type: "panel/portalPeekUnmapped", tabId, on: false }).catch(() => {});
+      return;
+    }
+    setBusy("peek");
+    setError(null);
+    try {
+      const tab = await grantActiveTab(setAwaitingGrant);
+      const r = await send<{ shown: number }>({ type: "panel/portalPeekUnmapped", tabId: tab.id, on: true });
+      peekTabRef.current = tab.id;
+      setPeekCount(r.shown);
+      setPeekUnmapped(true);
+    } catch (e) {
+      setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
+    } finally {
+      setBusy(null);
+    }
+  };
+  // outlines never outlive this screen
+  useEffect(() => () => {
+    const tabId = peekTabRef.current;
+    if (tabId !== null) void send({ type: "panel/portalPeekUnmapped", tabId, on: false }).catch(() => {});
+  }, []);
   const [crmQuery, setCrmQuery] = useState("");
   const [crmRows, setCrmRows] = useState<InsuredSearchRow[] | null>(null);
   const [crmNote, setCrmNote] = useState<string | null>(null);
@@ -315,6 +347,22 @@ export function PortalFill({ onChanged, onFlowActive }: {
           disabled={busy !== null}
           onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}
         />
+        <Tooltip
+          content={peekUnmapped
+            ? `${peekCount ?? 0} unmapped field${peekCount === 1 ? "" : "s"} outlined in red. Click to hide.`
+            : "Peek unmapped fields: outline in red what no mapping covers"}
+          relationship="label"
+          withArrow
+        >
+          <Button
+            style={{ marginLeft: "auto", color: "#d13438" }}
+            appearance={peekUnmapped ? "outline" : "subtle"}
+            icon={busy === "peek" ? <Spinner size="tiny" /> : peekUnmapped ? <EyeFilled /> : <EyeRegular />}
+            disabledFocusable={busy !== null && busy !== "peek"}
+            aria-pressed={peekUnmapped}
+            onClick={busy !== null ? undefined : () => void togglePeekUnmapped()}
+          />
+        </Tooltip>
       </div>
       {app
         ? <div className={styles.ready}>
