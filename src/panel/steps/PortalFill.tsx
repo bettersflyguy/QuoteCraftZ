@@ -307,6 +307,9 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
           onPickCancel={mapTabId === null
             ? undefined
             : () => send<null>({ type: "panel/portalPickCancel", tabId: mapTabId })}
+          onPeek={mapTabId === null
+            ? undefined
+            : items => send<import("@/boldpenguin/types").PeekResult>({ type: "panel/portalPeek", tabId: mapTabId, items })}
         />
       )}
       {mapNote && <div className={styles.result}>{mapNote}</div>}

@@ -54,3 +54,13 @@ export interface PortalScanRow {
 }
 
 export interface PortalScanResult { origin: string; rows: PortalScanRow[] }
+
+/** One mapping the editor's peek highlights on the page. */
+export interface PeekItem {
+  key: string;
+  label: string;
+  kind: "mapped" | "auto" | "skip";
+  /** Array teaching — highlight every row the capture would pull. */
+  array?: boolean;
+}
+export interface PeekResult { shown: number; missing: number }

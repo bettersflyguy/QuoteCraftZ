@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
-import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
+import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { MAP_PATH_GROUPS, PATH_LABEL, isArrayPath } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
 import { send } from "./api";
@@ -63,7 +63,7 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek }: {
   scan: PortalScanResult;
   draft: Record<string, string>;
   setDraft: (updater: (d: Record<string, string>) => Record<string, string>) => void;
@@ -77,6 +77,8 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   onPick?: () => Promise<PortalScanRow | "timeout" | null>;
   /** Resolves a pending pick immediately (the Stop button). */
   onPickCancel?: () => Promise<unknown>;
+  /** Outlines the mapped fields on the page (null clears). */
+  onPeek?: (items: PeekItem[] | null) => Promise<PeekResult>;
 }) {
   const styles = useStyles();
   const capturedValues = new Set(captured.map(c => c.value));
@@ -166,6 +168,45 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   const rows = allRows.filter(r =>
     showAll || revealed.has(r.key) || Boolean(r.autoPath) || Boolean(r.mapped) || Boolean(draft[r.key]));
   const hiddenCount = allRows.length - rows.length;
+
+  /* peek: what the current (unsaved) draft covers, including hidden rows that
+   * auto-match — so the page shows exactly what still needs mapping */
+  const targetText = (v: string) =>
+    PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ??
+    (v.startsWith("label:") ? (captured.find(c => c.value === v)?.label ?? v.slice(6)) : v);
+  const peekItems: PeekItem[] = allRows.flatMap<PeekItem>(r => {
+    const v = draft[r.key] ?? "";
+    if (r.payment) return [];
+    if (v === "skip") return [{ key: r.key, label: "Never fill", kind: "skip" }];
+    if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v) }];
+    if (r.autoPath) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
+    return [];
+  });
+  const peekSignature = JSON.stringify(peekItems);
+  const [peeking, setPeeking] = useState(false);
+  const [peekNote, setPeekNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!peeking || !onPeek) return;
+    let live = true;
+    void onPeek(peekItems).then(r => {
+      if (!live) return;
+      setPeekNote(r.shown || r.missing
+        ? `${r.shown} mapped field${r.shown === 1 ? "" : "s"} highlighted on the page${r.missing ? ` · ${r.missing} not on this page` : ""}.`
+        : "Nothing is mapped yet — click a field on the page to start.");
+    }).catch(e => { if (live) setPeekNote(String((e as Error).message ?? e)); });
+    return () => { live = false; };
+    // re-highlight whenever the draft's coverage changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peeking, peekSignature]);
+  // highlights never outlive the editor (ref: parents pass a fresh closure
+  // every render, which must not count as an unmount)
+  const peekRef = useRef(onPeek);
+  peekRef.current = onPeek;
+  useEffect(() => () => { void peekRef.current?.(null).catch(() => {}); }, []);
+  const togglePeek = () => {
+    if (peeking) { setPeeking(false); setPeekNote(null); void onPeek?.(null).catch(() => {}); }
+    else setPeeking(true);
+  };
   return (
     <div className={styles.root}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>
@@ -176,12 +217,23 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           <Button size="small" disabled={busy} onClick={() => (picking ? stopPick() : void pick())}>
             {picking ? "Stop picking" : "Click a field on the page…"}
           </Button>
+          {onPeek && (
+            <Button size="small" appearance={peeking ? "primary" : "secondary"} disabled={busy} onClick={togglePeek}
+              title="Outline every mapped field on the page: green = mapped, blue dashed = auto-match, grey = never fill">
+              {peeking ? "Hide peek" : "Peek"}
+            </Button>
+          )}
           {picking && <Spinner size="tiny" />}
           <span className={styles.label} style={{ maxWidth: "none" }}>
             {picking
               ? "Now click a field OR a plain-text value in the page (Esc or Stop cancels)."
               : pickNote ?? "Fields jump to their row; read-only text becomes a capture teaching."}
           </span>
+        </div>
+      )}
+      {peeking && peekNote && (
+        <div className={styles.label} style={{ maxWidth: "none", marginBottom: 4 }}>
+          {peekNote} <span style={{ color: "#13a10e" }}>■ mapped</span> <span style={{ color: "#0f6cbd" }}>▫ auto</span> <span style={{ color: "#8a8886" }}>▫ never fill</span>
         </div>
       )}
       {rows.map(r => {

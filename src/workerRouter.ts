@@ -109,6 +109,8 @@ export interface Deps {
   pickPortalTab: (tabId: number) => Promise<import("@/boldpenguin/types").PortalScanRow | "timeout" | null>;
   /** Resolves a pending pick in every frame (the panel's Stop button). */
   cancelPortalPick: (tabId: number) => Promise<void>;
+  /** Outlines the mapped fields on the page (null clears). */
+  peekPortalTab: (tabId: number, items: import("@/boldpenguin/types").PeekItem[] | null) => Promise<import("@/boldpenguin/types").PeekResult>;
   /** Persists the agent-taught per-site field map (empty map deletes the site). */
   saveFieldMap: (origin: string, map: Record<string, string>) => Promise<void>;
   /** Starts/stops passive auto-capture on the tab (observer scripts, no clicks). */
@@ -403,6 +405,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/portalPickCancel":
         await deps.cancelPortalPick(msg.tabId);
         return { ok: true, data: null };
+
+      case "panel/portalPeek":
+        return { ok: true, data: await deps.peekPortalTab(msg.tabId, msg.items) };
 
       case "panel/saveFieldMap":
         await deps.saveFieldMap(msg.origin, msg.map);
@@ -739,6 +744,32 @@ async function cancelPortalPick(tabId: number): Promise<void> {
   });
 }
 
+/** Peek: every frame outlines its own mapped elements; counts aggregate. A
+ * key resolved in ANY frame counts as shown (frames that lack it report it
+ * missing), so missing = items found nowhere. */
+async function peekPortalTab(
+  tabId: number,
+  items: import("@/boldpenguin/types").PeekItem[] | null
+): Promise<import("@/boldpenguin/types").PeekResult> {
+  if (items) {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"]
+    });
+  }
+  const frames = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: (it: unknown) =>
+      (globalThis as { __bettersPortalPeek?: (it: unknown) => unknown }).__bettersPortalPeek?.(it) ?? null,
+    args: [items]
+  });
+  const results = frames
+    .map(f => f.result as import("@/boldpenguin/types").PeekResult | null)
+    .filter((r): r is import("@/boldpenguin/types").PeekResult => r !== null);
+  const shown = Math.min(items?.length ?? 0, results.reduce((n, r) => n + r.shown, 0));
+  return { shown, missing: Math.max(0, (items?.length ?? 0) - shown) };
+}
+
 async function fillPortalTab(
   tabId: number,
   payload: import("@/boldpenguin/types").CapturedApplication,
@@ -919,6 +950,7 @@ export const realDeps: Deps = {
   scanPortalTab,
   pickPortalTab,
   cancelPortalPick,
+  peekPortalTab,
   saveFieldMap,
   setAutoCapture,
   isAutoCapturing

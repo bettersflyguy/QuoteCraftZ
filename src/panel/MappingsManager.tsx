@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular } from "@fluentui/react-icons";
-import type { CapturedApplication, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
+import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import {
   getAllFieldMaps,
   setAllFieldMaps,
@@ -171,6 +171,9 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
           onPickCancel={scanTabId === null
             ? undefined
             : () => send<null>({ type: "panel/portalPickCancel", tabId: scanTabId })}
+          onPeek={scanTabId === null
+            ? undefined
+            : items => send<PeekResult>({ type: "panel/portalPeek", tabId: scanTabId, items })}
         />
       )}
       <div className={styles.row}>

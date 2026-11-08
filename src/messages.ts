@@ -55,6 +55,8 @@ export type PanelRequest =
   | { type: "panel/portalScan"; tabId: number }
   | { type: "panel/portalPick"; tabId: number }
   | { type: "panel/portalPickCancel"; tabId: number }
+  /** items null clears the highlights. */
+  | { type: "panel/portalPeek"; tabId: number; items: import("@/boldpenguin/types").PeekItem[] | null }
   | { type: "panel/saveFieldMap"; origin: string; map: Record<string, string> }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }

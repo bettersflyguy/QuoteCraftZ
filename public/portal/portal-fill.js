@@ -705,6 +705,81 @@
   /* invoked per frame by the worker via chrome.scripting.executeScript func —
    * each frame (agent portals often put the form in an iframe) fills its own
    * fields and returns its own counts for the worker to aggregate */
+  /* --- peek: outline every element the current mapping covers, so the agent
+   * sees at a glance what is still unmapped. Green = mapped, blue dashed =
+   * auto-match, grey dashed = never fill. Badges are inert overlays
+   * (pointer-events: none) and every style is restored on clear. --- */
+  var peekMarks = [];
+  var PEEK_STYLE = {
+    mapped: { outline: "3px solid #13a10e", badge: "#13a10e" },
+    auto: { outline: "2px dashed #0f6cbd", badge: "#0f6cbd" },
+    skip: { outline: "2px dashed #8a8886", badge: "#8a8886" }
+  };
+
+  function clearPeek() {
+    peekMarks.forEach(function (m) {
+      if (m.el) { m.el.style.outline = m.outline; m.el.style.outlineOffset = m.offset; }
+      if (m.badge && m.badge.parentNode) m.badge.parentNode.removeChild(m.badge);
+    });
+    peekMarks = [];
+  }
+
+  function markPeek(el, kind, label) {
+    var s = PEEK_STYLE[kind] || PEEK_STYLE.mapped;
+    var mark = { el: el, outline: el.style.outline, offset: el.style.outlineOffset, badge: null };
+    el.style.outline = s.outline;
+    el.style.outlineOffset = "1px";
+    if (label) {
+      var r = el.getBoundingClientRect();
+      var b = document.createElement("div");
+      b.textContent = label;
+      b.setAttribute("data-betters-peek", "1");
+      b.style.cssText = "position:absolute;z-index:2147483647;pointer-events:none;font:600 10px/1.3 Segoe UI,Arial,sans-serif;" +
+        "color:#fff;padding:1px 4px;border-radius:3px;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;" +
+        "background:" + s.badge + ";left:" + Math.max(0, r.left + window.scrollX) + "px;top:" + Math.max(0, r.top + window.scrollY - 15) + "px";
+      document.body.appendChild(b);
+      mark.badge = b;
+    }
+    peekMarks.push(mark);
+  }
+
+  /* items: [{key, label, kind, array}] — control keys resolve through the
+   * same controlKey the fill uses; "pick:" keys through their selector, and
+   * array teachings through the capture's own row expansion */
+  function peek(items) {
+    clearPeek();
+    if (!Array.isArray(items) || !items.length) return { shown: 0, missing: 0 };
+    var byKey = {};
+    Array.prototype.forEach.call(document.querySelectorAll("input, select, textarea"), function (el) {
+      var type = (el.type || "").toLowerCase();
+      if (["hidden", "password", "file", "submit", "button", "reset", "image"].indexOf(type) !== -1 || !visible(el)) return;
+      var k = controlKey(el);
+      (byKey[k] = byKey[k] || []).push(el);
+    });
+    var shown = 0;
+    var missing = 0;
+    items.forEach(function (it) {
+      if (!it || typeof it.key !== "string") return;
+      var els = [];
+      if (it.key.indexOf("pick:") === 0) {
+        var sel = it.key.slice(5);
+        var rows = it.array && typeof globalThis.__bettersExpandTaughtRows === "function"
+          ? globalThis.__bettersExpandTaughtRows(sel) : null;
+        if (rows) els = rows.map(function (r) { return r.el; }).filter(function (e) { return visible(e); });
+        else { var one = null; try { one = document.querySelector(sel); } catch (_e) { /* stale */ } if (one && visible(one)) els = [one]; }
+      } else {
+        els = byKey[it.key] || [];
+      }
+      if (!els.length) { missing += 1; return; }
+      shown += 1;
+      els.forEach(function (el, i) {
+        markPeek(el, it.kind, i === 0 ? String(it.label || "") + (it.array && els.length > 1 ? " (" + els.length + " rows)" : "") : "");
+      });
+    });
+    return { shown: shown, missing: missing };
+  }
+
+  globalThis.__bettersPortalPeek = (items) => (items ? peek(items) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
   globalThis.__bettersPortalPick = (timeoutMs) => pickField(timeoutMs);

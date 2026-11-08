@@ -480,5 +480,8 @@
 
   /* invoked per frame by the worker via chrome.scripting.executeScript func —
    * fields from every frame are aggregated worker-side */
+  /* shared with the mapping editor's peek, so the highlighted rows are
+   * exactly the rows a capture would pull */
+  globalThis.__bettersExpandTaughtRows = expandTaughtRows;
   globalThis.__bettersPortalIngest = (taught) => ({ fields: taughtFields(taught).concat(collect()), title: document.title, url: location.href });
 })();
