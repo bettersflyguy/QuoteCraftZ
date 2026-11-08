@@ -75,6 +75,10 @@ export interface PortalFillResult {
   optionMismatchCount: number;
   controlCount: number;
   filled: { label: string; path: string }[];
+  /** Mapped controls the capture held no value for. */
+  noData?: { label: string; path: string }[];
+  /** Secured pass-through outcome (counts only; values never leave the worker). */
+  secure?: { filled: number; missing: number; note: string | null };
 }
 
 /** One fillable control from the mapping editor's page scan. */

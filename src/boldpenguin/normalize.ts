@@ -115,7 +115,7 @@ export const isGridRow = (field: { group?: string }): boolean => /^Row \d+$/.tes
  * review, duplicate gate, contact dedupe, policy draft and portal fill all
  * read semantic paths, so a taught "Insured (account): Email" must drive
  * them exactly like the semantic "Email" target would. */
-const CRM_BRIDGE: Record<string, string> = {
+export const CRM_BRIDGE: Record<string, string> = {
   "crm:account.iacrm_insuredfirstname": "contact.firstName",
   "crm:account.iacrm_insuredlastname": "contact.lastName",
   "crm:account.emailaddress1": "contact.email",

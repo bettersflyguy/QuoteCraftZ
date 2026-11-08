@@ -64,13 +64,47 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
 export const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
 
 /** Array relationship ("contacts[].email"): teaching ONE row's cell makes the
- * capture pull that cell from EVERY row of the repeated structure. Array
- * targets are capture-only - a fill can't know which row to write. */
+ * capture pull that cell from EVERY row of the repeated structure. A form
+ * control (one input) maps to ONE row instead: see toRowTarget. */
 export const isArrayPath = (path: string): boolean => path.includes("[].");
 
 /** Concrete per-row slots an array capture fans out into ("contact2.email",
  * "vehicle5.vin"; contact1 is reserved for the primary insured). */
 const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin))$/;
+
+/** Rows a form control can address ("Driver 2" = related contact row 1). */
+export const ARRAY_ROW_MAX = 10;
+
+/** Per array: the slot prefix and the slot number of row 1 (related
+ * contacts start at 2 because contact1 is the primary insured). */
+const ROW_SLOTS: Record<string, { slot: string; start: number }> = {
+  contacts: { slot: "contact", start: 2 },
+  vehicles: { slot: "vehicle", start: 1 },
+  "crm:contacts": { slot: "crm:contact", start: 2 },
+  "crm:policies": { slot: "crm:policy", start: 1 },
+  "secure:contacts": { slot: "secure:contact", start: 2 }
+};
+
+/** "contacts[].email" + row 2 -> "contact3.email" (the one-row target a
+ * form control fills from and captures into). */
+export function toRowTarget(arrayPath: string, row: number): string | null {
+  const m = /^((?:crm:|secure:)?[a-z]+)\[\]\.(.+)$/.exec(arrayPath);
+  const cfg = m ? ROW_SLOTS[m[1]!] : undefined;
+  if (!m || !cfg || !Number.isInteger(row) || row < 1 || row > ARRAY_ROW_MAX) return null;
+  return `${cfg.slot}${cfg.start + row - 1}.${m[2]}`;
+}
+
+/** Inverse of toRowTarget: "contact3.email" -> {contacts[].email, row 2}. */
+export function rowTargetOf(path: string): { arrayPath: string; row: number } | null {
+  for (const [array, cfg] of Object.entries(ROW_SLOTS)) {
+    const m = new RegExp(`^${cfg.slot.replace(":", "\\:")}(\\d+)\\.(.+)$`).exec(path);
+    if (!m) continue;
+    const row = Number(m[1]) - cfg.start + 1;
+    if (row < 1 || row > ARRAY_ROW_MAX) return null;
+    return { arrayPath: `${array}[].${m[2]}`, row };
+  }
+  return null;
+}
 
 /** CRM column targets taught in the capture editor ("crm:account.address1_city",
  * "crm:contacts[].address1_city"): the column list comes live from Dataverse
@@ -96,6 +130,26 @@ export const isRoutablePath = (path: string): boolean =>
   (CRM_ROUTABLE.test(path) && !AMS_OWNED.has(path.split(".")[1]!) && !path.endsWith(".governmentid") &&
     !isSensitiveLabel(path.split(".")[1]!.replace(/_/g, " ")));
 
+/** SECURED targets: identifier-class CRM columns (SSN, government ID,
+ * driver's license number, any field-secured column). Pass-through only:
+ * a captured value goes straight to a session-memory holding area and on to
+ * its CRM column at load; a fill reads it live from the CRM (field security
+ * decides who may) into the one control mapped to it. Never stored in the
+ * capture, the Excel export, timeline notes, peek labels or share files. */
+const SECURE_TARGET = /^secure:(account|primarycontact|contacts\[\]|contact(?:[2-9]|[1-3]\d))\.([a-z][a-z0-9_]{0,99})$/;
+export const SECURE_PREFIX = "secure:";
+export function isSecureTarget(path: string | undefined | null): boolean {
+  const m = path ? SECURE_TARGET.exec(path) : null;
+  return Boolean(m && !AMS_OWNED.has(m[2]!));
+}
+/** Concrete (one-record) secured target - what a fill or a held value uses. */
+export const isConcreteSecureTarget = (path: string): boolean => isSecureTarget(path) && !isArrayPath(path);
+
+/** Everything a form control can fill from: semantic paths (one row), row
+ * slots, concrete CRM columns, captured labels and concrete secured columns. */
+export const isFillTarget = (path: string): boolean =>
+  isRoutablePath(path) || /^label:[a-z0-9 ]{1,100}$/.test(path) || isConcreteSecureTarget(path);
+
 /** Capture target for data with no CRM column: the value is gathered into
  * the insured's timeline note (one organized entry per source site). On a
  * grid cell it takes the whole column, every row. */
@@ -117,7 +171,8 @@ export const noteRecordOf = (path: string | undefined): NoteRecord | null =>
 
 /** Valid capture (pick-key) target: a known semantic path, a CRM column,
  * or a timeline note. */
-export const isCaptureTarget = (path: string): boolean => PATH_LABEL.has(path) || isCrmTarget(path) || isNoteTarget(path);
+export const isCaptureTarget = (path: string): boolean =>
+  PATH_LABEL.has(path) || isCrmTarget(path) || isNoteTarget(path) || isSecureTarget(path);
 
 /** MAP_PATHS partitioned into ordered entity groups for the editor's
  * target dropdowns. */
@@ -171,7 +226,7 @@ export interface FieldMapExport {
 }
 
 export function buildFieldMapExport(maps: FieldMaps): FieldMapExport {
-  return { type: EXPORT_TYPE, version: 1, exportedAt: new Date().toISOString(), maps };
+  return { type: EXPORT_TYPE, version: 1, exportedAt: new Date().toISOString(), maps: withoutSecured(maps) };
 }
 
 export interface FieldMapImport {
@@ -180,6 +235,8 @@ export interface FieldMapImport {
   fields: number;
   /** Entries dropped by validation (unknown paths, malformed origins/keys). */
   dropped: number;
+  /** Of those, secured mappings (never imported; map them locally). */
+  secured: number;
   /** Captured-field targets ("label:…") in the file, for user review before
    * applying: an imported file deciding which captured values land where is
    * the one place a tampered share file could redirect data. */
@@ -212,6 +269,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
   const maps: FieldMaps = {};
   let fields = 0;
   let dropped = 0;
+  let secured = 0;
   const labelTargets = new Set<string>();
   const perOrigin: { origin: string; fields: number; labels: string[]; picks: number }[] = [];
   for (const [origin, entries] of Object.entries(doc.maps as Record<string, unknown>)) {
@@ -227,8 +285,13 @@ export function parseFieldMapImport(text: string): FieldMapImport {
       // own restricted grammar, and may only target known CRM fields - a
       // "label:" target would invert the data direction
       const pickKey = typeof key === "string" && key.startsWith("pick:");
+      // secured targets never travel in share files: each agent maps them on
+      // their own machine, so a tampered file can't aim an SSN at a field
+      if (typeof path === "string" && path.startsWith(SECURE_PREFIX)) { dropped += 1; secured += 1; continue; }
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
-          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) && !(pickKey && (isCrmTarget(path) || isNoteTarget(path)))) ||
+          typeof path !== "string" ||
+          (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) &&
+            !(pickKey ? isCaptureTarget(path) : isRoutablePath(path))) ||
           (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !isCaptureTarget(path))))) {
         dropped += 1;
         continue;
@@ -244,5 +307,15 @@ export function parseFieldMapImport(text: string): FieldMapImport {
     }
   }
   if (!Object.keys(maps).length) throw new Error("The file contained no usable mappings.");
-  return { maps, sites: Object.keys(maps).length, fields, dropped, labelTargets: [...labelTargets].sort(), perOrigin };
+  return { maps, sites: Object.keys(maps).length, fields, dropped, secured, labelTargets: [...labelTargets].sort(), perOrigin };
+}
+
+/** A share file never carries secured mappings (see parseFieldMapImport). */
+export function withoutSecured(maps: FieldMaps): FieldMaps {
+  const out: FieldMaps = {};
+  for (const [origin, entries] of Object.entries(maps)) {
+    const kept = Object.fromEntries(Object.entries(entries).filter(([, v]) => !v.startsWith(SECURE_PREFIX)));
+    if (Object.keys(kept).length) out[origin] = kept;
+  }
+  return out;
 }

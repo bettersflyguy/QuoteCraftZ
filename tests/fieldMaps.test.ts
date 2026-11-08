@@ -125,10 +125,11 @@ describe("field-map share files", () => {
         "pick:#g > span": "crm:systemuser.fullname",             // not a capture entity - dropped
         "pick:#h > span": "crm:account.Address1_City",           // not a logical name - dropped
         "pick:#i > span": "crm:policies[].iacrm_synctoams",      // AMS-owned sync flag - dropped
-        "text:city": "crm:account.address1_city"                 // fill keys can't take CRM columns - dropped
+        "text:city": "crm:account.address1_city",                // form control: concrete CRM column - kept
+        "text:dob2": "crm:contacts[].birthdate"                  // form control: needs a row - dropped
       }
     })));
-    expect(Object.keys(parsed.maps["https://ams.example.com"]!).sort()).toEqual(["pick:#a > span", "pick:#b > span", "pick:#c > span", "pick:#d > span"]);
+    expect(Object.keys(parsed.maps["https://ams.example.com"]!).sort()).toEqual(["pick:#a > span", "pick:#b > span", "pick:#c > span", "pick:#d > span", "text:city"]);
     expect(parsed.dropped).toBe(6);
     expect(parsed.perOrigin[0]!.picks).toBe(4);
   });

@@ -3,7 +3,10 @@ import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, NotepadRegula
 import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import { MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget } from "@/portal/fieldMaps";
+import {
+  ARRAY_ROW_MAX, MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget,
+  isSensitiveLabel, rowTargetOf, toRowTarget
+} from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
 import { send } from "./api";
 
@@ -23,11 +26,29 @@ export function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
   return [...crm, ...riskData];
 }
 
-/** Array targets ("Related contacts - all rows") are capture-only: a fill
- * can't know which row a single control belongs to. */
-const FILL_GROUPS = MAP_PATH_GROUPS
-  .map(g => ({ ...g, paths: g.paths.filter(p => !isArrayPath(p.path)) }))
-  .filter(g => g.paths.length > 0);
+/** Secured pass-through targets (SSN, license number, field-secured
+ * columns): they map only to secured CRM columns or fill quote forms,
+ * never a timeline note or the capture. */
+export function securedGroups(catalog: FieldCatalog | null): OptionGroup[] {
+  return (catalog?.entities ?? [])
+    .filter(e => e.secured?.length)
+    .map(e => ({
+      group: `Secured: ${e.label}`,
+      paths: e.secured!.map(c => ({ path: `secure:${e.key}${e.array ? "[]" : ""}.${c.name}`, label: c.label }))
+    }));
+}
+
+/** Display text for any saved target, row slots and secured ones included. */
+export function targetLabel(v: string, catalog: FieldCatalog | null): string | null {
+  const direct = PATH_LABEL.get(v) ?? catalogLabel(catalog, v);
+  if (direct) return direct;
+  const row = rowTargetOf(v);
+  if (row) {
+    const base = PATH_LABEL.get(row.arrayPath) ?? catalogLabel(catalog, row.arrayPath) ?? row.arrayPath;
+    return `${base} (row ${row.row})`;
+  }
+  return null;
+}
 
 const useStyles = makeStyles({
   root: {
@@ -104,11 +125,14 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     }
   };
   useEffect(() => { void loadCatalog(false); }, []);
-  const groups = useMemo(() => captureGroups(catalog), [catalog]);
+  const secured = useMemo(() => securedGroups(catalog), [catalog]);
+  const groups = useMemo(() => [...captureGroups(catalog), ...secured], [catalog, secured]);
   const groupValues = useMemo(() => new Set(groups.flatMap(g => g.paths.map(p => p.path))), [groups]);
+  // a form control fills from (and captures into) any target; list targets
+  // take a row number beside the picker
   const fillGroups = useMemo<OptionGroup[]>(() => captured.length
-    ? [...FILL_GROUPS, { group: "Captured fields (drivers, vehicles, extra records…)", paths: captured.map(c => ({ path: c.value, label: c.label })) }]
-    : FILL_GROUPS, [captured]);
+    ? [...groups, { group: "Captured fields (drivers, vehicles, extra records…)", paths: captured.map(c => ({ path: c.value, label: c.label })) }]
+    : groups, [captured, groups]);
 
   useEffect(() => {
     if (!focusKey) return;
@@ -172,7 +196,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   /* peek: what the current (unsaved) draft covers, including hidden rows that
    * auto-match - so the page shows exactly what still needs mapping */
   const targetText = (v: string) =>
-    PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ??
+    targetLabel(v, catalog) ??
     (v.startsWith("label:") ? (captured.find(c => c.value === v)?.label ?? v.slice(6)) : v);
   const peekItems: PeekItem[] = allRows.flatMap<PeekItem>(r => {
     const v = draft[r.key] ?? "";
@@ -233,6 +257,13 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
         const current = draft[r.key] ?? "";
         const orphanLabel = current.startsWith("label:") && !capturedValues.has(current)
           ? current.slice(6) : null;
+        // identifier fields (SSN, ITIN, passport) map ONLY to secured targets
+        const identifier = isSensitiveLabel(r.label) || isSecureTarget(current);
+        const isPick = r.key.startsWith("pick:");
+        // a form control names ONE row of a list ("Driver 2" = row 1 of related contacts)
+        const slot = !isPick ? rowTargetOf(current) : null;
+        const pickerValue = slot ? slot.arrayPath : current;
+        const choose = (v: string) => setTarget(r.key, !isPick && isArrayPath(v) ? (toRowTarget(v, 1) ?? v) : v);
         return (
           <div
             key={r.key}
@@ -242,32 +273,48 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
             <span className={styles.label} title={r.key}>{r.label}</span>
             {r.payment
               ? <span>Payment field, never filled</span>
-              : r.key.startsWith("pick:") ? (
+              : isPick ? (
                 /* read-only text teaching: capture direction, CRM fields only */
                 <TargetPicker
                   value={current}
-                  onChange={v => setTarget(r.key, v)}
-                  groups={groups}
+                  onChange={choose}
+                  groups={identifier ? secured : groups}
                   specials={[
                     { value: "", label: "Not captured" },
-                    ...NOTE_TARGETS.map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> }))
+                    // secured data never goes to a timeline note
+                    ...(identifier ? [] : NOTE_TARGETS.map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> })))
                   ]}
                   currentText={current && !groupValues.has(current)
-                    ? `${PATH_LABEL.get(current) ?? catalogLabel(catalog, current) ?? current} (saved)`
+                    ? `${targetText(current)} (saved)`
                     : undefined}
                   groupPrefix="Capture as: "
                 />
               ) : (
-                <TargetPicker
-                  value={current}
-                  onChange={v => setTarget(r.key, v)}
-                  groups={fillGroups}
-                  specials={[
-                    { value: "", label: r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)" },
-                    { value: "skip", label: "Never fill" }
-                  ]}
-                  currentText={orphanLabel ? `${orphanLabel} (saved; not in current capture)` : undefined}
-                />
+                <>
+                  <TargetPicker
+                    value={pickerValue}
+                    onChange={choose}
+                    groups={identifier ? secured : fillGroups}
+                    specials={[
+                      { value: "", label: identifier ? "Not mapped" : r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)" },
+                      { value: "skip", label: "Never fill" }
+                    ]}
+                    currentText={orphanLabel ? `${orphanLabel} (saved; not in current capture)`
+                      : current && !groupValues.has(pickerValue) ? `${targetText(current)} (saved)` : undefined}
+                  />
+                  {slot && (
+                    <Tooltip content="Which row of the list this field is (row 1 = first related contact)" relationship="label" withArrow>
+                      <select
+                        aria-label="Row"
+                        value={slot.row}
+                        onChange={e => setTarget(r.key, toRowTarget(slot.arrayPath, Number(e.target.value)) ?? current)}
+                        style={{ fontSize: 12, flexShrink: 0 }}
+                      >
+                        {Array.from({ length: ARRAY_ROW_MAX }, (_, i) => i + 1).map(n => <option key={n} value={n}>Row {n}</option>)}
+                      </select>
+                    </Tooltip>
+                  )}
+                </>
               )}
             {!r.payment && current && (
               <Tooltip content="Delete this mapping (saved with Save mapping)" relationship="label" withArrow>

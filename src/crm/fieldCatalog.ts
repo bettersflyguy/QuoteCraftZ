@@ -25,7 +25,13 @@ export interface CatalogEntity {
   label: string;
   array: boolean;
   columns: CatalogColumn[];
+  /** Identifier-class text columns (SSN, government ID, license number, any
+   * field-secured column): mappable only as "secure:" pass-through targets. */
+  secured?: CatalogColumn[];
 }
+
+/** Entities whose identifier columns are offered as secured targets. */
+export const SECURE_ENTITY_KEYS = new Set(["account", "primarycontact", "contacts"]);
 
 export interface FieldCatalog { envId: string; fetchedAt: number; entities: CatalogEntity[] }
 
@@ -87,7 +93,33 @@ export function filterColumns(raw: RawAttribute[]): CatalogColumn[] {
     if (a.IsValidForCreate === false && a.IsValidForUpdate === false) continue;
     if (DENY.has(name) || DENY_PREFIX.test(name) || name.endsWith("_base")) continue;
     if (isSensitiveLabel(label) || isSensitiveLabel(name.replace(/_/g, " "))) continue;
+    if (isLicenseNumber(name, label)) continue;           // secured channel only
     out.push({ name, label, type: a.AttributeType as CatalogColumn["type"] });
+  }
+  return out.sort((x, y) => x.label.localeCompare(y.label));
+}
+
+/** A driver's license NUMBER column (not its state, status or class). */
+function isLicenseNumber(name: string, label: string): boolean {
+  return /licen[cs]e(number|no|num)?$/.test(name) && !/state|status|class|expir|date|type/i.test(label);
+}
+
+/** The identifier-class text columns offered ONLY as secured pass-through
+ * targets: field-secured columns, government ID, SSN-labelled columns and
+ * license numbers. Plumbing (portal password hashes) and AMS-sync columns
+ * stay out entirely. */
+export function securedColumns(raw: RawAttribute[]): CatalogColumn[] {
+  const out: CatalogColumn[] = [];
+  for (const a of raw) {
+    const name = a.LogicalName;
+    const label = clean(a.DisplayName?.UserLocalizedLabel?.Label ?? "");
+    if (!name || !label || (a.AttributeType !== "String" && a.AttributeType !== "Memo")) continue;
+    if (a.AttributeOf || a.IsPrimaryId) continue;
+    if (a.IsValidForCreate === false && a.IsValidForUpdate === false) continue;
+    if (DENY_PREFIX.test(name) || name === "iacrm_amsexternalid" || /password|hash/i.test(name)) continue;
+    const identifier = a.IsSecured === true || name === "governmentid" ||
+      isSensitiveLabel(label) || isSensitiveLabel(name.replace(/_/g, " ")) || isLicenseNumber(name, label);
+    if (identifier) out.push({ name, label, type: a.AttributeType as CatalogColumn["type"] });
   }
   return out.sort((x, y) => x.label.localeCompare(y.label));
 }
@@ -159,10 +191,11 @@ export interface CatalogApi {
   dvJson: <T>(env: CrmEnvironment, path: string) => Promise<T>;
 }
 
-async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogApi): Promise<CatalogColumn[]> {
+async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogApi): Promise<{ columns: CatalogColumn[]; secured: CatalogColumn[] }> {
   const base = `EntityDefinitions(LogicalName='${logical}')/Attributes`;
   const { value } = await api.dvJson<{ value: RawAttribute[] }>(env,
     `${base}?$select=LogicalName,AttributeType,AttributeOf,IsValidForCreate,IsValidForUpdate,IsSecured,IsPrimaryId,DisplayName`);
+  const secured = securedColumns(value);
   const cols = filterColumns(value);
   const byName = new Map(cols.map(c => [c.name, c]));
   // type details are enrichments: a failed probe leaves defaults, never
@@ -193,21 +226,22 @@ async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogAp
     }
   } catch { /* picklists without options can't be coerced; they simply won't write */ }
   // a picklist with no resolvable options can never take a value - hide it
-  return cols.filter(c => c.type !== "Picklist" || (c.options?.length ?? 0) > 0);
+  return { columns: cols.filter(c => c.type !== "Picklist" || (c.options?.length ?? 0) > 0), secured };
 }
 
 export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): Promise<FieldCatalog> {
-  const byLogical = new Map<string, Promise<CatalogColumn[]>>();
+  const byLogical = new Map<string, Promise<{ columns: CatalogColumn[]; secured: CatalogColumn[] }>>();
   const entities: CatalogEntity[] = [];
   for (const e of CATALOG_ENTITIES) {
-    if (!byLogical.has(e.logical)) byLogical.set(e.logical, fetchColumns(env, e.logical, api).catch(() => []));
-    const columns = await byLogical.get(e.logical)!;
-    if (columns.length) entities.push({ ...e, columns });
+    if (!byLogical.has(e.logical)) byLogical.set(e.logical, fetchColumns(env, e.logical, api).catch(() => ({ columns: [], secured: [] })));
+    const { columns, secured } = await byLogical.get(e.logical)!;
+    if (columns.length) entities.push({ ...e, columns, ...(SECURE_ENTITY_KEYS.has(e.key) && secured.length ? { secured } : {}) });
   }
   return { envId: env.id, fetchedAt: Date.now(), entities };
 }
 
-const CACHE_PREFIX = "crm/fieldCatalog/";
+// v2: entities carry their secured (pass-through) columns
+const CACHE_PREFIX = "crm/fieldCatalog/v2/";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Cached per environment for a day - metadata changes only with a solution
@@ -227,9 +261,16 @@ export async function getFieldCatalog(env: CrmEnvironment, api: CatalogApi, refr
 /** "crm:account.address1_city" -> its catalog display label ("Insured
  * (account): Address 1: City"). */
 export function catalogLabel(catalog: FieldCatalog | null, target: string): string | null {
-  const m = /^crm:([a-z]+)(?:\[\])?\.([a-z0-9_]+)$/.exec(target);
+  const m = /^(crm|secure):([a-z]+?)(\d*)(?:\[\])?\.([a-z0-9_]+)$/.exec(target);
   if (!m || !catalog) return null;
-  const entity = catalog.entities.find(e => e.key === m[1]);
-  const col = entity?.columns.find(c => c.name === m[2]);
-  return entity && col ? `${entity.label.replace(/ \(all rows\)$/, "")}: ${col.label}` : null;
+  const secure = m[1] === "secure";
+  // row slots ("crm:contact3", "secure:contact2") name their array entity
+  const key = m[3] ? (m[2] === "contact" ? "contacts" : m[2] === "policy" ? "policies" : m[2]) : m[2];
+  const entity = catalog.entities.find(e => e.key === key);
+  const col = (secure ? entity?.secured : entity?.columns)?.find(c => c.name === m[4]);
+  if (!entity || !col) return null;
+  const base = m[3]
+    ? `${key === "contacts" ? "Related contact" : "Policy"} ${Number(m[3]) - (key === "contacts" ? 1 : 0)}`
+    : entity.label.replace(/ \(all rows\)$/, "");
+  return `${secure ? "Secured: " : ""}${base}: ${col.label}`;
 }

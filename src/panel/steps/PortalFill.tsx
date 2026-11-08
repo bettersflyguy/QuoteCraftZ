@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Tab, TabList, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
-import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
+import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, LockClosedRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { grantActiveTab } from "../portalAccess";
 import { send, PanelError } from "../api";
@@ -196,9 +196,12 @@ export function PortalFill({ onChanged, onFlowActive }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadFlow, busy, crmOpen]);
 
+  // secured values held for the CRM: masked, never part of the capture
+  const [secureHeld, setSecureHeld] = useState<{ path: string; label: string; masked: string }[]>([]);
   const refresh = useCallback(() => {
     send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(setApp).catch(() => {});
     send<CrmLink | null>({ type: "panel/getCrmLink" }).then(setCrmLink).catch(() => {});
+    send<{ path: string; label: string; masked: string }[]>({ type: "panel/securePending" }).then(setSecureHeld).catch(() => {});
   }, []);
   useEffect(refresh, [refresh]);
 
@@ -246,6 +249,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
         const outcome = await send<IngestOutcome>({ type: "panel/portalIngest", tabId: tab.id });
         setIngestResult(outcome);
         setApp(outcome.app);
+        refresh();
         onChanged();
       }
     } catch (e) {
@@ -290,6 +294,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const clear = async () => {
     await send({ type: "panel/bpClear" }).catch(() => {});
     setApp(null);
+    setSecureHeld([]);
     setFillResult(null);
     setIngestResult(null);
     onChanged();
@@ -461,6 +466,14 @@ export function PortalFill({ onChanged, onFlowActive }: {
         </div>
       )}
       {app && view === "data" && gridTables(regular).map(renderGrid)}
+      {app && view === "data" && secureHeld.length > 0 && (
+        <div>
+          <div className={styles.gridTitle} title="Held in memory for this session only. Written to the secured CRM columns on load; never exported or noted.">
+            <LockClosedRegular /> Secured ({secureHeld.length})
+          </div>
+          {renderGrid({ title: "secured", label: "Notes", columns: ["Field", "Value"], rows: secureHeld.map(s => ({ Field: s.label, Value: s.masked })) })}
+        </div>
+      )}
       {app && view === "data" && noteFields.length > 0 && (
         <div className={styles.notesBlock}>
           <div className={styles.notesTitle}><NotepadRegular /> Non Mapped Timeline Entries</div>
@@ -502,8 +515,12 @@ export function PortalFill({ onChanged, onFlowActive }: {
       {fillResult && (
         <div className={styles.result}>
           Filled {fillResult.filledCount} of {fillResult.controlCount} form fields
+          {fillResult.secure?.filled ? ` (${fillResult.secure.filled} secured)` : ""}
           {fillResult.existingCount ? `; ${fillResult.existingCount} kept their existing values` : ""}
-          {fillResult.optionMismatchCount ? `; ${fillResult.optionMismatchCount} had no matching option` : ""}.
+          {fillResult.optionMismatchCount ? `; ${fillResult.optionMismatchCount} had no matching option` : ""}
+          {fillResult.noData?.length ? `; ${fillResult.noData.length} mapped with no data` : ""}
+          {fillResult.secure?.missing ? `; ${fillResult.secure.missing} secured with no value` : ""}.
+          {fillResult.secure?.note && <div>{fillResult.secure.note}</div>}
         </div>
       )}
       {app && <LoadToCrm key={app.capturedAt} app={app} onFlowActive={setLoadFlow} onLoaded={refresh} />}

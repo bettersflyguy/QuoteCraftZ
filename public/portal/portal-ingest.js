@@ -141,6 +141,20 @@
   /* banking, payment and card data is never captured */
   const PAYMENT_FIELD = /\b(bank|routing|account\s*(no|num|number)|iban|swift|card\s*(no|num|number)?|credit\s*card|debit|cvv|cvc|pay\s*method|method\s*of\s*payment|eft|ach)\b/i;
 
+  /* identifier-class data (SSN, ITIN, passport) is never captured into the
+   * application: only a control the agent mapped to a SECURED target lifts
+   * it, onto the separate pass-through channel. Mirrors fieldMaps.ts. */
+  const SENSITIVE_LABEL = /(?<![a-z])(ssns?|ss ?num(ber)?|soc(ial)? ?sec(urity)?|itins?|passports?)(?![a-z])/i;
+  function sensitiveLabel(label) {
+    const spaced = String(label || "").toLowerCase();
+    return SENSITIVE_LABEL.test(spaced) || /(socialsecurity|socsec|ssnum|passport)/.test(spaced.replace(/[^a-z]/g, ""));
+  }
+  const SSN_SHAPE = /\b\d{3}[\s.-]\d{2}[\s.-]\d{4}\b/;
+  function identifierField(f) {
+    return sensitiveLabel(f.label) || sensitiveLabel(f.name) || SSN_SHAPE.test(String(f.value || ""));
+  }
+  const isSecurePath = (p) => typeof p === "string" && p.indexOf("secure:") === 0;
+
   /* cookie/consent widgets contribute nothing but noise */
   function inConsentUi(element) {
     return Boolean(element.closest("[id*='onetrust'], [class*='onetrust'], [id*='cookie'], [class*='cookie-banner'], [id*='consent'], [aria-label*='consent' i]"));
@@ -364,11 +378,16 @@
     return Array.from(new Set(els));
   }
 
-  function collect() {
+  /* controlMap: the page's saved control mappings ({controlKey: target}),
+   * so a mapped control routes its value on capture exactly as on fill;
+   * secureOut collects values of controls mapped to SECURED targets */
+  function collect(controlMap, secureOut) {
     const modal = activeModal();
     const section = pageSection(modal);
     const root = modal || document.querySelector("main") || document;
     const fields = [];
+    const map = controlMap || {};
+    const keyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
 
     Array.from(root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']"))
       .filter(isVisible)
@@ -378,7 +397,18 @@
         const label = clean(labelFor(control));
         if (PAYMENT_FIELD.test(label) || PAYMENT_FIELD.test(clean(control.name || control.id))) return;
         if (isGridChrome(control, label)) return;
-        fields.push({ label, value: valueFor(control), name: clean(control.name || control.id), section, group: "", source: "control" });
+        let path = null;
+        if (keyOf && control.matches("input, select, textarea")) {
+          try { path = map[keyOf(control)] || null; } catch (_e) { path = null; }
+        }
+        const value = valueFor(control);
+        if (isSecurePath(path)) {
+          if (value && secureOut) secureOut.push({ path, value });
+          return;
+        }
+        const field = { label, value, name: clean(control.name || control.id), section, group: "", source: "control" };
+        if (path && /^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path)) field.mapped = path;
+        fields.push(field);
       });
 
     Array.from(root.querySelectorAll("fieldset"))
@@ -650,7 +680,7 @@
     return null;
   }
 
-  function taughtFields(taught) {
+  function taughtFields(taught, secureOut) {
     const out = [];
     (Array.isArray(taught) ? taught : []).forEach((t) => {
       if (!t || typeof t.selector !== "string" || typeof t.label !== "string" || PAYMENT_FIELD.test(t.label)) return;
@@ -662,7 +692,29 @@
         const value = text(el).slice(0, 300);
         return value && taughtValueSafe(el, value) ? value : null;
       };
+      if (isSecurePath(path)) {
+        /* SECURED teaching: the value goes to the pass-through channel only
+         * (never a capture field); payment data is still refused */
+        const sec = (el) => {
+          if (!el || !shown(el)) return null;
+          const value = text(el).slice(0, 100);
+          return value && !PAYMENT_FIELD.test(value) ? value : null;
+        };
+        const arrSec = path.match(/^secure:contacts\[\]\.([a-z][a-z0-9_]{0,99})$/);
+        if (arrSec) {
+          (expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : [])).forEach((r) => {
+            const value = sec(r.el);
+            if (value && secureOut) secureOut.push({ path: "secure:contact" + (r.n + 1) + "." + arrSec[1], value });
+          });
+          return;
+        }
+        const value = sec(anchor);
+        if (value && secureOut) secureOut.push({ path, value });
+        return;
+      }
       if (/^note(:(contact|opportunity|quote|policy))?$/.test(path)) {
+        /* identifier data can never become a timeline note */
+        if (sensitiveLabel(t.label) || (anchor && sensitiveLabel(noteLabel(anchor)))) return;
         /* timeline-note teaching ("note" = insured account, "note:<record>"
          * otherwise): on a grid cell, the whole column (every row, under the
          * grid's title and real header); else the one value */
@@ -710,5 +762,15 @@
    * exactly the rows a capture would pull */
   globalThis.__bettersExpandTaughtRows = expandTaughtRows;
   globalThis.__bettersCaptureElements = captureElements;
-  globalThis.__bettersPortalIngest = (taught) => ({ fields: taughtFields(taught).concat(collect()), title: document.title, url: location.href });
+  /* `controls`: the page's saved control mappings. `secure` comes back
+   * separately and is never merged into the capture by the worker. */
+  globalThis.__bettersPortalIngest = (taught, controls) => {
+    const secure = [];
+    const fields = taughtFields(taught, secure)
+      .concat(collect(controls, secure).filter((f) => !identifierField(f)))
+      /* identifier data never becomes a timeline note, by label OR by what
+       * the text itself says ("SSN 123...", "Passport ...") */
+      .filter((f) => !(f.mapped && /^note/.test(f.mapped) && (identifierField(f) || sensitiveLabel(f.value))));
+    return { fields, secure, title: document.title, url: location.href };
+  };
 })();

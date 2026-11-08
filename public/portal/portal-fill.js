@@ -302,9 +302,20 @@
    * or "label:<canonical captured label>" - the label form reaches ANY held
    * field (2nd driver, vehicle 2 VIN, garaging address...), explicit user
    * intent bypassing the generic-label drop */
-  function overrideCandidate(overrides, key, candidates, payloadFields) {
+  /* secured targets ("secure:primarycontact.iacrm_socialsecuritynumber")
+   * never resolve from the payload: they fill in a separate pass with values
+   * handed only to the frame that holds the mapped control */
+  function isSecurePath(path) { return typeof path === "string" && path.indexOf("secure:") === 0; }
+
+  function overrideCandidate(overrides, key, candidates, payloadFields, values) {
     const path = overrides[key];
-    if (!path || path === "skip") return null;
+    if (!path || path === "skip" || isSecurePath(path)) return null;
+    /* any mapping target the capture holds a value for: CRM columns, row
+     * slots ("Driver 2 DOB" = contact3.dateOfBirth), policies... */
+    if (values && typeof values[path] === "string" && clean(values[path])) {
+      const known = candidates.find((c) => c.path === path);
+      return known || { path, value: clean(values[path]) };
+    }
     if (path.indexOf("label:") === 0) {
       const wanted = path.slice(6);
       /* label targets can come from an IMPORTED share file: never let one pull
@@ -314,6 +325,29 @@
       return field ? { path, value: clean(field.value) } : null;
     }
     return candidates.find((c) => c.path === path) || null;
+  }
+
+  /* SUPERVISED ADVANCE (opt-in): when no visible required field is left
+   * blank, click the page's plain continue button. Allowlist verbs only -
+   * never submit/purchase/bind/pay/rate; the agent watches the tab. */
+  async function advance(fillRoot) {
+    try {
+      await new Promise((r) => setTimeout(r, 400));
+      const requiredBlank = Array.from(fillRoot.querySelectorAll("input, select, textarea"))
+        .filter((el) => visible(el) && !el.disabled && (el.required || el.getAttribute("aria-required") === "true"))
+        .some((el) => blank(el));
+      if (requiredBlank) return null;
+      const STOP = /submit|purchase|bind|pay|checkout|finalize|order|agree|buy|rate/i;
+      const target = Array.from(fillRoot.querySelectorAll("button, [role='button'], input[type='submit']"))
+        .filter((b) => b.getClientRects().length && !b.disabled)
+        .find((b) => {
+          const t = clean(b.innerText || b.value || "");
+          return /^(next|continue|start quote|save and continue|save & continue)$/i.test(t) && !STOP.test(t);
+        });
+      if (!target) return null;
+      target.click();
+      return "Advanced: " + clean(target.innerText || target.value || "button");
+    } catch (_e) { return null; /* best effort */ }
   }
 
   async function fill(payload, overwrite, autoAdvance, overrides) {
@@ -328,10 +362,20 @@
     };
     const results = [];
     const handledRadioGroups = new Set();
+    const values = (payload && payload.values) || {};
+    /* secured mappings present in THIS frame: the worker fetches only these
+     * and sends them back to this frame alone */
+    const secure = [];
 
     for (const element of controls) {
       const name = fieldName(element);
       if (!name || PAYMENT_FIELD.test(name)) continue;
+      if (element.type !== "radio" && isSecurePath(ov[controlKey(element)])) {
+        if (overwrite || blank(element)) secure.push({ key: controlKey(element), path: ov[controlKey(element)] });
+        continue;
+      }
+      /* an identifier field nobody mapped as secured is never auto-filled */
+      if (!ov[controlKey(element)] && isSensitiveSource(name)) continue;
       if (element.type === "radio") {
         const fieldset = element.closest("fieldset");
         const groupKey = element.name ? `name:${element.name}` : fieldset || element;
@@ -339,7 +383,7 @@
         handledRadioGroups.add(groupKey);
         const mapKey = controlKey(element);
         if (ov[mapKey] === "skip") continue;
-        const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
+        const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
         const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
@@ -350,8 +394,11 @@
       }
       const mapKey = controlKey(element);
       if (ov[mapKey] === "skip") continue;
-      const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
-      if (!candidate) continue;
+      const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
+      if (!candidate) {
+        if (ov[mapKey]) results.push({ label: name, path: ov[mapKey], status: "no-data" });
+        continue;
+      }
       const outcome = await fillControl(element, candidate, overwrite, addrCtx, name);
       results.push({ label: name, path: candidate.path, status: outcome.status });
     }
@@ -385,29 +432,11 @@
       }
     } catch (_e) { /* no dialog - nothing to confirm */ }
 
-    /* SUPERVISED ADVANCE (opt-in): when no visible required field is left
-     * blank, click the page's plain continue button. Allowlist verbs only -
-     * never submit/purchase/bind/pay/rate; the agent watches the tab. */
-    if (autoAdvance) {
-      try {
-        await new Promise((r) => setTimeout(r, 400));
-        const requiredBlank = Array.from(fillRoot.querySelectorAll("input, select, textarea"))
-          .filter((el) => visible(el) && !el.disabled && (el.required || el.getAttribute("aria-required") === "true"))
-          .some((el) => blank(el));
-        if (!requiredBlank) {
-          const STOP = /submit|purchase|bind|pay|checkout|finalize|order|agree|buy|rate/i;
-          const target = Array.from(fillRoot.querySelectorAll("button, [role='button'], input[type='submit']"))
-            .filter((b) => b.getClientRects().length && !b.disabled)
-            .find((b) => {
-              const t = clean(b.innerText || b.value || "");
-              return /^(next|continue|start quote|save and continue|save & continue)$/i.test(t) && !STOP.test(t);
-            });
-          if (target) {
-            target.click();
-            results.push({ label: "Advanced: " + clean(target.innerText || target.value || "button"), path: "advance", status: "filled" });
-          }
-        }
-      } catch (_e) { /* best effort */ }
+    /* secured fields on this frame fill in a second pass: advancing now
+     * would leave them behind, so the worker advances after that pass */
+    if (autoAdvance && !secure.length) {
+      const advanced = await advance(fillRoot);
+      if (advanced) results.push({ label: advanced, path: "advance", status: "filled" });
     }
 
     const filled = results.filter((result) => result.status === "filled");
@@ -416,8 +445,33 @@
       existingCount: results.filter((result) => result.status === "existing").length,
       optionMismatchCount: results.filter((result) => result.status === "option-mismatch").length,
       controlCount: controls.length,
-      filled: filled.map(({ label, path }) => ({ label, path }))
+      filled: filled.map(({ label, path }) => ({ label, path })),
+      noData: results.filter((result) => result.status === "no-data").map(({ label, path }) => ({ label, path })),
+      secure
     };
+  }
+
+  /* second pass, secured values only: fills ONLY controls whose saved
+   * mapping names a secured target that `values` carries. Values are never
+   * echoed back; the result lists labels and target paths. */
+  async function fillSecure(values, overwrite, overrides) {
+    const ov = overrides || {};
+    const vals = values || {};
+    const filled = [];
+    let missing = 0;
+    for (const element of pageControls(activeModal() || document)) {
+      if (element.type === "radio" || element.type === "checkbox" || element.tagName === "SELECT") continue;
+      const key = controlKey(element);
+      const path = ov[key];
+      if (!isSecurePath(path)) continue;
+      if (!overwrite && !blank(element)) continue;
+      const value = typeof vals[path] === "string" ? vals[path] : "";
+      if (!value) { missing += 1; continue; }
+      setNativeValue(element, value);
+      dispatch(element, value);
+      filled.push({ label: fieldName(element), path });
+    }
+    return { filled, missing };
   }
 
   /* mapping editor's view of this frame: every fillable control with its key,
@@ -856,6 +910,12 @@
   globalThis.__bettersPortalPeekUnmapped = (arg) => (arg ? peekUnmapped(arg) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalPeek = (items) => (items ? peek(items) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
+  globalThis.__bettersPortalFillSecure = (values, overwrite, overrides) => fillSecure(values, Boolean(overwrite), overrides || {});
+  globalThis.__bettersPortalAdvance = () => advance(activeModal() || document);
+  /* shared with the ingester, so a control's saved mapping routes its value
+   * on capture exactly as it does on fill */
+  globalThis.__bettersControlKey = controlKey;
+  globalThis.__bettersIsSensitiveLabel = isSensitiveSource;
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
   globalThis.__bettersPortalPick = (timeoutMs) => pickField(timeoutMs);
   globalThis.__bettersPortalPickCancel = () => { if (activePickCancel) activePickCancel(); };

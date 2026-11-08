@@ -355,7 +355,23 @@ export async function getInsuredSourceRecords(
     } catch { /* non-fatal: panel just shows no contact list */ }
   }
 
-  return { account, contact, riskAnswers, relatedContacts };
+  // the FULL records (every column, display values annotated) so a page
+  // mapping to any CRM column can fill; related contacts in the one shared
+  // slot order. Secured columns come back empty here unless permitted, and
+  // are dropped by the capture builder regardless.
+  const full: NonNullable<import("./crmSource").CrmSourceRecords["full"]> = { account: null, primary: null, related: [] };
+  try {
+    if (accountId) full.account = await dvJson<Record<string, unknown>>(env, `accounts(${accountId})`);
+    const primaryId = (full.account?.["_primarycontactid_value"] as string | undefined) ?? (contact?.["contactid"] as string | undefined);
+    if (primaryId) full.primary = await dvJson<Record<string, unknown>>(env, `contacts(${primaryId})`);
+    if (accountId) {
+      const { value } = await dvJson<{ value: Record<string, unknown>[] }>(env,
+        `contacts?$filter=_parentcustomerid_value eq ${accountId} and statecode eq 0&$orderby=createdon asc&$top=12`);
+      full.related = value.filter(c => c["contactid"] !== primaryId).slice(0, 10);
+    }
+  } catch { /* the basic fields above still fill */ }
+
+  return { account, contact, riskAnswers, relatedContacts, full };
 }
 
 /** Timeline-capable records a note can attach to: logical name + entity set
