@@ -29,7 +29,7 @@ const useStyles = makeStyles({
 /** In-panel manager for the per-site field mappings, reachable from the
  * environment menu so agents handle sharing without leaving their work:
  * list + remove sites, export the share file, import a teammate's. */
-export function MappingsManager({ onClose }: { onClose: () => void }) {
+export function MappingsManager({ onClose, mapOnOpen = false }: { onClose: () => void; mapOnOpen?: boolean }) {
   const styles = useStyles();
   const [maps, setMaps] = useState<FieldMaps>({});
   const [note, setNote] = useState<string | null>(null);
@@ -68,6 +68,11 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
       setBusy(null);
     }
   };
+  useEffect(() => {
+    if (mapOnOpen) void mapThisPage();
+    // once, on open
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveScan = async () => {
     if (!scan) return;

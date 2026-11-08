@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, Checkbox, Input, Spinner, Text, makeStyles, tokens } from "@fluentui/react-components";
 import type { InsuredSearchRow } from "@/crm/dataverse";
-import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { grantActiveTab } from "../portalAccess";
-import { MapEditor, capturedTargets } from "../MapEditor";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
@@ -65,7 +63,12 @@ function businessName(app: CapturedApplication | null): string | null {
 /** Carrier-portal mode: the active tab is neither EZLynx, Bold Penguin, nor the
  * CRM. Ingest reads the visible insured data on this page into the held
  * application; Fill writes the held application into this page's form. */
-export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void; onFlowActive?: (active: boolean) => void }) {
+export function PortalFill({ onChanged, onFlowActive, onOpenMappings }: {
+  onChanged: () => void;
+  onFlowActive?: (active: boolean) => void;
+  /** Mapping lives on its own page, never inline with ingest/fill. */
+  onOpenMappings?: () => void;
+}) {
   const styles = useStyles();
   const [app, setApp] = useState<CapturedApplication | null>(null);
   const [overwrite, setOverwrite] = useState(false);
@@ -85,10 +88,6 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
   const [crmLink, setCrmLink] = useState<CrmLink | null>(null);
   const [env, setEnv] = useState<CrmEnvironment | null>(null);
   const [loadFlow, setLoadFlow] = useState(false);
-  const [mapScan, setMapScan] = useState<PortalScanResult | null>(null);
-  const [mapTabId, setMapTabId] = useState<number | null>(null);
-  const [mapDraft, setMapDraft] = useState<Record<string, string>>({});
-  const [mapNote, setMapNote] = useState<string | null>(null);
 
   useEffect(() => { getActiveEnvironment().then(setEnv).catch(() => {}); }, []);
 
@@ -170,45 +169,6 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
     }
   };
 
-  const openMapper = async () => {
-    setBusy("map");
-    setError(null);
-    setMapNote(null);
-    try {
-      const tab = await grantActiveTab(setAwaitingGrant);
-      const scan = await send<PortalScanResult>({ type: "panel/portalScan", tabId: tab.id });
-      const draft: Record<string, string> = {};
-      for (const r of scan.rows) draft[r.key] = r.mapped ?? "";
-      setMapDraft(draft);
-      setMapScan(scan);
-      setMapTabId(tab.id);
-    } catch (e) {
-      setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const saveMapping = async () => {
-    if (!mapScan) return;
-    setBusy("map-save");
-    setError(null);
-    try {
-      const map: Record<string, string> = {};
-      for (const [key, v] of Object.entries(mapDraft)) if (v) map[key] = v;
-      await send({ type: "panel/saveFieldMap", origin: mapScan.origin, map });
-      const n = Object.keys(map).length;
-      setMapNote(n
-        ? `Saved ${n} mapping${n === 1 ? "" : "s"} for ${mapScan.origin}. Fill uses them on this site from now on.`
-        : `Cleared the saved mappings for ${mapScan.origin}. Fill is back to automatic matching.`);
-      setMapScan(null);
-    } catch (e) {
-      setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const crmSearch = async () => {
     setBusy("crm");
     setError(null);
@@ -264,10 +224,7 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
               </>
             )}
           </div>
-        : <div className={styles.hint}>
-            Nothing captured yet. Ingest this page to pull the insured data shown
-            here, or capture a completed application in Bold Penguin.
-          </div>}
+        : <div className={styles.hint}>Nothing captured yet.</div>}
       {awaitingGrant && (
         <Text size={200} style={{ display: "block", marginTop: 6, fontWeight: 600 }}>
           Waiting for browser approval to access {awaitingGrant}. Look for the permission
@@ -288,31 +245,10 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
         <Button disabled={busy !== null} onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}>
           Fill from CRM…
         </Button>
-        <Button disabled={busy !== null} onClick={() => (mapScan ? setMapScan(null) : void openMapper())}>
-          {busy === "map" ? <Spinner size="tiny" /> : mapScan ? "Close mapping" : "Map fields…"}
-        </Button>
+        {onOpenMappings && (
+          <Button disabled={busy !== null} onClick={onOpenMappings}>Field mappings</Button>
+        )}
       </div>
-      {mapScan && (
-        <MapEditor
-          scan={mapScan}
-          draft={mapDraft}
-          setDraft={u => setMapDraft(u)}
-          captured={capturedTargets(app?.fields)}
-          busy={busy === "map-save"}
-          onSave={saveMapping}
-          onCancel={() => setMapScan(null)}
-          onPick={mapTabId === null
-            ? undefined
-            : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: mapTabId })}
-          onPickCancel={mapTabId === null
-            ? undefined
-            : () => send<null>({ type: "panel/portalPickCancel", tabId: mapTabId })}
-          onPeek={mapTabId === null
-            ? undefined
-            : items => send<import("@/boldpenguin/types").PeekResult>({ type: "panel/portalPeek", tabId: mapTabId, items })}
-        />
-      )}
-      {mapNote && <div className={styles.result}>{mapNote}</div>}
       {crmOpen && (
         <>
           <div className={styles.row}>
