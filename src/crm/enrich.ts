@@ -35,6 +35,9 @@ export interface NewContact {
   birthdate: string | null;
   dlNumber?: string | null;
   dlState?: string | null;
+  /** Catalog-coerced CRM column values captured for this person; explicit
+   * fields above win over them. */
+  extra?: Record<string, unknown>;
 }
 
 export interface EnrichApi {
@@ -50,18 +53,27 @@ export interface EnrichApi {
  * (typically: agent not in the field security profile), retry without them so
  * a missing profile membership never blocks contact creation. */
 async function createContactSafe(env: CrmEnvironment, api: EnrichApi, c: NewContact): Promise<string> {
-  if (!c.dlNumber && !c.dlState) return api.createContact(env, c);
-  try {
-    return await api.createContact(env, c);
-  } catch {
-    return api.createContact(env, { ...c, dlNumber: null, dlState: null });
+  // secured DL fields and captured extra columns are both optional riders: a
+  // rejected rider must never block creating the person
+  const attempts: NewContact[] = [c];
+  if (c.dlNumber || c.dlState) attempts.push({ ...c, dlNumber: null, dlState: null });
+  if (c.extra && Object.keys(c.extra).length) attempts.push({ ...c, dlNumber: null, dlState: null, extra: undefined });
+  let lastError: unknown = null;
+  for (const attempt of attempts) {
+    try { return await api.createContact(env, attempt); } catch (e) { lastError = e; }
   }
+  throw lastError;
 }
 
 export interface EnrichResult {
   filledFields: string[];
   contactsCreated: string[];
   primaryContactSet: boolean;
+  /** The contact representing the captured applicant (matched or created). */
+  applicantContactId: string | null;
+  /** Related people that matched EXISTING contacts — their captured column
+   * values still need a fill-if-empty pass (created ones got them on create). */
+  matchedCoContacts: { contactId: string; extra: Record<string, unknown> }[];
 }
 
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
@@ -140,9 +152,14 @@ export async function ensureInsuredData(
     });
     contactsCreated.push(`${applicant.firstName} ${applicant.lastName}`);
   }
+  const matchedCoContacts: EnrichResult["matchedCoContacts"] = [];
   for (const co of applicant.coApplicants) {
     const cand: Candidate = { firstName: co.firstName, lastName: co.lastName, phone: co.phone, email: co.email };
-    if (existing.some(c => contactMatches(c, cand))) continue;
+    const hit = existing.find(c => contactMatches(c, cand));
+    if (hit) {
+      if (co.extra && Object.keys(co.extra).length) matchedCoContacts.push({ contactId: hit.contactId, extra: co.extra });
+      continue;
+    }
     await createContactSafe(env, api, {
       accountId,
       firstName: co.firstName,
@@ -151,7 +168,8 @@ export async function ensureInsuredData(
       email: co.email,
       birthdate: co.dateOfBirth,
       dlNumber: dlColumns ? co.dlNumber : null,
-      dlState: dlColumns ? co.dlState : null
+      dlState: dlColumns ? co.dlState : null,
+      extra: co.extra
     });
     contactsCreated.push(`${co.firstName} ${co.lastName}`);
   }
@@ -167,7 +185,9 @@ export async function ensureInsuredData(
   return {
     filledFields: Object.keys(patch).filter(k => k !== "primarycontactid@odata.bind"),
     contactsCreated,
-    primaryContactSet
+    primaryContactSet,
+    applicantContactId,
+    matchedCoContacts
   };
 }
 

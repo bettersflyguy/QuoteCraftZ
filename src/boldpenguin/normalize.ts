@@ -105,10 +105,51 @@ export interface NormalizableField {
   mapped?: string;
 }
 
+/** Well-known CRM columns that ALSO feed the semantic pipeline — identity
+ * review, duplicate gate, contact dedupe, policy draft and portal fill all
+ * read semantic paths, so a taught "Insured (account): Email" must drive
+ * them exactly like the semantic "Email" target would. */
+const CRM_BRIDGE: Record<string, string> = {
+  "crm:account.iacrm_insuredfirstname": "contact.firstName",
+  "crm:account.iacrm_insuredlastname": "contact.lastName",
+  "crm:account.emailaddress1": "contact.email",
+  "crm:account.telephone1": "contact.phone",
+  "crm:account.address1_line1": "address.street1",
+  "crm:account.address1_line2": "address.street2",
+  "crm:account.address1_city": "address.city",
+  "crm:account.address1_stateorprovince": "address.state",
+  "crm:account.address1_postalcode": "address.postalCode",
+  "crm:primarycontact.firstname": "contact.firstName",
+  "crm:primarycontact.lastname": "contact.lastName",
+  "crm:primarycontact.emailaddress1": "contact.email",
+  "crm:primarycontact.mobilephone": "contact.phone",
+  "crm:primarycontact.telephone1": "contact.phone",
+  "crm:primarycontact.birthdate": "contact.dateOfBirth",
+  "crm:policy1.iacrm_policynumber": "policy.number",
+  "crm:policy1.iacrm_premium": "policy.premium",
+  "crm:policy1.iacrm_effectivedate": "coverage.effectiveDate",
+  "crm:policy1.iacrm_expirationdate": "coverage.expirationDate"
+};
+const CONTACT_COLUMN_BRIDGE: Record<string, string> = {
+  firstname: "firstName", lastname: "lastName", emailaddress1: "email",
+  mobilephone: "phone", telephone1: "phone", birthdate: "dateOfBirth"
+};
+
+function bridgeOf(path: string): string | null {
+  if (CRM_BRIDGE[path]) return CRM_BRIDGE[path]!;
+  const m = /^crm:contact(\d+)\.([a-z0-9_]+)$/.exec(path);
+  const key = m ? CONTACT_COLUMN_BRIDGE[m[2]!] : undefined;
+  return m && key ? `contact${m[1]}.${key}` : null;
+}
+
 /** Field indices carrying a valid explicit path, with the paths they set
- * (first capture of a path wins). These are spoken for: alias scoring must
- * never claim them, and alias rules must never overwrite their paths. */
-function explicitRouting(fields: NormalizableField[]): { indices: Set<number>; byIndex: Map<number, string>; paths: Set<string> } {
+ * (first capture of a path wins), plus the semantic paths well-known CRM
+ * columns bridge into. These are spoken for: alias scoring must never claim
+ * the indices, and alias rules must never overwrite their paths. A semantic
+ * explicit teaching beats a bridged one for the same path. */
+function explicitRouting(fields: NormalizableField[]): {
+  indices: Set<number>; byIndex: Map<number, string>; paths: Set<string>; bridged: Map<string, string>;
+} {
   const indices = new Set<number>();
   const byIndex = new Map<number, string>();
   const paths = new Set<string>();
@@ -120,7 +161,13 @@ function explicitRouting(fields: NormalizableField[]): { indices: Set<number>; b
     paths.add(path);
     byIndex.set(index, path);
   });
-  return { indices, byIndex, paths };
+  const bridged = new Map<string, string>();
+  for (const [index, path] of byIndex) {
+    const target = bridgeOf(path);
+    if (target && !paths.has(target) && !bridged.has(target)) bridged.set(target, clean(fields[index]!.value));
+  }
+  for (const target of bridged.keys()) paths.add(target);
+  return { indices, byIndex, paths, bridged };
 }
 
 /** Which field indices the rules under the given path prefixes would claim —
@@ -157,6 +204,7 @@ export function normalize(fields: NormalizableField[]): NormalizedApplication {
   const explicit = explicitRouting(fields);
   for (const index of explicit.indices) claimed.add(index);
   for (const [index, path] of explicit.byIndex) setPath(result, path, clean(fields[index]!.value));
+  for (const [path, value] of explicit.bridged) setPath(result, path, value);
 
   for (const [path, aliases] of rules) {
     if (explicit.paths.has(path)) continue;

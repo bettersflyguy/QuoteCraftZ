@@ -5,7 +5,7 @@ import { ErrorBar } from "../ErrorBar";
 import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages } from "@/crm/dataverse";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, carrierGuess, coApplicantsFromCapture, guessInsuredType, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { applicantFromIdentity, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -43,7 +43,11 @@ const useStyles = makeStyles({
 });
 
 interface OppState { create: boolean; lobId: string | null; name: string; nameEdited: boolean }
-interface PolicyRow { number: string; premium: string; effective: string; expiration: string; carrierId: string | null; lobId: string | null }
+interface PolicyRow {
+  number: string; premium: string; effective: string; expiration: string; carrierId: string | null; lobId: string | null;
+  /** Taught CRM columns for this policy row (raw text; coerced worker-side). */
+  extra?: Record<string, string>;
+}
 interface PolicyState { create: boolean; rows: PolicyRow[] }
 interface QuoteState { create: boolean; premium: string; carrierId: string | null; lobId: string | null }
 interface PendingOpp { accountId: string; accountName: string; opps: OppSummary[] }
@@ -64,7 +68,16 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   const [opp, setOpp] = useState<OppState>({ create: false, lobId: null, name: "", nameEdited: false });
   // A captured policy number means the ingest happened on a SALE screen —
   // policy creation offers itself pre-checked with the captured terms.
+  // Policies are an array: a taught AMS policies list yields one row per
+  // captured policy (with its mapped columns); otherwise the single draft.
   const [policy, setPolicy] = useState<PolicyState>(() => {
+    const taught = policyDraftsFromCapture(app).filter(d => d.hasPolicy);
+    if (taught.length) {
+      return {
+        create: true,
+        rows: taught.map(d => ({ number: d.number, premium: d.premiumText, effective: d.effectiveDate, expiration: d.expirationDate, carrierId: null, lobId: null, extra: d.extra }))
+      };
+    }
     const d = policyFromCapture(app);
     return { create: d.hasPolicy, rows: [{ number: d.number, premium: d.premiumText, effective: d.effectiveDate, expiration: d.expirationDate, carrierId: null, lobId: null }] };
   });
@@ -225,7 +238,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             accountId, lobId: oppLobId, name,
             pipelineId: stages?.pipelineId ?? null,
             stageId: stages?.stages[0]?.stageId ?? null,
-            leadSource: leadSourceGuess(app)
+            leadSource: leadSourceGuess(app),
+            extra: crmGroup(app, "crm:opportunity") ?? undefined
           });
           createdOppId = createdOpp.opportunityId;
           rows.push({ key: `Opportunity — created "${name}"`, status: 204, error: null, entityId: null });
@@ -250,10 +264,11 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 accountId,
                 carrierId: pr.carrierId,
                 lobId: pr.lobId ?? opp.lobId,
-                opportunityId: createdOppId
+                opportunityId: createdOppId,
+                extra: pr.extra
               }
             });
-            rows.push({ key: `Policy — created ${pr.number.trim()} (Active)`, status: 204, error: null, entityId: null });
+            rows.push({ key: `Policy — created ${pr.number.trim()}${pr.extra ? "" : " (Active)"}`, status: 204, error: null, entityId: null });
           } catch (e) {
             rows.push({ key: `Policy ${pr.number.trim()}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
           }
@@ -275,7 +290,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
               coverageSummary: draft.coverageSummary,
               effectiveDate: toIsoDate(draft.effectiveDate.trim() || null),
               sourceUrl: app.source.url,
-              quotingMethodId: null
+              quotingMethodId: null,
+              extra: crmGroup(app, "crm:quote") ?? undefined
             }
           });
           rows.push({ key: `Quote — ${carrierName} ${quote.premium || ""} on the opportunity${q.linesWritten ? ` with ${q.linesWritten} coverage lines` : ""} (re-captures update it)`, status: 204, error: null, entityId: null });

@@ -72,11 +72,32 @@ export const isArrayPath = (path: string): boolean => path.includes("[].");
  * "vehicle5.vin"; contact1 is reserved for the primary insured). */
 const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin))$/;
 
+/** CRM column targets taught in the capture editor ("crm:account.address1_city",
+ * "crm:contacts[].address1_city"): the column list comes live from Dataverse
+ * metadata, so the grammar is all that can be checked offline — the commit
+ * re-validates every column against the live catalog before writing. */
+/** Columns owned by the AMS sync — never written by extension features. */
+const AMS_OWNED = new Set(["iacrm_amsexternalid", "iacrm_synctoams", "iacrm_lastsyncon"]);
+const CRM_TARGET = /^crm:(account|primarycontact|quote|opportunity|contacts\[\]|policies\[\])\.([a-z][a-z0-9_]{0,99})$/;
+/** Concrete per-row forms array teachings fan out into. */
+const CRM_ROUTABLE = /^crm:(account|primarycontact|quote|opportunity|contact(?:[2-9]|[1-3]\d)|policy(?:[1-9]|[1-3]\d))\.([a-z][a-z0-9_]{0,99})$/;
+
+export function isCrmTarget(path: string): boolean {
+  const m = CRM_TARGET.exec(path);
+  // AMS-owned columns and identifier-class columns are never targets
+  return Boolean(m && !AMS_OWNED.has(m[2]!) && m[2] !== "governmentid" && !isSensitiveLabel(m[2]!.replace(/_/g, " ")));
+}
+
 /** Paths the normalizer may route an explicitly mapped field to: the editor
  * vocabulary (minus array forms, which fan out before normalize sees them)
- * plus the concrete per-row slots. */
+ * plus the concrete per-row slots and CRM column targets. */
 export const isRoutablePath = (path: string): boolean =>
-  (PATH_LABEL.has(path) && !isArrayPath(path)) || SLOT_PATH.test(path);
+  (PATH_LABEL.has(path) && !isArrayPath(path)) || SLOT_PATH.test(path) ||
+  (CRM_ROUTABLE.test(path) && !AMS_OWNED.has(path.split(".")[1]!) && !path.endsWith(".governmentid") &&
+    !isSensitiveLabel(path.split(".")[1]!.replace(/_/g, " ")));
+
+/** Valid capture (pick-key) target: a known semantic path or a CRM column. */
+export const isCaptureTarget = (path: string): boolean => PATH_LABEL.has(path) || isCrmTarget(path);
 
 /** MAP_PATHS partitioned into ordered entity groups for the editor's
  * target dropdowns. */
@@ -187,8 +208,8 @@ export function parseFieldMapImport(text: string): FieldMapImport {
       // "label:" target would invert the data direction
       const pickKey = typeof key === "string" && key.startsWith("pick:");
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
-          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path)) ||
-          (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !PATH_LABEL.has(path))))) {
+          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) && !(pickKey && isCrmTarget(path))) ||
+          (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !isCaptureTarget(path))))) {
         dropped += 1;
         continue;
       }

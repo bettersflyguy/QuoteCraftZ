@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { MAP_PATH_GROUPS, PATH_LABEL, isArrayPath } from "@/portal/fieldMaps";
+import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
+import { send } from "./api";
+
+type OptionGroup = { group: string; paths: { path: string; label: string }[] };
+
+/** Capture targets: every core column of each CRM entity (live metadata, in
+ * hierarchy order) plus the semantic risk-data groups that have no CRM table
+ * (building, payroll, vehicles). Without a catalog (not signed in), the
+ * built-in semantic vocabulary stands in. */
+function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
+  const riskData = MAP_PATH_GROUPS.filter(g => /risk data/.test(g.group));
+  if (!catalog?.entities.length) return MAP_PATH_GROUPS;
+  const crm = catalog.entities.map(e => ({
+    group: e.label,
+    paths: e.columns.map(c => ({ path: `crm:${e.key}${e.array ? "[]" : ""}.${c.name}`, label: c.label }))
+  }));
+  return [...crm, ...riskData];
+}
 
 /** Array targets ("Related contacts — all rows") are capture-only: a fill
  * can't know which row a single control belongs to. */
@@ -68,6 +86,22 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   // still get a row so they can be mapped
   const [extraRows, setExtraRows] = useState<PortalScanRow[]>([]);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const [catalog, setCatalog] = useState<FieldCatalog | null>(null);
+  const [catalogNote, setCatalogNote] = useState<string | null>(null);
+
+  const loadCatalog = async (refresh: boolean) => {
+    setCatalogNote(refresh ? "Refreshing CRM fields…" : null);
+    try {
+      const c = await send<FieldCatalog>({ type: "panel/crmFieldCatalog", refresh });
+      setCatalog(c);
+      setCatalogNote(c.entities.length ? null : "CRM fields unavailable — showing built-in targets.");
+    } catch {
+      setCatalogNote("CRM fields unavailable (sign in to the CRM) — showing built-in targets.");
+    }
+  };
+  useEffect(() => { void loadCatalog(false); }, []);
+  const groups = captureGroups(catalog);
+  const groupValues = new Set(groups.flatMap(g => g.paths.map(p => p.path)));
 
   useEffect(() => {
     if (!focusKey) return;
@@ -151,7 +185,12 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                   onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [r.key]: v })); }}
                 >
                   <option value="">Not captured</option>
-                  {MAP_PATH_GROUPS.map(g => (
+                  {current && !groupValues.has(current) && (
+                    <option value={current}>
+                      {PATH_LABEL.get(current) ?? catalogLabel(catalog, current) ?? current} (saved)
+                    </option>
+                  )}
+                  {groups.map(g => (
                     <optgroup key={g.group} label={`Capture as — ${g.group}`}>
                       {g.paths.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
                     </optgroup>
@@ -181,6 +220,12 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           </div>
         );
       })}
+      <div className={styles.label} style={{ maxWidth: "none", marginTop: 4 }}>
+        {catalogNote ?? (catalog
+          ? <>Capture targets list every CRM column ({catalog.entities.reduce((n, e) => n + e.columns.length, 0)}).{" "}
+              <a href="#" onClick={e => { e.preventDefault(); void loadCatalog(true); }}>Refresh CRM fields</a></>
+          : "Loading CRM fields…")}
+      </div>
       <div className={styles.actions}>
         <Button appearance="primary" size="small" disabled={busy} onClick={onSave}>
           {busy ? <Spinner size="tiny" /> : "Save mapping"}

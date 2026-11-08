@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applicantFromCapture, accountNameFromCapture, buildSupplementalNote, coApplicantsFromCapture, carrierGuess, detectPhone, parseMoney, policyFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
+import { applicantFromCapture, accountNameFromCapture, buildSupplementalNote, coApplicantsFromCapture, crmGroup, policyDraftsFromCapture, carrierGuess, detectPhone, parseMoney, policyFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
 import { normalize } from "@/boldpenguin/normalize";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CrmEnvironment } from "@/crm/environments";
@@ -430,5 +430,35 @@ describe("supplemental note with entity-slot fields", () => {
     const note = buildSupplementalNote(app);
     expect(note?.body).not.toContain("jamie@example.com");
     expect(note?.body).toContain("1HGCM82633A004352");
+  });
+});
+
+describe("CRM-column captures at commit", () => {
+  it("related contacts carry their taught columns as extras", () => {
+    const app = capture({
+      normalized: {
+        contact: { fullName: "Tracey Dittrich" },
+        contact2: { firstName: "Alaxander", lastName: "Dittrich" },
+        "crm:contact2": { firstname: "Alaxander", lastname: "Dittrich", address1_city: "Duluth" }
+      }
+    });
+    const [co] = coApplicantsFromCapture(app);
+    expect(co?.firstName).toBe("Alaxander");
+    expect(co?.extra).toEqual({ firstname: "Alaxander", lastname: "Dittrich", address1_city: "Duluth" });
+  });
+
+  it("policies fan out into one draft per taught row, in row order", () => {
+    const app = capture({
+      normalized: {
+        "crm:policy2": { iacrm_policynumber: "502346899300", iacrm_premium: "$3,892.14" },
+        "crm:policy1": { iacrm_policynumber: "989815765", iacrm_effectivedate: "06/01/2026", iacrm_expirationdate: "12/01/2026" },
+        "crm:policy3": { iacrm_premium: "$905.00" }
+      }
+    });
+    const drafts = policyDraftsFromCapture(app);
+    expect(drafts.map(d => [d.number, d.hasPolicy])).toEqual([["989815765", true], ["502346899300", true], ["", false]]);
+    expect(drafts[0]!.effectiveDate).toBe("06/01/2026");
+    expect(drafts[1]!.extra["iacrm_premium"]).toBe("$3,892.14");
+    expect(crmGroup(app, "crm:quote")).toBeNull();
   });
 });

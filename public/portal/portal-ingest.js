@@ -407,7 +407,12 @@
   /* Array relationships ("contacts[].email"): the plural names the CRM array,
    * slot/start name the per-row groups the capture fans out into (contact1 is
    * the primary insured, so related contacts start at 2). */
-  var ARRAY_SLOTS = { contacts: { slot: "contact", start: 2 }, vehicles: { slot: "vehicle", start: 1 } };
+  var ARRAY_SLOTS = {
+    contacts: { slot: "contact", start: 2 }, vehicles: { slot: "vehicle", start: 1 },
+    /* CRM-column arrays share the semantic numbering, so a table taught with
+     * a mix of both kinds of target stays row-aligned */
+    "crm:contacts": { slot: "crm:contact", start: 2 }, "crm:policies": { slot: "crm:policy", start: 1 }
+  };
 
   /* An array teaching's selector points at ONE row's cell. The repeating axis
    * is found mechanically: vary each :nth-of-type index OUTERMOST FIRST and
@@ -450,7 +455,7 @@
         const value = text(el).slice(0, 300);
         return value && taughtValueSafe(el, value) ? value : null;
       };
-      const arr = path.match(/^([a-z]+)\[\]\.([a-z][a-zA-Z0-9]{0,30})$/);
+      const arr = path.match(/^((?:crm:)?[a-z]+)\[\]\.([a-z][a-zA-Z0-9_]{0,99})$/);
       if (arr && ARRAY_SLOTS[arr[1]]) {
         /* array teaching: pull the taught cell from EVERY repeated row */
         const cfg = ARRAY_SLOTS[arr[1]];
@@ -467,7 +472,7 @@
       if (!value) return;
       /* the explicit rule path rides along so the normalizer routes the value
        * to its exact entity slot (worker validates it against MAP_PATHS) */
-      const mapped = /^[a-z][a-zA-Z0-9]{0,30}\.[a-z][a-zA-Z0-9]{0,30}$/.test(path) ? path : undefined;
+      const mapped = /^(?:crm:[a-z]+|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ? path : undefined;
       out.push({ label: t.label, value, section: "", group: "", source: "taught", mapped });
     });
     return out;

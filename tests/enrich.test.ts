@@ -167,3 +167,33 @@ describe("ensureInsuredData", () => {
     expect(r.filledFields).toEqual([]);
   });
 });
+
+describe("captured CRM columns on contacts", () => {
+  const withExtra = (extra: Record<string, unknown>): CapturedApplicant => ({
+    ...applicant,
+    coApplicants: [{ ...applicant.coApplicants[0]!, extra }]
+  });
+
+  it("created related contacts receive their columns on create; matched ones are returned for fill-if-empty", async () => {
+    const created = makeApi(emptyState(), []);
+    const r1 = await ensureInsuredData(ENV, "ACC", withExtra({ address1_city: "Duluth" }), created);
+    const steven = created.createContact.mock.calls.map(c => c[1] as { firstName: string; extra?: Record<string, unknown> }).find(c => c.firstName === "STEVEN");
+    expect(steven?.extra).toEqual({ address1_city: "Duluth" });
+    expect(r1.matchedCoContacts).toEqual([]);
+    expect(r1.applicantContactId).toBe("NEW-Jill");
+
+    const matched = makeApi(emptyState(), [bare("C-STEVEN", "STEVEN", "KERNS")]);
+    const r2 = await ensureInsuredData(ENV, "ACC", withExtra({ address1_city: "Duluth" }), matched);
+    expect(r2.matchedCoContacts).toEqual([{ contactId: "C-STEVEN", extra: { address1_city: "Duluth" } }]);
+  });
+
+  it("a column value the CRM rejects never blocks creating the person", async () => {
+    const api = makeApi(emptyState(), []);
+    api.createContact.mockImplementation(async (_e: unknown, c: { firstName: string; extra?: Record<string, unknown> }) => {
+      if (c.extra && Object.keys(c.extra).length) throw new Error("400 bad column value");
+      return `NEW-${c.firstName}`;
+    });
+    const r = await ensureInsuredData(ENV, "ACC", withExtra({ iacrm_badcol: "x" }), api);
+    expect(r.contactsCreated).toContain("STEVEN KERNS");
+  });
+});

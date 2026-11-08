@@ -109,3 +109,40 @@ describe("explicit entity-slot routing (agent-taught captures)", () => {
     expect(result["window"]).toBeUndefined();
   });
 });
+
+describe("CRM-column captures", () => {
+  it("routes crm targets into their record group and bridges well-known columns into the semantic pipeline", () => {
+    const result = normalize([
+      { label: "Insured (account): Email", value: "tracey@example.com", mapped: "crm:account.emailaddress1" },
+      { label: "Insured (account): Address 1: City", value: "Champlin", mapped: "crm:account.address1_city" },
+      { label: "Related contacts: First Name 3", value: "Alaxander", mapped: "crm:contact3.firstname" },
+      { label: "Related contacts: Address 1: City 3", value: "Duluth", mapped: "crm:contact3.address1_city" }
+    ]);
+    expect(result["crm:account"]).toEqual({ emailaddress1: "tracey@example.com", address1_city: "Champlin" });
+    expect(result["contact"]?.["email"]).toBe("tracey@example.com");
+    expect(result["address"]?.["city"]).toBe("Champlin");
+    expect(result["crm:contact3"]).toEqual({ firstname: "Alaxander", address1_city: "Duluth" });
+    expect(result["contact3"]?.["firstName"]).toBe("Alaxander");
+  });
+
+  it("a semantic teaching beats a bridged CRM column, and bridged values beat alias guesses", () => {
+    const result = normalize([
+      { label: "Email", value: "semantic@example.com", mapped: "contact.email" },
+      { label: "Insured (account): Email", value: "crm@example.com", mapped: "crm:account.emailaddress1" },
+      { label: "Insured (account): Main Phone", value: "612-555-0100", mapped: "crm:account.telephone1" },
+      { label: "Phone", value: "000-000-0000" }
+    ]);
+    expect(result["contact"]?.["email"]).toBe("semantic@example.com");
+    expect(result["crm:account"]?.["emailaddress1"]).toBe("crm@example.com");
+    expect(result["contact"]?.["phone"]).toBe("612-555-0100");
+  });
+
+  it("never routes the AMS-reserved key or malformed crm targets", () => {
+    const result = normalize([
+      { label: "x", value: "AMS-1", mapped: "crm:account.iacrm_amsexternalid" },
+      { label: "y", value: "v", mapped: "crm:systemuser.fullname" }
+    ]);
+    expect(result["crm:account"]).toBeUndefined();
+    expect(result["crm:systemuser"]).toBeUndefined();
+  });
+});

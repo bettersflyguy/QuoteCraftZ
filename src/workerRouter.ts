@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, isCrmTarget } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -37,7 +37,8 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { buildSupplementalNote, coverageLinesFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
-import { createLead, createPolicy, createQuote, dvJson, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
 
 export interface Deps {
@@ -72,6 +73,9 @@ export interface Deps {
   findInsuredMatches: typeof findInsuredMatches;
   createPolicy: typeof createPolicy;
   createQuote: typeof createQuote;
+  fillIfEmpty: typeof fillIfEmpty;
+  /** Live CRM column catalog for capture mappings (cached per environment). */
+  getFieldCatalog: (env: CrmEnvironment, refresh?: boolean) => Promise<FieldCatalog>;
   dvQuery: typeof dvJson;
   upsertAccountNote: typeof upsertAccountNote;
   searchInsureds: typeof searchInsureds;
@@ -118,6 +122,25 @@ function pageKindOf(url: string): import("@/messages").PageKind {
   if (/^https:\/\/[^/]+\.(crm[0-9]*\.)?dynamics\.com\//i.test(url) || /^https:\/\/login\.microsoftonline\.com\//i.test(url)) return "crm";
   if (/^https:/i.test(url)) return "other";
   return "crm"; // chrome://, edge://, file:, http: — never a fillable/ingestable portal
+}
+
+/** Raw captured column text for one record -> catalog-coerced values. Any
+ * catalog failure yields no extras rather than failing the record. */
+async function coercedExtras(deps: Deps, env: CrmEnvironment, entityKey: string, raw: Record<string, string> | undefined): Promise<Record<string, unknown>> {
+  if (!raw || !Object.keys(raw).length) return {};
+  try {
+    const catalog = await deps.getFieldCatalog(env);
+    return coerceGroup(catalog.entities.find(e => e.key === entityKey), raw);
+  } catch {
+    return {};
+  }
+}
+
+/** Captured columns are optional riders: when a create with them is
+ * rejected (a value the column refuses), retry once without them. */
+async function withExtrasFallback<T>(extra: Record<string, unknown>, create: (extra: Record<string, unknown>) => Promise<T>): Promise<T> {
+  if (!Object.keys(extra).length) return create({});
+  try { return await create(extra); } catch { return create({}); }
 }
 
 export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<unknown>> {
@@ -178,7 +201,17 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/createOpportunity": {
         const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name, msg.pipelineId, msg.stageId, msg.leadSource ?? null) };
+        const extra = await coercedExtras(deps, env, "opportunity", msg.extra);
+        return {
+          ok: true,
+          data: await withExtrasFallback(extra, x =>
+            deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name, msg.pipelineId, msg.stageId, msg.leadSource ?? null, x))
+        };
+      }
+
+      case "panel/crmFieldCatalog": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.getFieldCatalog(env, msg.refresh ?? false) };
       }
 
       case "panel/getStagesForLob": {
@@ -397,8 +430,21 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         const results: import("@/crm/dataverse").BatchItemResult[] = [];
         // same best-effort structure as the EZLynx commit: enrichment first,
         // then the knowledge write, each surfacing its own result row.
+        // captured CRM-column values, coerced against the live catalog (a
+        // missing catalog just means no extra columns — never a failed load)
+        let catalog: FieldCatalog | null = null;
+        try { catalog = await deps.getFieldCatalog(env); } catch { catalog = null; }
+        const entityOf = (key: string) => catalog?.entities.find(e => e.key === key);
+        const groupOf = (name: string) => app.normalized[name] as Record<string, unknown> | undefined;
+        const applicant = {
+          ...msg.applicant,
+          coApplicants: msg.applicant.coApplicants.map(co => ({
+            ...co,
+            extra: coerceGroup(entityOf("contacts"), co.extra as Record<string, unknown> | undefined)
+          }))
+        };
         try {
-          const en = await ensureInsuredData(env, msg.accountId, msg.applicant, {
+          const en = await ensureInsuredData(env, msg.accountId, applicant, {
             getAccountEnrichmentState: deps.getAccountEnrichmentState,
             updateAccount: deps.updateAccount,
             getAccountContacts: deps.getAccountContacts,
@@ -410,6 +456,24 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
           if (en.primaryContactSet) bits.push("set primary contact");
           results.push({ key: `Insured profile — ${bits.length ? bits.join("; ") : "already complete"}`, status: 204, error: null, entityId: null });
+          // taught CRM columns, hierarchy order: account, primary contact,
+          // then related contacts that matched existing records (created
+          // ones received their columns on create). Fill-if-empty: agent-
+          // entered CRM data always wins.
+          const columnWrites: { label: string; set: string; id: string | null; values: Record<string, unknown> }[] = [
+            { label: "Insured", set: "accounts", id: msg.accountId, values: coerceGroup(entityOf("account"), groupOf("crm:account")) },
+            { label: "Primary contact", set: "contacts", id: en.applicantContactId, values: coerceGroup(entityOf("primarycontact"), groupOf("crm:primarycontact")) },
+            ...en.matchedCoContacts.map(m => ({ label: "Related contact", set: "contacts", id: m.contactId, values: m.extra }))
+          ];
+          for (const w of columnWrites) {
+            if (!w.id || !Object.keys(w.values).length) continue;
+            try {
+              const written = await deps.fillIfEmpty(env, w.set, w.id, w.values);
+              if (written.length) results.push({ key: `${w.label} — filled ${written.length} mapped column${written.length === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+            } catch (e) {
+              results.push({ key: `${w.label} mapped columns`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+            }
+          }
         } catch (e) {
           results.push({ key: "Insured profile", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
@@ -462,7 +526,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/createPolicy": {
         const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.createPolicy(env, msg.fields) };
+        const extra = await coercedExtras(deps, env, "policies", msg.fields.extra);
+        return { ok: true, data: await withExtrasFallback(extra, x => deps.createPolicy(env, msg.fields, x)) };
       }
 
       case "panel/createQuote": {
@@ -471,7 +536,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         // carrier-direct; the carrier lookup says WHICH carrier)
         let quotingMethodId = await deps.getQuotingMethodId(env, "Carrier Direct");
         if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "Carrier Direct");
-        const { quoteId } = await deps.createQuote(env, { ...msg.fields, quotingMethodId });
+        const quoteExtra = await coercedExtras(deps, env, "quote", msg.fields.extra);
+        const { quoteId } = await withExtrasFallback(quoteExtra, x => deps.createQuote(env, { ...msg.fields, quotingMethodId }, x));
         // structured coverage rows from the held capture (best-effort,
         // schema-aware like the EZLynx path)
         let linesWritten = 0;
@@ -713,9 +779,19 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   // normalizer recognizes — the page never chooses its own labels
   const origin = await tabOrigin(tabId);
   const siteMap = origin ? await fieldMapFor(origin) : {};
+  // CRM-column teachings label themselves from the cached catalog (falling
+  // back to the column's logical name when the catalog isn't loaded yet)
+  let catalog: FieldCatalog | null = null;
+  if (Object.values(siteMap).some(v => isCrmTarget(v))) {
+    try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
+  }
   const taught = Object.entries(siteMap)
-    .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && PATH_LABEL.has(v))
-    .map(([k, v]) => ({ selector: k.slice(5), label: PATH_LABEL.get(v) as string, path: v }));
+    .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v)))
+    .map(([k, v]) => ({
+      selector: k.slice(5),
+      label: PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ?? v.replace(/^crm:/, "").replace("[]", ""),
+      path: v
+    }));
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: (t: unknown) => (globalThis as { __bettersPortalIngest?: (t: unknown) => unknown }).__bettersPortalIngest?.(t) ?? null,
@@ -823,6 +899,8 @@ export const realDeps: Deps = {
   findInsuredMatches,
   createPolicy,
   createQuote,
+  fillIfEmpty,
+  getFieldCatalog: (env, refresh) => getFieldCatalog(env, { dvJson }, refresh),
   dvQuery: dvJson,
   upsertAccountNote,
   searchInsureds,

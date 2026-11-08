@@ -113,6 +113,26 @@ describe("field-map share files", () => {
     expect(parsed.perOrigin[0]!.picks).toBe(3);
   });
 
+  it("accepts CRM-column capture targets on pick keys only, never the AMS-reserved or identifier-class columns", () => {
+    const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
+      "https://ams.example.com": {
+        "pick:#a > span": "crm:account.address1_city",           // kept
+        "pick:#b > span": "crm:contacts[].address1_city",        // kept (array)
+        "pick:#c > span": "crm:policies[].iacrm_policynumber",   // kept (array)
+        "pick:#d > span": "crm:account.iacrm_fein",              // kept (FEIN allowed)
+        "pick:#e > span": "crm:account.iacrm_amsexternalid",     // AMS-reserved — dropped
+        "pick:#f > span": "crm:primarycontact.iacrm_ssn",        // identifier-class — dropped
+        "pick:#g > span": "crm:systemuser.fullname",             // not a capture entity — dropped
+        "pick:#h > span": "crm:account.Address1_City",           // not a logical name — dropped
+        "pick:#i > span": "crm:policies[].iacrm_synctoams",      // AMS-owned sync flag — dropped
+        "text:city": "crm:account.address1_city"                 // fill keys can't take CRM columns — dropped
+      }
+    })));
+    expect(Object.keys(parsed.maps["https://ams.example.com"]!).sort()).toEqual(["pick:#a > span", "pick:#b > span", "pick:#c > span", "pick:#d > span"]);
+    expect(parsed.dropped).toBe(6);
+    expect(parsed.perOrigin[0]!.picks).toBe(4);
+  });
+
   it("rejects files that are not ours", () => {
     expect(() => parseFieldMapImport("not json")).toThrow(/valid JSON/);
     expect(() => parseFieldMapImport(JSON.stringify({ type: "other", maps: {} }))).toThrow(/not a Quote Connector/);

@@ -82,3 +82,40 @@ describe("array taught captures", () => {
     expect(fields.map(f => [f.mapped, f.value])).toEqual([["contact.email", "a@example.com"]]);
   });
 });
+
+describe("CRM-column array captures", () => {
+  it("fan out to crm:contactN with the same numbering as semantic contact arrays", () => {
+    document.body.innerHTML = `
+      <table id="rc2"><tbody>
+        <tr><td>Alaxander</td><td>Duluth</td></tr>
+        <tr><td>Tracy</td><td>Champlin</td></tr>
+      </tbody></table>`;
+    const fields = taughtOnly([
+      { selector: "#rc2 > tbody > tr:nth-of-type(1) > td:nth-of-type(1)", label: "Related contact first name", path: "contacts[].firstName" },
+      { selector: "#rc2 > tbody > tr:nth-of-type(1) > td:nth-of-type(2)", label: "Related contacts: Address 1: City", path: "crm:contacts[].address1_city" }
+    ]);
+    expect(fields.map(f => [f.mapped, f.value])).toEqual([
+      ["contact2.firstName", "Alaxander"],
+      ["contact3.firstName", "Tracy"],
+      ["crm:contact2.address1_city", "Duluth"],
+      ["crm:contact3.address1_city", "Champlin"]
+    ]);
+  });
+
+  it("single CRM targets keep their path; policies arrays start at 1", () => {
+    document.body.innerHTML = `
+      <div id="h"><span>Champlin</span></div>
+      <table id="pl"><tbody>
+        <tr><td>989815765</td></tr><tr><td>502346899300</td></tr>
+      </tbody></table>`;
+    const fields = taughtOnly([
+      { selector: "#h > span", label: "Insured (account): Address 1: City", path: "crm:account.address1_city" },
+      { selector: "#pl > tbody > tr:nth-of-type(1) > td:nth-of-type(1)", label: "Policies: Policy Number", path: "crm:policies[].iacrm_policynumber" }
+    ]);
+    expect(fields.map(f => [f.mapped, f.value])).toEqual([
+      ["crm:account.address1_city", "Champlin"],
+      ["crm:policy1.iacrm_policynumber", "989815765"],
+      ["crm:policy2.iacrm_policynumber", "502346899300"]
+    ]);
+  });
+});

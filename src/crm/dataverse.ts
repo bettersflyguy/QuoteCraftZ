@@ -190,17 +190,23 @@ export interface NewPolicyFields {
   carrierId: string | null;
   lobId: string | null;
   opportunityId: string | null;
+  /** Captured CRM-column values (raw text) taught for this policy row —
+   * coerced against the live catalog worker-side; explicit fields win. */
+  extra?: Record<string, string>;
 }
 
 /** Creates an ACTIVE policy from a carrier sale screen: bound today, tied to
  * the insured and (when known) carrier / LOB / originating opportunity.
  * Schema-cased nav props verified against live metadata. */
-export async function createPolicy(env: CrmEnvironment, f: NewPolicyFields): Promise<{ policyId: string }> {
+export async function createPolicy(env: CrmEnvironment, f: NewPolicyFields, extra: Record<string, unknown> = {}): Promise<{ policyId: string }> {
   const body: Record<string, unknown> = {
+    ...extra,
     iacrm_policy_name: f.name,
     iacrm_policynumber: f.policyNumber,
-    iacrm_binddate: new Date().toISOString().slice(0, 10),
-    iacrm_status: 738590000, // Active
+    // a taught status/bind date (an AMS policies list: Renewed, Cancelled…)
+    // is the truth for that row; sale screens default to bound-today Active
+    iacrm_binddate: extra["iacrm_binddate"] ?? new Date().toISOString().slice(0, 10),
+    iacrm_status: extra["iacrm_status"] ?? 738590000, // Active
     "iacrm_InsuredId@odata.bind": `/accounts(${f.accountId})`
   };
   if (f.premium != null) body["iacrm_premium"] = f.premium;
@@ -226,6 +232,8 @@ export interface NewQuoteFields {
   /** The portal page the quote came from (iacrm_quotelink + alt-key host). */
   sourceUrl: string;
   quotingMethodId: string | null;
+  /** Captured CRM-column values (raw text) — coerced worker-side; explicit fields win. */
+  extra?: Record<string, string>;
 }
 
 /** Upserts a portal-captured quote onto the opportunity — provider "Portal",
@@ -233,10 +241,11 @@ export interface NewQuoteFields {
  * duplicating. Same column conventions as the EZLynx writer; premium status
  * is always Estimated (standing rule), source type left unset (carrier
  * direct, not comparative rater). */
-export async function createQuote(env: CrmEnvironment, f: NewQuoteFields): Promise<{ quoteId: string }> {
+export async function createQuote(env: CrmEnvironment, f: NewQuoteFields, extra: Record<string, unknown> = {}): Promise<{ quoteId: string }> {
   const host = new URL(f.sourceUrl).hostname;
   const ext = `${host}:${f.opportunityId}`.replace(/'/g, "''");
   const body: Record<string, unknown> = {
+    ...extra,
     iacrm_quote_name: f.name,
     iacrm_provider: "Portal",
     iacrm_amsexternalid: `${host}:${f.opportunityId}`,
@@ -556,9 +565,11 @@ export async function getStagesForLob(
 
 export async function createOpportunity(
   env: CrmEnvironment, accountId: string, lobId: string, name: string,
-  pipelineId?: string | null, stageId?: string | null, leadSource?: string | null
+  pipelineId?: string | null, stageId?: string | null, leadSource?: string | null,
+  extra: Record<string, unknown> = {}
 ): Promise<OppSummary> {
   const body: Record<string, unknown> = {
+    ...extra,
     name,
     "customerid_account@odata.bind": `/accounts(${accountId})`,
     // nav property is SCHEMA-cased - iacrm_lineofbusinessid (logical case) is
@@ -628,6 +639,27 @@ export async function updateAccount(env: CrmEnvironment, accountId: string, patc
   }
 }
 
+/** Writes captured column values onto an existing record ONLY where the
+ * column is empty — agent-entered CRM data always wins over captured data.
+ * Returns the columns written. */
+export async function fillIfEmpty(env: CrmEnvironment, entitySet: string, id: string, values: Record<string, unknown>): Promise<string[]> {
+  const cols = Object.keys(values).filter(c => /^[a-z][a-z0-9_]*$/.test(c));
+  if (!cols.length) return [];
+  const current = await dvJson<Record<string, unknown>>(env, `${entitySet}(${id})?$select=${cols.join(",")}`);
+  const patch: Record<string, unknown> = {};
+  for (const c of cols) {
+    const v = current[c];
+    if (v === null || v === undefined || v === "") patch[c] = values[c];
+  }
+  if (!Object.keys(patch).length) return [];
+  const res = await dv(env, `${entitySet}(${id})`, { method: "PATCH", body: JSON.stringify(patch) });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Dataverse ${res.status} updating ${entitySet}: ${detail.slice(0, 300)}`);
+  }
+  return Object.keys(patch);
+}
+
 export async function getAccountContacts(env: CrmEnvironment, accountId: string): Promise<ContactRow[]> {
   const q = `contacts?$select=contactid,firstname,lastname,emailaddress1,mobilephone,telephone1&$filter=_parentcustomerid_value eq ${accountId} and statecode eq 0`;
   const { value } = await dvJson<{ value: Record<string, string | null>[] }>(env, q);
@@ -643,6 +675,7 @@ export async function getAccountContacts(env: CrmEnvironment, accountId: string)
 
 export async function createContact(env: CrmEnvironment, c: NewContact): Promise<string> {
   const body: Record<string, unknown> = {
+    ...(c.extra ?? {}),
     firstname: c.firstName,
     lastname: c.lastName,
     "parentcustomerid_account@odata.bind": `/accounts(${c.accountId})`

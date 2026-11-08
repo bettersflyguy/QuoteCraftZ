@@ -213,15 +213,17 @@ export function coApplicantsFromCapture(app: CapturedApplication): CapturedAppli
   const primary = identityFromCapture(app);
   const primaryName = canonical(`${primary.firstName} ${primary.lastName}`);
   const primaryEmail = primary.email.toLowerCase();
-  const slots = Object.keys(app.normalized)
-    .map(k => /^contact(\d+)$/.exec(k))
+  const slots = [...new Set(Object.keys(app.normalized)
+    .map(k => /^(?:crm:)?contact(\d+)$/.exec(k))
     .filter((m): m is RegExpExecArray => m !== null)
     .map(m => Number(m[1]))
-    .filter(n => n >= 2)
+    .filter(n => n >= 2))]
     .sort((a, b) => a - b);
   const out: CapturedApplicant["coApplicants"] = [];
   for (const n of slots) {
-    const grp = app.normalized[`contact${n}`]!;
+    // identity columns of CRM-taught rows are bridged into contactN by the
+    // normalizer; every taught column rides along as the record's extras
+    const grp = app.normalized[`contact${n}`] ?? {};
     const get = (k: string) => { const v = grp[k]; return typeof v === "string" ? clean(v) : ""; };
     let firstName = stripNameDecorations(get("firstName"));
     let lastName = stripNameDecorations(get("lastName"));
@@ -244,10 +246,43 @@ export function coApplicantsFromCapture(app: CapturedApplication): CapturedAppli
       email: EMAIL_RX.test(email) ? email : null,
       dateOfBirth: toIsoDate(get("dateOfBirth") || null),
       dlNumber: null,
-      dlState: null
+      dlState: null,
+      ...(crmGroup(app, `crm:contact${n}`) ? { extra: crmGroup(app, `crm:contact${n}`)! } : {})
     });
   }
   return out;
+}
+
+/** The raw captured column text of one CRM-taught record ("crm:account",
+ * "crm:policy2", …), or null when nothing was taught for it. */
+export function crmGroup(app: CapturedApplication, name: string): Record<string, string> | null {
+  const grp = app.normalized[name];
+  if (!grp) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(grp)) if (typeof v === "string" && v) out[k] = v;
+  return Object.keys(out).length ? out : null;
+}
+
+/** One policy draft per CRM-taught policy row (policies are an array: an
+ * AMS policies list fans into crm:policy1..N). Empty when no policy row was
+ * taught — the caller falls back to the single label-scored draft. */
+export function policyDraftsFromCapture(app: CapturedApplication): (PolicyDraft & { extra: Record<string, string> })[] {
+  return Object.keys(app.normalized)
+    .map(k => /^crm:policy(\d+)$/.exec(k))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map(m => Number(m[1]))
+    .sort((a, b) => a - b)
+    .map(n => crmGroup(app, `crm:policy${n}`))
+    .filter((g): g is Record<string, string> => g !== null)
+    .map(g => ({
+      hasPolicy: Boolean(g["iacrm_policynumber"]),
+      number: g["iacrm_policynumber"] ?? "",
+      premiumText: g["iacrm_premium"] ?? "",
+      effectiveDate: g["iacrm_effectivedate"] ?? "",
+      expirationDate: g["iacrm_expirationdate"] ?? "",
+      carrierName: carrierGuess(app),
+      extra: g
+    }));
 }
 
 /** Projects the capture's normalized identity into the shape the existing
@@ -318,7 +353,8 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
  * everything else is supplemental and goes into the activity note. */
 // bare "contact" prefix covers the primary (contact.) AND every related-
 // contact array slot (contact2., contact3., …) — all become contact records
-const STRUCTURED_PATHS = ["contact", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate"];
+// "crm:" = agent-taught CRM columns, written to their records by the load
+const STRUCTURED_PATHS = ["contact", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate", "crm:"];
 
 export interface SupplementalNote {
   subject: string;

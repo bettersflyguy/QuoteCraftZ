@@ -8,7 +8,13 @@ export interface CapturedApplicant {
   address: { street: string; city: string; state: string; postalCode: string } | null;
   phones: { type: string | null; number: string }[];
   emails: string[];
-  coApplicants: { firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null; dateOfBirth: string | null; dlNumber: string | null; dlState: string | null }[];
+  coApplicants: {
+    firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null;
+    dateOfBirth: string | null; dlNumber: string | null; dlState: string | null;
+    /** Captured CRM-column values for this person (raw text from the panel;
+     * the worker replaces them with catalog-coerced values before writing). */
+    extra?: Record<string, unknown>;
+  }[];
   isCommercial: boolean;
 }
 

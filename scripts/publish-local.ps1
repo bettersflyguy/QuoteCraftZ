@@ -15,7 +15,7 @@ try {
   npm run build
   if ($LASTEXITCODE -ne 0) { throw "build failed" }
   git add package.json package-lock.json
-  git commit -m "release: v$ver`n`nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>" | Out-Null
+  git commit -m "release: v$ver`n`nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" | Out-Null
   git push | Out-Null
 } finally { Pop-Location }
 

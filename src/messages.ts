@@ -49,7 +49,8 @@ export type PanelRequest =
   | { type: "panel/searchUsers"; query: string }
   | { type: "panel/createAccount"; fields: NewAccountFields }
   | { type: "panel/getLobs" }
-  | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string; pipelineId: string | null; stageId: string | null; leadSource?: string | null }
+  | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string; pipelineId: string | null; stageId: string | null; leadSource?: string | null; extra?: Record<string, string> }
+  | { type: "panel/crmFieldCatalog"; refresh?: boolean }
   | { type: "panel/getStagesForLob"; lobId: string | null; insuredType?: 1 | 2 | null; lobName?: string | null }
   | { type: "panel/portalScan"; tabId: number }
   | { type: "panel/portalPick"; tabId: number }
