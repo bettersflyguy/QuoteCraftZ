@@ -240,7 +240,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     return [];
   }).concat((extraPeek ?? []).map(x => ({ key: x.key, label: targetText(x.target), kind: "mapped" as const })));
   const peekSignature = JSON.stringify(peekItems);
-  const [peeking, setPeeking] = useState(false);
+  // on from the start: the page shows green/red while mapping and re-colors
+  // with every change (the eye turns it off)
+  const [peeking, setPeeking] = useState(Boolean(onPeek));
   const [peekNote, setPeekNote] = useState<string | null>(null);
   useEffect(() => {
     if (!peeking || !onPeek) return;

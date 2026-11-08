@@ -78,6 +78,20 @@ describe("one peek: mapped green, unmapped red", () => {
     expect(r.unmapped).toBe(1);
   });
 
+  it("stays live: a field the page adds later is outlined on its own, until turned off", async () => {
+    document.body.innerHTML = `<main id="m"><label for="vin">VIN</label><input id="vin" name="vin" value="X"></main>`;
+    const peekAll = (globalThis as unknown as { __bettersPortalPeekAll: (a: unknown) => unknown }).__bettersPortalPeekAll;
+    peekAll({ items: [{ key: "text:vin", label: "VIN", kind: "mapped" }], map: {}, payload: null, pageLabels: [] });
+    const extra = document.createElement("div");
+    extra.innerHTML = `<label for="miles">Annual Miles</label><input id="miles" name="miles" value="12000">`;
+    document.getElementById("m")!.appendChild(extra);
+    await new Promise(r => setTimeout(r, 900));
+    expect((document.getElementById("miles") as HTMLElement).style.outline).toMatch(/d13438|rgb\(209, 52, 56\)/);
+    expect((document.getElementById("vin") as HTMLElement).style.outline).toMatch(/13a10e|rgb\(19, 161, 14\)/);
+    peekAll(null);
+    expect((document.getElementById("miles") as HTMLElement).style.outline).toBe("");
+  }, 5000);
+
   it("never flags the site's own search box, and clears badges an older copy left behind", () => {
     document.body.innerHTML = `<header><input placeholder="Search" name="q"></header>
       <main><label for="color">Color</label><input id="color" name="color" value="Blue"></main>

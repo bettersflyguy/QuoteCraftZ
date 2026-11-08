@@ -1041,7 +1041,32 @@
    * everything the capture reads that nothing covers in red. Covered for
    * red = the items shown plus the saved map, auto-matches and (data-service
    * sites) fields the service fills. */
-  function peekAll(arg) {
+  /* the outlines stay live while the editor is open: when the page redraws
+   * (an SPA step change, an added vehicle card) they re-apply on their own.
+   * Only real content changes count - the badges this script adds are
+   * ignored, so re-applying never feeds itself. */
+  var lastPeekArg = null;
+  var peekObserver = null;
+  var peekRedo = 0;
+  function isOwnNode(n) { return n && n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-betters-peek"); }
+  function watchPage(on) {
+    if (peekObserver) { peekObserver.disconnect(); peekObserver = null; }
+    if (!on || typeof MutationObserver !== "function" || !document.body) return;
+    peekObserver = new MutationObserver(function (records) {
+      var real = records.some(function (r) {
+        var nodes = Array.prototype.slice.call(r.addedNodes).concat(Array.prototype.slice.call(r.removedNodes));
+        return nodes.some(function (n) { return n.nodeType === 1 && !isOwnNode(n); });
+      });
+      if (!real || !lastPeekArg) return;
+      clearTimeout(peekRedo);
+      peekRedo = setTimeout(function () { if (lastPeekArg) peekAll(lastPeekArg, true); }, 700);
+    });
+    peekObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function peekAll(arg, redo) {
+    lastPeekArg = arg;
+    if (!redo) watchPage(true);
     clearPeek();
     var items = (arg && Array.isArray(arg.items)) ? arg.items : [];
     var r = peek(items, true);
@@ -1099,7 +1124,8 @@
 
   globalThis.__bettersPortalPeekUnmapped = (arg) => (arg ? peekUnmapped(arg) : (clearPeek(), { shown: 0, missing: 0 }));
   globalThis.__bettersPortalPeek = (items) => (items ? peek(items) : (clearPeek(), { shown: 0, missing: 0 }));
-  globalThis.__bettersPortalPeekAll = (arg) => (arg ? peekAll(arg) : (clearPeek(), { shown: 0, missing: 0, unmapped: 0 }));
+  globalThis.__bettersPortalPeekAll = (arg) => (arg ? peekAll(arg)
+    : (lastPeekArg = null, watchPage(false), clearPeek(), { shown: 0, missing: 0, unmapped: 0 }));
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalFillSecure = (values, overwrite, overrides) => fillSecure(values, Boolean(overwrite), overrides || {});
   globalThis.__bettersPortalAdvance = () => advance(activeModal() || document);
