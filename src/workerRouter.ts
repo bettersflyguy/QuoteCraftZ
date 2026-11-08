@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGET, isCrmTarget } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, isCrmTarget, isNoteTarget } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -37,7 +37,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
-import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields } from "@/crm/crmSource";
 
@@ -74,6 +74,7 @@ export interface Deps {
   createPolicy: typeof createPolicy;
   createQuote: typeof createQuote;
   fillIfEmpty: typeof fillIfEmpty;
+  upsertRecordNote: typeof upsertRecordNote;
   /** Live CRM column catalog for capture mappings (cached per environment). */
   getFieldCatalog: (env: CrmEnvironment, refresh?: boolean) => Promise<FieldCatalog>;
   dvQuery: typeof dvJson;
@@ -211,6 +212,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           data: await withExtrasFallback(extra, x =>
             deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name, msg.pipelineId, msg.stageId, msg.leadSource ?? null, x))
         };
+      }
+
+      case "panel/upsertNote": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.upsertRecordNote(env, msg.record, msg.id, msg.subject, msg.html) };
       }
 
       case "panel/crmFieldCatalog": {
@@ -450,6 +456,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             extra: coerceGroup(entityOf("contacts"), co.extra as Record<string, unknown> | undefined)
           }))
         };
+        let primaryContactId: string | null = null;
         try {
           const en = await ensureInsuredData(env, msg.accountId, applicant, {
             getAccountEnrichmentState: deps.getAccountEnrichmentState,
@@ -469,7 +476,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           // entered CRM data always wins.
           const columnWrites: { label: string; set: string; id: string | null; values: Record<string, unknown> }[] = [
             { label: "Insured", set: "accounts", id: msg.accountId, values: coerceGroup(entityOf("account"), groupOf("crm:account")) },
-            { label: "Primary contact", set: "contacts", id: en.applicantContactId, values: coerceGroup(entityOf("primarycontact"), groupOf("crm:primarycontact")) },
+            { label: "Primary contact", set: "contacts", id: (primaryContactId = en.applicantContactId), values: coerceGroup(entityOf("primarycontact"), groupOf("crm:primarycontact")) },
             ...en.matchedCoContacts.map(m => ({ label: "Related contact", set: "contacts", id: m.contactId, values: m.extra }))
           ];
           for (const w of columnWrites) {
@@ -518,16 +525,26 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         } catch (e) {
           results.push({ key: "Supplemental data note", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
-        // values the agent tagged "Add to notes (timeline)": one organized
-        // rich-text entry per source site
-        try {
-          const tl = buildTimelineNote(app);
-          if (tl) {
-            const outcome = await deps.upsertAccountNote(env, msg.accountId, tl.subject, tl.html);
-            results.push({ key: `Notes: timeline entry ${outcome} with ${tl.count} value${tl.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+        // values tagged for the insured's / primary contact's timeline: one
+        // organized rich-text entry per record and source site (opportunity,
+        // quote and policy notes are written by the panel once those exist)
+        const noteTargets: { record: "account" | "contact"; id: string | null; label: string }[] = [
+          { record: "account", id: msg.accountId, label: "Insured" },
+          { record: "contact", id: primaryContactId, label: "Primary contact" }
+        ];
+        for (const t of noteTargets) {
+          const tl = buildTimelineNote(app, t.record);
+          if (!tl) continue;
+          if (!t.id) {
+            results.push({ key: `Notes for ${t.label}: no record to attach to`, status: 0, error: "skipped", entityId: null });
+            continue;
           }
-        } catch (e) {
-          results.push({ key: "Notes (timeline)", status: 0, error: String((e as Error).message ?? e), entityId: null });
+          try {
+            const outcome = await deps.upsertRecordNote(env, t.record, t.id, tl.subject, tl.html);
+            results.push({ key: `Notes for ${t.label}: timeline entry ${outcome} with ${tl.count} value${tl.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            results.push({ key: `Notes for ${t.label}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
         }
         return { ok: true, data: results };
       }
@@ -757,6 +774,25 @@ async function cancelPortalPick(tabId: number): Promise<void> {
   });
 }
 
+/** An array mapping's table: its record type ("Related contacts") and the
+ * column name ("First Name"); null for single-record mappings. */
+function arrayTableOf(path: string, catalog: FieldCatalog | null): { title: string; column: string } | null {
+  const crm = /^crm:([a-z]+)\[\]\.([a-z0-9_]+)$/.exec(path);
+  if (crm) {
+    const entity = catalog?.entities.find(e => e.key === crm[1]);
+    const column = entity?.columns.find(c => c.name === crm[2])?.label ?? crm[2]!;
+    const title = (entity?.label ?? crm[1]!).replace(/ \(all rows\)$/, "");
+    return { title: title.charAt(0).toUpperCase() + title.slice(1), column };
+  }
+  const semantic = /^([a-z]+)\[\]\.[a-zA-Z]+$/.exec(path);
+  if (semantic) {
+    const title = semantic[1] === "contacts" ? "Related contacts" : semantic[1] === "vehicles" ? "Vehicles" : semantic[1]!;
+    const label = (PATH_LABEL.get(path) ?? "").replace(/^(Related contact|Vehicle) /i, "");
+    return { title, column: label.charAt(0).toUpperCase() + label.slice(1) };
+  }
+  return null;
+}
+
 /** Peek: every frame outlines its own mapped elements; counts aggregate. A
  * key resolved in ANY frame counts as shown (frames that lack it report it
  * missing), so missing = items found nowhere. */
@@ -830,13 +866,17 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
     try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
   }
   const taught = Object.entries(siteMap)
-    .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || v === NOTE_TARGET))
-    .map(([k, v]) => ({
-      selector: k.slice(5),
+    .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v)))
+    .map(([k, v]) => {
       // note teachings are labeled on the page (column header / field label)
-      label: v === NOTE_TARGET ? "" : PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ?? v.replace(/^crm:/, "").replace("[]", ""),
-      path: v
-    }));
+      if (isNoteTarget(v)) return { selector: k.slice(5), label: "", path: v };
+      const full = PATH_LABEL.get(v) ?? catalogLabel(catalog, v) ?? v.replace(/^crm:/, "").replace("[]", "");
+      // arrays render as their own table: record type = table, column = label
+      const table = arrayTableOf(v, catalog);
+      return table
+        ? { selector: k.slice(5), label: table.column || full, section: table.title, path: v }
+        : { selector: k.slice(5), label: full, path: v };
+    });
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: (t: unknown) => (globalThis as { __bettersPortalIngest?: (t: unknown) => unknown }).__bettersPortalIngest?.(t) ?? null,
@@ -945,6 +985,7 @@ export const realDeps: Deps = {
   createPolicy,
   createQuote,
   fillIfEmpty,
+  upsertRecordNote,
   getFieldCatalog: (env, refresh) => getFieldCatalog(env, { dvJson }, refresh),
   dvQuery: dvJson,
   upsertAccountNote,

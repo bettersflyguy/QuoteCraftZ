@@ -135,10 +135,13 @@ describe("field-map share files", () => {
 
   it("accepts the timeline-note target on taught text only", () => {
     const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
-      "https://ams.example.com": { "pick:#a > td": "note", "text:remarks": "note", "text:fn": "contact.firstName" }
+      "https://ams.example.com": {
+        "pick:#a > td": "note", "pick:#b > td": "note:policy", "pick:#c > td": "note:systemuser",
+        "text:remarks": "note", "text:fn": "contact.firstName"
+      }
     })));
-    expect(parsed.maps["https://ams.example.com"]).toEqual({ "pick:#a > td": "note", "text:fn": "contact.firstName" });
-    expect(parsed.dropped).toBe(1);
+    expect(parsed.maps["https://ams.example.com"]).toEqual({ "pick:#a > td": "note", "pick:#b > td": "note:policy", "text:fn": "contact.firstName" });
+    expect(parsed.dropped).toBe(2);
   });
 
   it("rejects files that are not ours", () => {

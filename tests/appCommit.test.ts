@@ -477,7 +477,8 @@ describe("timeline note (Add to notes)", () => {
       ]
     });
     const note = buildTimelineNote(app)!;
-    expect(note.subject).toBe("QuoteCraftZ: notes (sales.geico.com)");
+    expect(note.subject).toBe("QuoteCraftZ: Non Mapped Timeline Entries (sales.geico.com)");
+    expect(note.html.startsWith("<h2>Non Mapped Timeline Entries</h2>")).toBe(true);
     expect(note.count).toBe(4);
     expect(note.html).toContain("<h3>Notes</h3>");
     expect(note.html).toContain("<td>Customer since</td><td>11/04/2019</td>");
@@ -490,5 +491,24 @@ describe("timeline note (Add to notes)", () => {
     expect(leftovers.body).toContain("Employment Status");
     expect(leftovers.body).not.toContain("Customer since");
     expect(buildTimelineNote(capture())).toBeNull();
+  });
+});
+
+describe("timeline notes per record", () => {
+  it("each record gets only the values tagged for it", () => {
+    const app = capture({
+      fields: [
+        { label: "Customer since", value: "11/04/2019", section: "Notes", group: "", source: "taught", mapped: "note" },
+        { label: "Prior carrier remarks", value: "Non-renewed 2024", section: "Notes", group: "", source: "taught", mapped: "note:policy" },
+        { label: "Best time to call", value: "Evenings", section: "Notes", group: "", source: "taught", mapped: "note:contact" }
+      ]
+    });
+    expect(buildTimelineNote(app, "account")!.html).toContain("Customer since");
+    expect(buildTimelineNote(app, "account")!.html).not.toContain("Prior carrier");
+    expect(buildTimelineNote(app, "policy")!.html).toContain("Non-renewed 2024");
+    expect(buildTimelineNote(app, "contact")!.count).toBe(1);
+    expect(buildTimelineNote(app, "quote")).toBeNull();
+    // none of them leak into the leftovers note
+    expect(buildSupplementalNote(app)).toBeNull();
   });
 });

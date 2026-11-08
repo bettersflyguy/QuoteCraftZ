@@ -163,7 +163,7 @@ function explicitRouting(fields: NormalizableField[]): {
     const path = field.mapped;
     // timeline-note teachings are spoken for (never alias-guessed into a
     // CRM field) but route nowhere: they become the note
-    if (path === "note") { indices.add(index); return; }
+    if (path && /^note(:[a-z]+)?$/.test(path)) { indices.add(index); return; }
     if (!path || !isRoutablePath(path) || !clean(field.value)) return;
     indices.add(index);
     if (paths.has(path)) return;

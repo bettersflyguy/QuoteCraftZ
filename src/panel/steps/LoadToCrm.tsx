@@ -5,7 +5,7 @@ import { ErrorBar } from "../ErrorBar";
 import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages } from "@/crm/dataverse";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { applicantFromIdentity, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -248,11 +248,13 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         }
       }
       const quoteOppId = createdOppId ?? opts?.existingOppId ?? null;
+      const policyIds: string[] = [];
+      let quoteId: string | null = null;
       if (policy.create) {
         for (const pr of policy.rows) {
           if (!pr.number.trim()) continue;
           try {
-            await send<{ policyId: string }>({
+            const createdPolicy = await send<{ policyId: string }>({
               type: "panel/createPolicy",
               fields: {
                 // policy name convention: the policy NUMBER, nothing else
@@ -268,6 +270,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 extra: pr.extra
               }
             });
+            policyIds.push(createdPolicy.policyId);
             rows.push({ key: `Policy: created ${pr.number.trim()}${pr.extra ? "" : " (Active)"}`, status: 204, error: null, entityId: null });
           } catch (e) {
             rows.push({ key: `Policy ${pr.number.trim()}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
@@ -294,9 +297,33 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
               extra: crmGroup(app, "crm:quote") ?? undefined
             }
           });
+          quoteId = q.quoteId;
           rows.push({ key: `Quote: ${carrierName} ${quote.premium || ""} on the opportunity${q.linesWritten ? ` with ${q.linesWritten} coverage lines` : ""} (re-captures update it)`, status: 204, error: null, entityId: null });
         } catch (e) {
           rows.push({ key: "Quote", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
+      }
+      // values tagged for an opportunity / quote / policy timeline land on the
+      // records this load created (or the opportunity the quote attached to)
+      const recordNotes: { record: "opportunity" | "quote" | "policy"; label: string; ids: string[] }[] = [
+        { record: "opportunity", label: "Opportunity", ids: quoteOppId ? [quoteOppId] : [] },
+        { record: "quote", label: "Quote", ids: quoteId ? [quoteId] : [] },
+        { record: "policy", label: "Policy", ids: policyIds }
+      ];
+      for (const rn of recordNotes) {
+        const tl = buildTimelineNote(app, rn.record);
+        if (!tl) continue;
+        if (!rn.ids.length) {
+          rows.push({ key: `Notes for ${rn.label}: no ${rn.label.toLowerCase()} in this load`, status: 0, error: "skipped", entityId: null });
+          continue;
+        }
+        for (const id of rn.ids) {
+          try {
+            const outcome = await send<"created" | "updated">({ type: "panel/upsertNote", record: rn.record, id, subject: tl.subject, html: tl.html });
+            rows.push({ key: `Notes for ${rn.label}: timeline entry ${outcome} with ${tl.count} value${tl.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            rows.push({ key: `Notes for ${rn.label}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
         }
       }
       setResults(rows);

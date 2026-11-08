@@ -3,6 +3,7 @@
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
 import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
+import { noteRecordOf, type NoteRecord } from "@/portal/fieldMaps";
 import type { CapturedApplication } from "@/boldpenguin/types";
 
 /** Fields that describe the insured themselves; data-grid rows (Drivers,
@@ -404,15 +405,19 @@ const TABLE = '<table border="1" cellpadding="4" style="border-collapse:collapse
 
 export interface TimelineNote { subject: string; html: string; count: number }
 
-/** Values the agent tagged "Add to notes (timeline)", gathered into ONE
- * rich-text note per source site, organized like the panel shows them:
+/** Values the agent tagged for a record's timeline ("Notes: Insured",
+ * "Notes: Policy", ...), gathered into ONE rich-text "Non Mapped Timeline
+ * Entries" note per record and source site, organized like the panel:
  * single values as a Field/Value table, grid columns as a table under the
  * grid's title with its real headers. Stable subject, so a re-load updates
  * the same note. */
-export function buildTimelineNote(app: CapturedApplication): TimelineNote | null {
-  const tagged = app.fields.filter(f => f.mapped === "note" && clean(f.value));
+export function buildTimelineNote(app: CapturedApplication, record: NoteRecord = "account"): TimelineNote | null {
+  const tagged = app.fields.filter(f => noteRecordOf(f.mapped) === record && clean(f.value));
   if (!tagged.length) return null;
-  const parts: string[] = [`<p><b>Captured ${html(new Date(app.capturedAt).toLocaleString())} from ${html(app.source.system)}</b></p>`];
+  const parts: string[] = [
+    "<h2>Non Mapped Timeline Entries</h2>",
+    `<p><b>Captured ${html(new Date(app.capturedAt).toLocaleString())} from ${html(app.source.system)}</b></p>`
+  ];
   for (const section of [...new Set(tagged.map(f => f.section))]) {
     const inSection = tagged.filter(f => f.section === section);
     parts.push(`<h3>${html(section || "Notes")}</h3>`);
@@ -432,7 +437,7 @@ export function buildTimelineNote(app: CapturedApplication): TimelineNote | null
     }
   }
   return {
-    subject: `QuoteCraftZ: notes (${app.source.system})`,
+    subject: `QuoteCraftZ: Non Mapped Timeline Entries (${app.source.system})`,
     html: parts.join("").slice(0, 100000),
     count: tagged.length
   };

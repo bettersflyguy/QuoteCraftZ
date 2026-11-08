@@ -353,12 +353,34 @@ export async function getInsuredSourceRecords(
   return { account, contact, riskAnswers, relatedContacts };
 }
 
+/** Timeline-capable records a note can attach to: logical name + entity set
+ * (the annotation's objectid_<logical> binding). */
+export const NOTE_RECORDS = {
+  account: { logical: "account", set: "accounts" },
+  contact: { logical: "contact", set: "contacts" },
+  opportunity: { logical: "opportunity", set: "opportunities" },
+  quote: { logical: "iacrm_quote", set: "iacrm_quotes" },
+  policy: { logical: "iacrm_policy", set: "iacrm_policies" }
+} as const;
+
 /** One evergreen note per subject per account: found by subject -> PATCH,
  * else POST bound to the account. Returns "created" | "updated". */
 export async function upsertAccountNote(
   env: CrmEnvironment, accountId: string, subject: string, text: string,
   legacyMatch?: { prefix: string; suffix: string }
 ): Promise<"created" | "updated"> {
+  return upsertRecordNote(env, "account", accountId, subject, text, legacyMatch);
+}
+
+/** One evergreen note per subject per record (account, contact,
+ * opportunity, quote, policy): found by subject -> PATCH, else POST bound
+ * to the record. */
+export async function upsertRecordNote(
+  env: CrmEnvironment, record: keyof typeof NOTE_RECORDS, id: string, subject: string, text: string,
+  legacyMatch?: { prefix: string; suffix: string }
+): Promise<"created" | "updated"> {
+  const target = NOTE_RECORDS[record];
+  const recordId = id;
   // a renamed subject still finds (and renames) the note an earlier version wrote
   const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
   const subjects = `subject eq ${q(subject)}` + (legacyMatch
@@ -366,7 +388,7 @@ export async function upsertAccountNote(
     : "");
   const { value } = await dvJson<{ value: Record<string, string>[] }>(
     env,
-    `annotations?$select=annotationid&$filter=_objectid_value eq ${accountId} and (${subjects})&$top=1`
+    `annotations?$select=annotationid&$filter=_objectid_value eq ${recordId} and (${subjects})&$top=1`
   );
   if (value[0]) {
     await dv(env, `annotations(${value[0]["annotationid"]})`, {
@@ -379,7 +401,7 @@ export async function upsertAccountNote(
   await dvPost(env, "annotations?$select=annotationid", {
     subject,
     notetext: text,
-    "objectid_account@odata.bind": `/accounts(${accountId})`
+    [`objectid_${target.logical}@odata.bind`]: `/${target.set}(${recordId})`
   });
   return "created";
 }

@@ -101,9 +101,23 @@ export const isRoutablePath = (path: string): boolean =>
  * grid cell it takes the whole column, every row. */
 export const NOTE_TARGET = "note";
 
+/** Which record's timeline a note teaching lands on ("note" = the insured
+ * account, kept for mappings saved before the record choice existed). */
+export type NoteRecord = "account" | "contact" | "opportunity" | "quote" | "policy";
+export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[] = [
+  { value: "note", record: "account", label: "Notes: Insured (account)" },
+  { value: "note:contact", record: "contact", label: "Notes: Primary contact" },
+  { value: "note:opportunity", record: "opportunity", label: "Notes: Opportunity" },
+  { value: "note:quote", record: "quote", label: "Notes: Quote" },
+  { value: "note:policy", record: "policy", label: "Notes: Policy" }
+];
+export const isNoteTarget = (path: string | undefined): boolean => NOTE_TARGETS.some(t => t.value === path);
+export const noteRecordOf = (path: string | undefined): NoteRecord | null =>
+  NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
+
 /** Valid capture (pick-key) target: a known semantic path, a CRM column,
- * or the timeline note. */
-export const isCaptureTarget = (path: string): boolean => PATH_LABEL.has(path) || isCrmTarget(path) || path === NOTE_TARGET;
+ * or a timeline note. */
+export const isCaptureTarget = (path: string): boolean => PATH_LABEL.has(path) || isCrmTarget(path) || isNoteTarget(path);
 
 /** MAP_PATHS partitioned into ordered entity groups for the editor's
  * target dropdowns. */
@@ -214,7 +228,7 @@ export function parseFieldMapImport(text: string): FieldMapImport {
       // "label:" target would invert the data direction
       const pickKey = typeof key === "string" && key.startsWith("pick:");
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
-          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) && !(pickKey && (isCrmTarget(path) || path === NOTE_TARGET))) ||
+          typeof path !== "string" || (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) && !(pickKey && (isCrmTarget(path) || isNoteTarget(path)))) ||
           (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !isCaptureTarget(path))))) {
         dropped += 1;
         continue;

@@ -236,12 +236,17 @@
     if (own && own.querySelector(":scope > th")) {
       return { row: own, headers: Array.from(own.querySelectorAll(":scope > th, :scope > td")).map(headingText) };
     }
+    /* Kendo (NowCerts) puts the header table ~5 levels above the body
+     * table; the header row must have exactly as many cells as a data row */
+    const sample = Array.from(table.querySelectorAll(":scope > tbody > tr, :scope > tr")).find((r) => r.querySelector(":scope > td"));
+    const want = sample ? sample.querySelectorAll(":scope > td").length : 0;
     let node = table.parentElement;
-    for (let hops = 0; node && hops < 3; hops += 1, node = node.parentElement) {
-      const other = Array.from(node.querySelectorAll("table")).find((t) => t !== table && !t.contains(table) && t.querySelector("th"));
-      if (other) {
+    for (let hops = 0; node && hops < 7; hops += 1, node = node.parentElement) {
+      for (const other of node.querySelectorAll("table")) {
+        if (other === table || other.contains(table) || table.contains(other) || !other.querySelector("th")) continue;
         const row = other.querySelector("thead > tr:last-child") || other.querySelector("tr");
-        return { row: null, headers: Array.from(row.querySelectorAll(":scope > th, :scope > td")).map(headingText) };
+        const cells = row ? row.querySelectorAll(":scope > th, :scope > td") : [];
+        if (want && cells.length === want) return { row: null, headers: Array.from(cells).map(headingText) };
       }
     }
     return null;
@@ -251,8 +256,10 @@
   function gridTitle(table, n) {
     const caption = table.querySelector(":scope > caption");
     if (caption && headingText(caption)) return titleCase(headingText(caption));
+    /* NowCerts' panel title (H4 "Vehicles List") sits ~10 levels above the
+     * Kendo body table; the first ancestor holding a preceding title wins */
     let node = table;
-    for (let hops = 0; hops < 6; hops += 1) {
+    for (let hops = 0; hops < 12; hops += 1) {
       node = node.parentElement;
       if (!node) break;
       let best = "";
@@ -619,9 +626,10 @@
         const value = text(el).slice(0, 300);
         return value && taughtValueSafe(el, value) ? value : null;
       };
-      if (path === "note") {
-        /* timeline-note teaching: on a grid cell, the whole column (every
-         * row, under the grid's title and real header); else the one value */
+      if (/^note(:(contact|opportunity|quote|policy))?$/.test(path)) {
+        /* timeline-note teaching ("note" = insured account, "note:<record>"
+         * otherwise): on a grid cell, the whole column (every row, under the
+         * grid's title and real header); else the one value */
         const rows = expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : []);
         const multi = rows.length > 1;
         const first = rows[0] && rows[0].el;
@@ -630,19 +638,22 @@
         const section = table ? gridTitle(table, 0) : "Notes";
         rows.forEach(function (r) {
           const value = row(r.el);
-          if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: "note" });
+          if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: path });
         });
         return;
       }
       const arr = path.match(/^((?:crm:)?[a-z]+)\[\]\.([a-z][a-zA-Z0-9_]{0,99})$/);
       if (arr && ARRAY_SLOTS[arr[1]]) {
-        /* array teaching: pull the taught cell from EVERY repeated row */
+        /* array teaching: pull the taught cell from EVERY repeated row, as
+         * table rows under the record type ("Related contacts" | Row N |
+         * "First Name"), so every array shows as its own table */
         const cfg = ARRAY_SLOTS[arr[1]];
         const rows = expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : []);
+        const section = clean(t.section) || "Records";
         rows.forEach(function (r) {
           const value = row(r.el);
           if (!value) return;
-          out.push({ label: t.label + " " + r.n, value, section: "", group: "", source: "taught",
+          out.push({ label: t.label, value, section, group: "Row " + r.n, source: "taught",
             mapped: cfg.slot + (cfg.start + r.n - 1) + "." + arr[2] });
         });
         return;

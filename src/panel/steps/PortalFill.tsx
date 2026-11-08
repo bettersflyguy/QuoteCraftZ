@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
-import { ArrowDownloadRegular, DatabaseArrowDownRegular, FormRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
+import { ArrowDownloadRegular, DatabaseArrowDownRegular, FormRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { grantActiveTab } from "../portalAccess";
 import { send, PanelError } from "../api";
@@ -10,6 +10,7 @@ import { LoadToCrm } from "./LoadToCrm";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { isGridRow } from "@/boldpenguin/normalize";
+import { NOTE_TARGETS, isNoteTarget } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -46,6 +47,11 @@ const useStyles = makeStyles({
   },
   zebra: { backgroundColor: tokens.colorNeutralBackground2 },
   gridTitle: { fontSize: "12px", fontWeight: 600, marginBottom: "4px" },
+  notesBlock: {
+    display: "flex", flexDirection: "column", gap: "8px", padding: "8px",
+    border: `1px dashed ${tokens.colorNeutralStroke1}`, borderRadius: "4px"
+  },
+  notesTitle: { display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 600 },
   match: {
     display: "flex",
     justifyContent: "space-between",
@@ -75,7 +81,9 @@ function businessName(app: CapturedApplication | null): string | null {
 
 /** Captured data grids (fields grouped "Row N") rebuilt as tables: the
  * grid's own column headers, one line per row, in page order. */
-function gridTables(fields: CapturedApplication["fields"]): { title: string; columns: string[]; rows: Record<string, string>[] }[] {
+interface GridTable { title: string; label?: string; columns: string[]; rows: Record<string, string>[] }
+
+function gridTables(fields: CapturedApplication["fields"]): GridTable[] {
   const out = new Map<string, { columns: string[]; rows: Map<string, Record<string, string>> }>();
   for (const f of fields) {
     if (!isGridRow(f)) continue;
@@ -253,6 +261,30 @@ export function PortalFill({ onChanged, onFlowActive }: {
   };
 
   const name = businessName(app);
+  // values tagged for a timeline note show apart from the regular capture
+  const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped)) : [];
+  const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped)) : [];
+  const renderGrid = (t: GridTable) => (
+    <div key={t.title}>
+      {t.label !== "Notes" && <div className={styles.gridTitle}>{t.title} ({t.rows.length} row{t.rows.length === 1 ? "" : "s"})</div>}
+      <div className={styles.grid}>
+        <table className={styles.table} style={{ tableLayout: "auto", minWidth: "100%" }}>
+          <thead>
+            <tr>{t.columns.map(c => <th key={c} className={styles.th}>{c}</th>)}</tr>
+          </thead>
+          <tbody>
+            {t.rows.map((row, i) => (
+              <tr key={i} className={i % 2 ? styles.zebra : undefined}>
+                {t.columns.map(c => (
+                  <td key={c} className={styles.td} style={{ maxWidth: 180 }} title={row[c] ?? ""}>{row[c] ?? ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   return (
     <div className={styles.root}>
@@ -334,7 +366,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
       {autoCap && live?.replaced && (
         <div className={styles.result}>New person detected. Started a fresh capture.</div>
       )}
-      {app && app.fields.some(f => !isGridRow(f)) && (
+      {app && regular.some(f => !isGridRow(f)) && (
         <div className={styles.grid}>
           <table className={styles.table}>
             <colgroup><col style={{ width: "42%" }} /><col /></colgroup>
@@ -345,7 +377,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
               </tr>
             </thead>
             <tbody>
-              {[...new Set(app.fields.filter(f => !isGridRow(f)).map(f => f.section))].map(section => (
+              {[...new Set(regular.filter(f => !isGridRow(f)).map(f => f.section))].map(section => (
                 <Fragment key={section}>
                   <tr>
                     <td colSpan={2} className={styles.groupCell}>
@@ -357,7 +389,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
                       ) : (section || "Page")}
                     </td>
                   </tr>
-                  {app.fields.filter(f => f.section === section && !isGridRow(f)).map((f, i) => (
+                  {regular.filter(f => f.section === section && !isGridRow(f)).map((f, i) => (
                     <tr key={`${f.label}:${i}`} className={i % 2 ? styles.zebra : undefined}>
                       <td className={styles.td} title={f.group ? `${f.group}: ${f.label}` : f.label}>
                         {f.group ? `${f.group}: ` : ""}{f.label}
@@ -371,27 +403,23 @@ export function PortalFill({ onChanged, onFlowActive }: {
           </table>
         </div>
       )}
-      {app && gridTables(app.fields).map(t => (
-        <div key={t.title}>
-          <div className={styles.gridTitle}>{t.title} ({t.rows.length} row{t.rows.length === 1 ? "" : "s"})</div>
-          <div className={styles.grid}>
-            <table className={styles.table} style={{ tableLayout: "auto", minWidth: "100%" }}>
-              <thead>
-                <tr>{t.columns.map(c => <th key={c} className={styles.th}>{c}</th>)}</tr>
-              </thead>
-              <tbody>
-                {t.rows.map((row, i) => (
-                  <tr key={i} className={i % 2 ? styles.zebra : undefined}>
-                    {t.columns.map(c => (
-                      <td key={c} className={styles.td} style={{ maxWidth: 180 }} title={row[c] ?? ""}>{row[c] ?? ""}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {app && gridTables(regular).map(renderGrid)}
+      {app && noteFields.length > 0 && (
+        <div className={styles.notesBlock}>
+          <div className={styles.notesTitle}><NotepadRegular /> Non Mapped Timeline Entries</div>
+          {NOTE_TARGETS.filter(t => noteFields.some(f => f.mapped === t.value)).map(t => {
+            const forRecord = noteFields.filter(f => f.mapped === t.value);
+            const singles = forRecord.filter(f => !isGridRow(f));
+            return (
+              <div key={t.value}>
+                <div className={styles.gridTitle}>On {t.label.replace(/^Notes: /, "")}</div>
+                {singles.length > 0 && renderGrid({ title: `${t.value}:singles`, label: "Notes", columns: ["Field", "Value"], rows: singles.map(f => ({ Field: f.label, Value: f.value })) })}
+                {gridTables(forRecord).map(renderGrid)}
+              </div>
+            );
+          })}
         </div>
-      ))}
+      )}
       {app && (
         <Checkbox
           checked={overwrite}

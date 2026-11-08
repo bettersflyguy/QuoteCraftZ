@@ -119,3 +119,24 @@ describe("CRM-column array captures", () => {
     ]);
   });
 });
+
+describe("array teachings render as tables", () => {
+  it("emit rows under the record type with plain column names", () => {
+    document.body.innerHTML = `
+      <table id="rc3"><tbody>
+        <tr><td>Alaxander</td><td>T540230618409</td></tr>
+        <tr><td>Elizabeth</td><td>Y000108341300</td></tr>
+      </tbody></table>`;
+    const fields = (globalThis as unknown as { __bettersPortalIngest: (t: unknown) => { fields: { label: string; value: string; section: string; group: string; source: string }[] } })
+      .__bettersPortalIngest([
+        { selector: "#rc3 > tbody > tr:nth-of-type(1) > td:nth-of-type(1)", label: "First Name", section: "Related contacts", path: "crm:contacts[].firstname" },
+        { selector: "#rc3 > tbody > tr:nth-of-type(1) > td:nth-of-type(2)", label: "Drivers License", section: "Related contacts", path: "crm:contacts[].iacrm_dlnumber" }
+      ]).fields.filter(f => f.source === "taught");
+    expect(fields.map(f => [f.section, f.group, f.label, f.value])).toEqual([
+      ["Related contacts", "Row 1", "First Name", "Alaxander"],
+      ["Related contacts", "Row 2", "First Name", "Elizabeth"],
+      ["Related contacts", "Row 1", "Drivers License", "T540230618409"],
+      ["Related contacts", "Row 2", "Drivers License", "Y000108341300"]
+    ]);
+  });
+});
