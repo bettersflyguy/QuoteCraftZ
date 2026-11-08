@@ -617,6 +617,20 @@
         : (inferTextLabel(el) ? inferTextLabel(el) + ": " : "") + (snippet || "(empty)");
       rows.push({ key, label, type: "text", payment: false, autoPath: null, mapped: typeof ov[key] === "string" ? ov[key] : null });
     }
+    /* saved labelled-field teachings ("field:vehicles|vin") list as rows,
+     * named by the field's own label (and its card count) */
+    for (const key of Object.keys(ov)) {
+      if (key.indexOf("field:") !== 0 || seen.has(key)) continue;
+      seen.add(key);
+      const m = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(key);
+      if (!m) continue;
+      const els = typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2]) : [];
+      const name = els.length && typeof globalThis.__bettersFieldLabelText === "function" ? globalThis.__bettersFieldLabelText(els[0]) : "";
+      const label = name
+        ? name + (els.length > 1 ? " (" + els.length + " on this page)" : "")
+        : m[2] + (m[1] ? " (" + m[1] + " page)" : "");
+      rows.push({ key, label, type: "text", payment: false, autoPath: null, mapped: typeof ov[key] === "string" ? ov[key] : null });
+    }
     return rows;
   }
 
@@ -959,7 +973,11 @@
     items.forEach(function (it) {
       if (!it || typeof it.key !== "string") return;
       var els = [];
-      if (it.key.indexOf("pick:") === 0) {
+      var fk = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(it.key);
+      if (fk) {
+        els = (typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2]) : [])
+          .filter(function (e) { return visible(e); });
+      } else if (it.key.indexOf("pick:") === 0) {
         var sel = it.key.slice(5);
         var rows = it.array && typeof globalThis.__bettersExpandTaughtRows === "function"
           ? globalThis.__bettersExpandTaughtRows(sel) : null;
@@ -997,6 +1015,11 @@
     const canon = function (v) { return mapper && mapper.canonical ? mapper.canonical(v) : String(v || "").toLowerCase().trim(); };
     const serviceLabels = new Set(((arg && arg.pageLabels) || []).map(canon));
     Object.keys(keys).forEach(function (k) {
+      const fk = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(k);
+      if (keys[k] && fk && typeof globalThis.__bettersFieldsByLabel === "function") {
+        globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2]).forEach(function (el) { covered.push(el); });
+        return;
+      }
       if (!keys[k] || k.indexOf("pick:") !== 0) return;
       const sel = k.slice(5);
       const multi = /\[\]\.|^note/.test(String(keys[k]));

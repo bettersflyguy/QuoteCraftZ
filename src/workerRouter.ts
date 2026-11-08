@@ -1061,7 +1061,8 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
   const origin = await tabOrigin(tabId);
   const overrides = origin ? await fieldMapFor(origin) : {};
   const app = await getCapturedApplication();
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+  // the ingester names labelled-field rows ("field:vehicles|vin")
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: (p: unknown, ov: unknown) =>
@@ -1344,8 +1345,20 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
         ? { selector: k.slice(5), label: table.column || full, section: table.title, path: v }
         : { selector: k.slice(5), label: full, path: v };
     });
+  // labelled-field teachings ("field:vehicles|vin"): every card's field
+  // with that label on that step, routed like a pick
+  const labelled = Object.entries(siteMap)
+    .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v)))
+    .map(([k, v]) => {
+      const m = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(k);
+      if (!m) return null;
+      const table = arrayTableOf(v, catalog);
+      return { byLabel: m[2]!, page: m[1] ?? "", label: "", path: v, ...(table ? { section: table.title } : {}) };
+    })
+    .filter(Boolean);
+  taught.push(...(labelled as never[]));
   // control mappings (form inputs) route their values on capture as on fill
-  const controls = Object.fromEntries(Object.entries(siteMap).filter(([k, v]) => !k.startsWith("pick:") && v !== "skip"));
+  const controls = Object.fromEntries(Object.entries(siteMap).filter(([k, v]) => !k.startsWith("pick:") && !k.startsWith("field:") && v !== "skip"));
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: (t: unknown, c: unknown) => (globalThis as { __bettersPortalIngest?: (t: unknown, c: unknown) => unknown }).__bettersPortalIngest?.(t, c) ?? null,

@@ -31,6 +31,39 @@ const card = (n: number, vin: string, year: string, make: string) => `
     <mat-form-field class="mat-form-field"><label>* Make</label><mat-select role="combobox"><span>${make}</span></mat-select></mat-form-field>
   </div>`;
 
+describe("labelled-field keys (EZLynx steps)", () => {
+  const ezCard = (n: number, vin: string, year: string) => `
+    <div class="card"><span>Vehicle ${n}</span>
+      <mat-form-field class="mat-mdc-form-field"><label><span>*</span>VIN</label><input name="VIN" id="VIN-${n - 1}" value="${vin}"></mat-form-field>
+      <mat-form-field class="mat-mdc-form-field"><label>Year</label><mat-select role="combobox"><span class="mat-mdc-select-value-text">${year}</span></mat-select></mat-form-field>
+      <mat-form-field class="mat-mdc-form-field"><label># Days/Week</label><mat-select role="combobox"><span class="mat-mdc-select-value-text">5</span></mat-select></mat-form-field>
+    </div>`;
+  const taught = [
+    { byLabel: "vin", page: "vehicles", label: "", path: "note" },
+    { byLabel: "year", page: "vehicles", label: "", path: "note" },
+    { byLabel: "days week", page: "vehicles", label: "", path: "note" }
+  ];
+
+  it("every vehicle card's labelled fields form one Vehicles table", () => {
+    document.title = "Tracy Dittrich - Vehicles";
+    document.body.innerHTML = `<main>${ezCard(1, "2FMDK38C09BA65577", "2009")}${ezCard(2, "2FMDA52207BA05536", "2007")}</main>`;
+    const rows = new Map<string, Record<string, string>>();
+    for (const f of ingest(taught, {}).fields.filter(x => x.mapped === "note")) {
+      expect(f.section).toBe("Vehicles");
+      rows.set(f.group, { ...(rows.get(f.group) ?? {}), [f.label]: f.value });
+    }
+    expect(Object.fromEntries(rows)).toEqual({
+      "Row 1": { VIN: "2FMDK38C09BA65577", Year: "2009", "# Days/Week": "5" },
+      "Row 2": { VIN: "2FMDA52207BA05536", Year: "2007", "# Days/Week": "5" }
+    });
+  });
+
+  it("applies only on its own step", () => {
+    document.title = "Tracy Dittrich - Drivers";
+    expect(ingest(taught, {}).fields.filter(x => x.mapped === "note")).toEqual([]);
+  });
+});
+
 describe("repeated form cards", () => {
   it("VIN, Year and Make of each vehicle share one row of one table", () => {
     document.body.innerHTML = `<main><h1>Auto</h1><div id="cards">${card(1, "2FMDK38C09BA65577", "2009", "FORD")}${card(2, "2FMDA52207BA05536", "2007", "FORD")}</div></main>`;

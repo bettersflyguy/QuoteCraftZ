@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { buildFieldMapExport, isDataServiceTarget, parseFieldMapImport } from "@/portal/fieldMaps";
+import { buildFieldMapExport, fieldKeyOf, isDataServiceTarget, parseFieldMapImport } from "@/portal/fieldMaps";
 import { EZLYNX_FIELDS, effectiveTargets, ezlynxFields } from "@/sources/ezlynxSource";
 import { translateCapturedChoices } from "@/portal/choiceRouting";
 import type { FieldCatalog } from "@/crm/fieldCatalog";
@@ -14,6 +14,16 @@ const file = readFileSync(path.resolve(__dirname, "../public/mappings/quotecraft
 describe("EZLynx share file", () => {
   const parsed = parseFieldMapImport(file);
   const ez = parsed.dataServices["ezlynx"]!;
+
+  it("carries the EZLynx page fields as labelled-field keys", () => {
+    const site = parsed.maps["https://app.ezlynx.com"]!;
+    expect(Object.keys(site).length).toBe(62);
+    expect(site[fieldKeyOf("Vehicles", "VIN")]).toBe("note");
+    expect(site[fieldKeyOf("Vehicles", "# Days/Week")]).toBe("note");
+    expect(site[fieldKeyOf("Policy Info", "Prior Carrier")]).toBe("coverage.currentCarrier");
+    expect(site[fieldKeyOf("Coverage", "Towing & Labor")]).toBe("note:opportunity");
+    expect(Object.keys(site).every(k => k.startsWith("field:"))).toBe(true);
+  });
 
   it("imports every data-service field with a valid target, nothing dropped", () => {
     expect(parsed.dropped).toBe(0);

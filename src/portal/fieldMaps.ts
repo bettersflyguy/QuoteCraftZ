@@ -318,6 +318,14 @@ export interface FieldMapImport {
  * smuggle in a selector LIST or attribute/pseudo selector. */
 const PICK_SEG = String.raw`(?:#(?:[A-Za-z0-9_-]|[ -￿]|\\[0-9a-fA-F]{1,6} ?|\\[^0-9a-fA-F\s])+|[a-z][a-z0-9-]*(?::nth-of-type\(\d+\))?)`;
 const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
+/** "field:<page>|<label>" (or "field:<label>"): lowercase words only. */
+export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?[a-z0-9 ]{1,80}$/;
+
+/** A labelled-field key for a page step and a field label. */
+export function fieldKeyOf(page: string, label: string): string {
+  const k = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return `field:${page ? `${k(page)}|` : ""}${k(label)}`;
+}
 
 /** Parses and validates a share file. Only https origins, known rule paths
  * and "skip" survive - a tampered or stale file degrades to fewer entries,
@@ -347,7 +355,9 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
       // deeper than control keys (hence the longer cap), must fit cssPath's
       // own restricted grammar, and may only target known CRM fields - a
       // "label:" target would invert the data direction
-      const pickKey = typeof key === "string" && key.startsWith("pick:");
+      // "field:<page>|<label>" keys teach capture by label, like a pick
+      const fieldKey = typeof key === "string" && key.startsWith("field:");
+      const pickKey = typeof key === "string" && (key.startsWith("pick:") || fieldKey);
       // secured targets never travel in share files: each agent maps them on
       // their own machine, so a tampered file can't aim an SSN at a field
       if (typeof path === "string" && path.startsWith(SECURE_PREFIX)) { dropped += 1; secured += 1; continue; }
@@ -355,7 +365,7 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
           typeof path !== "string" ||
           (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) &&
             !(pickKey ? isCaptureTarget(path) : isRoutablePath(path) || isNoteTarget(path))) ||
-          (pickKey && (!PICK_SELECTOR.test(key) || (path !== "skip" && !isCaptureTarget(path))))) {
+          (pickKey && (!(fieldKey ? FIELD_KEY.test(key) : PICK_SELECTOR.test(key)) || (path !== "skip" && !isCaptureTarget(path))))) {
         dropped += 1;
         continue;
       }

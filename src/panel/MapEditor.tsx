@@ -288,7 +288,8 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           ? current.slice(6) : null;
         // identifier fields (SSN, ITIN, passport) map ONLY to secured targets
         const identifier = isSensitiveLabel(r.label) || isSecureTarget(current);
-        const isPick = r.key.startsWith("pick:");
+        // picked text and labelled fields are capture teachings
+        const isPick = r.key.startsWith("pick:") || r.key.startsWith("field:");
         // a form control names ONE row of a list ("Driver 2" = row 1 of related contacts)
         const slot = !isPick ? rowTargetOf(current) : null;
         const pickerValue = slot ? slot.arrayPath : current;

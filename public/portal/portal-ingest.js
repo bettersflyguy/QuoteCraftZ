@@ -381,6 +381,45 @@
     return "";
   }
 
+  /* LABELLED-FIELD keys ("field:vehicles|vin"): a field named by its label,
+   * on the page whose title names that step, in every card. Robust where
+   * selectors are not (re-rendered widgets, generated ids) and the same for
+   * every applicant and agent - so they share well. */
+  function labelKey(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+  /* the page's own name: "Tracy Dittrich - Vehicles" -> "Vehicles" */
+  function pageTitle() {
+    const parts = String(document.title || "").split(" - ");
+    const t = clean(parts[parts.length - 1]);
+    return parts.length > 1 && t && t.length <= 40 ? t : pageSection(activeModal());
+  }
+  function fieldsByLabel(key) {
+    const out = [];
+    document.querySelectorAll(FORM_FIELD).forEach((f) => {
+      if (!isVisible(f) || (f.parentElement && f.parentElement.closest(FORM_FIELD))) return;
+      const lab = f.querySelector("label, mat-label, .k-label, legend");
+      if (lab && labelKey(stripMarks(text(lab))) === key) out.push(f);
+    });
+    if (!out.length) {
+      document.querySelectorAll("input, select, textarea").forEach((c) => {
+        const type = (c.getAttribute("type") || "").toLowerCase();
+        if (isVisible(c) && SKIP_TYPES.indexOf(type) < 0 && labelKey(stripMarks(labelFor(c))) === key) out.push(c);
+      });
+    }
+    return inPageOrder(out);
+  }
+  function fieldValue(el) {
+    if (el.matches("input, select, textarea")) return valueOf(el);
+    const shownChoice = el.querySelector(".mat-mdc-select-value-text, .mat-select-value-text, .k-input-value-text, mat-select, [role='combobox']:not(input)");
+    if (shownChoice) return text(shownChoice);
+    const c = el.querySelector("input, select, textarea");
+    return c ? valueOf(c) : "";
+  }
+  function fieldLabelText(el) {
+    if (el.matches("input, select, textarea")) return stripMarks(labelFor(el));
+    const lab = el.querySelector("label, mat-label, .k-label, legend");
+    return lab ? stripMarks(text(lab)) : "";
+  }
+
   /* rows in page order, renumbered 1..n so columns from different fields
    * of the same cards line up */
   function inPageOrder(els) {
@@ -500,7 +539,7 @@
     byKey.forEach((group) => {
       if (group.length < 2) return;
       const ordered = inPageOrder(group.map((g) => g.control));
-      const title = repeatTitle(ordered) || section;
+      const title = repeatTitle(ordered) || pageTitle();
       ordered.forEach((control, i) => {
         const g = group.find((x) => x.control === control);
         g.field.group = "Row " + (i + 1);
@@ -781,9 +820,46 @@
     return null;
   }
 
+  /* one labelled-field teaching ({byLabel, page, path, section}): only on
+   * its own page; every card's instance, in page order; same routing as a
+   * picked field (note table, list rows, or one routed value). Secured
+   * targets never travel this way (share files can't carry them). */
+  function labelledFields(t, out) {
+    const path = typeof t.path === "string" ? t.path : "";
+    if (!path || isSecurePath(path)) return;
+    if (t.page && labelKey(pageTitle()) !== t.page) return;
+    const els = fieldsByLabel(t.byLabel);
+    if (!els.length) return;
+    const label = clean(t.label) || fieldLabelText(els[0]) || t.byLabel;
+    if (PAYMENT_FIELD.test(label) || sensitiveLabel(label)) return;
+    const values = els.map((el) => {
+      const v = fieldValue(el).slice(0, 300);
+      return v && shown(el) && taughtValueSafe(el, v) ? v : "";
+    });
+    const multi = els.length > 1;
+    if (/^note(:(contact|opportunity|quote|policy))?$/.test(path)) {
+      const section = multi ? pageTitle() : "Notes";
+      values.forEach((value, i) => { if (value) out.push({ label, value, section, group: multi ? "Row " + (i + 1) : "", source: "taught", mapped: path }); });
+      return;
+    }
+    const arr = path.match(/^((?:crm:)?[a-z]+)\[\]\.([a-z][a-zA-Z0-9_]{0,99})$/);
+    if (arr && ARRAY_SLOTS[arr[1]]) {
+      const cfg = ARRAY_SLOTS[arr[1]];
+      const section = clean(t.section) || pageTitle();
+      values.forEach((value, i) => {
+        if (value) out.push({ label, value, section, group: "Row " + (i + 1), source: "taught", mapped: cfg.slot + (cfg.start + i) + "." + arr[2] });
+      });
+      return;
+    }
+    if (values[0] && /^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path)) {
+      out.push({ label, value: values[0], section: "", group: "", source: "taught", mapped: path });
+    }
+  }
+
   function taughtFields(taught, secureOut) {
     const out = [];
     (Array.isArray(taught) ? taught : []).forEach((t) => {
+      if (t && typeof t.byLabel === "string" && t.byLabel) { labelledFields(t, out); return; }
       if (!t || typeof t.selector !== "string" || typeof t.label !== "string" || PAYMENT_FIELD.test(t.label)) return;
       const path = typeof t.path === "string" ? t.path : "";
       let anchor = null;
@@ -835,7 +911,7 @@
         const label = clean(t.label) || fieldLabelOf(first) || noteLabel(first) || "Note";
         const table = multi && first ? first.closest("table") : null;
         const section = table ? gridTitle(table, 0)
-          : multi ? (repeatTitle(rows.map((r) => r.el)) || pageSection(activeModal())) : "Notes";
+          : multi ? (repeatTitle(rows.map((r) => r.el)) || pageTitle()) : "Notes";
         rows.forEach(function (r) {
           const value = row(r.el);
           if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: path });
@@ -873,6 +949,10 @@
   /* shared with the mapping editor's peek, so the highlighted rows are
    * exactly the rows a capture would pull */
   globalThis.__bettersExpandTaughtRows = expandTaughtRows;
+  /* labelled-field keys for the filler's peek and the editor's scan */
+  globalThis.__bettersFieldsByLabel = (page, key) =>
+    (page && labelKey(pageTitle()) !== page ? [] : fieldsByLabel(key));
+  globalThis.__bettersFieldLabelText = fieldLabelText;
   globalThis.__bettersCaptureElements = captureElements;
   /* `controls`: the page's saved control mappings. `secure` comes back
    * separately and is never merged into the capture by the worker. */
