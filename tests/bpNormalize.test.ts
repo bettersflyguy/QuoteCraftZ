@@ -146,3 +146,16 @@ describe("CRM-column captures", () => {
     expect(result["crm:systemuser"]).toBeUndefined();
   });
 });
+
+describe("data-grid rows", () => {
+  it("never stand in for the primary insured", () => {
+    const result = normalize([
+      { label: "First Name", value: "Alexander", section: "Drivers list", group: "Row 1" },
+      { label: "Personal E-mail", value: "alex@example.com", section: "Contacts list", group: "Row 1" },
+      { label: "Name", value: "Dittrich, Tracey", section: "Personal insured", group: "" }
+    ]);
+    expect(result["contact"]?.["firstName"]).toBeUndefined();
+    expect(result["contact"]?.["email"]).toBeUndefined();
+    expect(result["contact"]?.["fullName"]).toBe("Dittrich, Tracey");
+  });
+});

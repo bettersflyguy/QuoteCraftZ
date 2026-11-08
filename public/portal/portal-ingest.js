@@ -206,6 +206,91 @@
     return wideRows >= 2;
   }
 
+  /* --- data grids (Vehicles, Drivers, Policies, Contacts lists): captured
+   * as ARRAYS. Every row becomes fields grouped "Row N" under the grid's own
+   * title, labeled with the grid's own column headers, so the panel can show
+   * the grid as its own table and nothing is flattened or lost. --- */
+  const MAX_GRIDS = 8;
+  const MAX_GRID_ROWS = 50;
+
+  function titleCase(t) {
+    return t === t.toUpperCase() && /[A-Z]/.test(t) ? t.charAt(0) + t.slice(1).toLowerCase() : t;
+  }
+
+  /* the grid's column headers: its own header row, or (split-header grids
+   * such as Kendo) the header table that sits beside the body table */
+  function gridHeaders(table) {
+    const own = table.querySelector(":scope > thead > tr:last-child") ||
+      Array.from(table.querySelectorAll(":scope > tbody > tr, :scope > tr")).find((r) => r.querySelector(":scope > th"));
+    if (own && own.querySelector(":scope > th")) {
+      return { row: own, headers: Array.from(own.querySelectorAll(":scope > th, :scope > td")).map(headingText) };
+    }
+    let node = table.parentElement;
+    for (let hops = 0; node && hops < 3; hops += 1, node = node.parentElement) {
+      const other = Array.from(node.querySelectorAll("table")).find((t) => t !== table && !t.contains(table) && t.querySelector("th"));
+      if (other) {
+        const row = other.querySelector("thead > tr:last-child") || other.querySelector("tr");
+        return { row: null, headers: Array.from(row.querySelectorAll(":scope > th, :scope > td")).map(headingText) };
+      }
+    }
+    return null;
+  }
+
+  /* the grid's name: the closest heading/panel title BEFORE it */
+  function gridTitle(table, n) {
+    const caption = table.querySelector(":scope > caption");
+    if (caption && headingText(caption)) return titleCase(headingText(caption));
+    let node = table;
+    for (let hops = 0; hops < 6; hops += 1) {
+      node = node.parentElement;
+      if (!node) break;
+      let best = "";
+      node.querySelectorAll("h1, h2, h3, h4, h5, h6, legend, [class*='title'], [class*='header'], [class*='caption']").forEach((c) => {
+        if (c.contains(table) || c.closest("table") || c.querySelector("table")) return;
+        if (!(c.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+        const t = headingText(c);
+        if (t.length >= 2 && t.length <= 60) best = t;
+      });
+      if (best) return titleCase(best);
+    }
+    return "Table " + n;
+  }
+
+  function cellValue(td) {
+    const t = clean(headingText(td).replace(/(^|\s)\+(?=\s|$)/g, " ")).replace(/\s+,/g, ",").replace(/,$/, "");
+    if (t) return t;
+    const box = td.querySelector("input[type='checkbox'], [role='checkbox']");
+    if (box) return box.checked === true || box.getAttribute("aria-checked") === "true" ? "Yes" : "No";
+    return "";
+  }
+
+  function collectGrids(root, fields) {
+    let n = 0;
+    const seen = new Set();
+    for (const table of root.querySelectorAll("table")) {
+      if (n >= MAX_GRIDS) break;
+      if (!isVisible(table) || inConsentUi(table) || seen.has(table)) continue;
+      const head = gridHeaders(table);
+      if (!head) continue;
+      const headers = head.headers.map((h) => clean(h));
+      if (headers.length < 3 || headers.filter(Boolean).length < 2) continue;
+      const rows = Array.from(table.querySelectorAll(":scope > tbody > tr, :scope > tr"))
+        .filter((r) => r !== head.row && isVisible(r) && r.querySelectorAll(":scope > td").length === headers.length);
+      if (!rows.length) continue;
+      seen.add(table);
+      n += 1;
+      const title = gridTitle(table, n);
+      rows.slice(0, MAX_GRID_ROWS).forEach((row, i) => {
+        const cells = row.querySelectorAll(":scope > td");
+        headers.forEach((label, c) => {
+          if (!label || GRID_CHROME_LABEL.test(label) || PAYMENT_FIELD.test(label)) return;
+          const value = cellValue(cells[c]).slice(0, 300);
+          if (value) fields.push({ label, value, section: title, group: "Row " + (i + 1), source: "table" });
+        });
+      });
+    }
+  }
+
   function collect() {
     const modal = activeModal();
     const section = pageSection(modal);
@@ -236,6 +321,8 @@
       const value = term.nextElementSibling && term.nextElementSibling.matches("dd") ? term.nextElementSibling : null;
       if (value) fields.push({ label: text(term), value: text(value), section, group: "", source: "definition-list" });
     });
+
+    collectGrids(root, fields);
 
     root.querySelectorAll("tr").forEach((row) => {
       if (!isVisible(row)) return;
@@ -339,7 +426,9 @@
     if (pol) salePush("Policy Number", pol[1]);
     /* raw VINs (17 chars, no I/O/Q) - servicing pages print them bare */
     let vinN = 0;
-    for (const vm of bodyText.matchAll(/(?:^|[\s#])([A-HJ-NPR-Z0-9]{17})(?=\s|$)/g)) {
+    /* a vehicles grid already carries its VINs with their vehicles */
+    const gridVins = fields.some((f) => /^Row \d+$/.test(f.group) && /\bvin\b/i.test(f.label));
+    for (const vm of gridVins ? [] : bodyText.matchAll(/(?:^|[\s#])([A-HJ-NPR-Z0-9]{17})(?=\s|$)/g)) {
       if (/[A-HJ-NPR-Z]/.test(vm[1]) && /\d/.test(vm[1])) {
         vinN += 1;
         if (vinN > 6) break;

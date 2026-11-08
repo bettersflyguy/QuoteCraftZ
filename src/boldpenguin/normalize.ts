@@ -100,10 +100,16 @@ export interface NormalizableField {
   value: string;
   name?: string;
   section?: string;
+  /** "Row N" for a data-grid row (Drivers, Vehicles lists): array records,
+   * never alias-guessed into the primary insured's identity. */
+  group?: string;
   /** Explicit rule path (agent-taught capture) - routed directly, never
    * alias-scored. Only known MAP_PATHS paths are honored. */
   mapped?: string;
 }
+
+/** A data-grid row field (group "Row N"). */
+export const isGridRow = (field: { group?: string }): boolean => /^Row \d+$/.test(field.group ?? "");
 
 /** Well-known CRM columns that ALSO feed the semantic pipeline - identity
  * review, duplicate gate, contact dedupe, policy draft and portal fill all
@@ -184,7 +190,7 @@ export function claimedIndices(fields: NormalizableField[], pathPrefixes: string
     if (!pathPrefixes.some(p => path.startsWith(p))) continue;
     let best: { index: number; score: number } | null = null;
     fields.forEach((field, index) => {
-      if (claimed.has(index) || explicit.indices.has(index) || !clean(field.value)) return;
+      if (claimed.has(index) || explicit.indices.has(index) || isGridRow(field) || !clean(field.value)) return;
       const label = canonical([field.label, field.name, field.section].filter(Boolean).join(" "));
       if (excludes[path]?.test(label)) return;
       const fieldScore = Math.max(...aliases.map(alias => score(label, canonical(alias))));
@@ -210,7 +216,7 @@ export function normalize(fields: NormalizableField[]): NormalizedApplication {
     if (explicit.paths.has(path)) continue;
     let best: { index: number; score: number; value: string } | null = null;
     fields.forEach((field, index) => {
-      if (claimed.has(index) || !clean(field.value)) return;
+      if (claimed.has(index) || isGridRow(field) || !clean(field.value)) return;
       const label = canonical([field.label, field.name, field.section].filter(Boolean).join(" "));
       if (excludes[path]?.test(label)) return;
       const fieldScore = Math.max(...aliases.map(alias => score(label, canonical(alias))));

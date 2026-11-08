@@ -2,8 +2,12 @@
  * the non-EZLynx twin of the quote commit: insured enrichment from the
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
-import { canonical, claimedIndices, clean } from "@/boldpenguin/normalize";
+import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
 import type { CapturedApplication } from "@/boldpenguin/types";
+
+/** Fields that describe the insured themselves; data-grid rows (Drivers,
+ * Vehicles, Policies lists) are records and never stand in for them. */
+const flatFields = (app: CapturedApplication) => app.fields.filter(f => !isGridRow(f));
 import type { CapturedApplicant } from "@/types";
 import { upsertKnowledge, type AnswerSpec, type KnowledgeApi, type KnowledgeWriteResult, type QuestionSpec } from "./knowledge";
 import type { CrmEnvironment } from "./environments";
@@ -31,17 +35,17 @@ const digitsOf = (v: string | null) => (v ?? "").replace(/\D/g, "");
  * "Phone Type" select ("Cellular telephone") with the number in a separate
  * control - a value without >=7 digits is a TYPE, never a number. */
 export function detectPhone(app: CapturedApplication): { number: string; isMobile: boolean } | null {
-  const typeField = app.fields.find(f => /\bphone\s*type\b|\btype\s*of\s*phone\b/i.test(f.label));
+  const typeField = flatFields(app).find(f => /\bphone\s*type\b|\btype\s*of\s*phone\b/i.test(f.label));
   const typeSaysMobile = Boolean(typeField && /cell|mobile|wireless/i.test(typeField.value));
 
   const normalized = str(app, "contact", "phone");
   if (normalized && digitsOf(normalized).length >= 7) return { number: normalized, isMobile: typeSaysMobile };
 
-  const mobileField = app.fields.find(f =>
+  const mobileField = flatFields(app).find(f =>
     /\b(cell|mobile|cellular)\b/i.test(f.label) && /phone|number|telephone/i.test(f.label + " phone") && digitsOf(f.value).length >= 7);
   if (mobileField) return { number: clean(mobileField.value), isMobile: true };
 
-  const anyField = app.fields.find(f => /\bphone\b|\btelephone\b/i.test(f.label) && !/\btype\b/i.test(f.label) && digitsOf(f.value).length >= 7);
+  const anyField = flatFields(app).find(f => /\bphone\b|\btelephone\b/i.test(f.label) && !/\btype\b/i.test(f.label) && digitsOf(f.value).length >= 7);
   if (anyField) return { number: clean(anyField.value), isMobile: typeSaysMobile };
   return null;
 }
@@ -123,7 +127,7 @@ function stripNameDecorations(v: string): string {
 function emailFromCapture(app: CapturedApplication): string {
   const mapped = clean(str(app, "contact", "email") ?? "");
   if (EMAIL_RX.test(mapped)) return mapped;
-  const row = app.fields.find(f => /e-?mail/i.test(f.label) && EMAIL_RX.test(clean(f.value)));
+  const row = flatFields(app).find(f => /e-?mail/i.test(f.label) && EMAIL_RX.test(clean(f.value)));
   return row ? clean(row.value) : "";
 }
 
@@ -140,7 +144,7 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
     // the BUSINESS name is never a person ("B H Towing Service" must not
     // become first "B", last "Service").
     const candidates = [
-      ...app.fields.filter(f => /^(name|full name|policyholder name|insured name)$/i.test(clean(f.label))).map(f => f.value),
+      ...flatFields(app).filter(f => /^(name|full name|policyholder name|insured name)$/i.test(clean(f.label))).map(f => f.value),
       str(app, "contact", "fullName") ?? ""
     ];
     const person = candidates.map(v => stripNameDecorations(clean(v))).find(v => v && (!bizCanon || canonical(v) !== bizCanon));
@@ -314,7 +318,7 @@ export interface PolicyDraft {
 }
 
 function fieldValue(app: CapturedApplication, labelRe: RegExp): string {
-  const f = app.fields.find(x => labelRe.test(x.label) && x.value);
+  const f = flatFields(app).find(x => labelRe.test(x.label) && x.value);
   return f ? clean(f.value) : "";
 }
 
@@ -334,7 +338,7 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
   if (!expirationDate && effectiveDate) {
     // sale screens rarely print the expiration - derive it from the term
     // ("Policy Term: 6 months" / "6 Month Auto Premium")
-    const termField = app.fields.find(f => /\b(6|12)\s*[- ]?month/i.test(`${f.label} ${f.value}`));
+    const termField = flatFields(app).find(f => /\b(6|12)\s*[- ]?month/i.test(`${f.label} ${f.value}`));
     const termText = fieldValue(app, /policy\s*term/i) || (termField ? `${termField.label} ${termField.value}` : "");
     const term = termText.match(/\b(6|12)\b/);
     if (term) expirationDate = addMonthsUs(effectiveDate, Number(term[1]));
@@ -414,7 +418,7 @@ export function guessInsuredType(app: CapturedApplication): 1 | 2 {
  * label ("Bodily Injury Liability (BI)" -> BI), else initials. Values stay
  * verbatim in limitText. */
 export function coverageLinesFromCapture(app: CapturedApplication): { code: string; label: string; limitText: string }[] {
-  return app.fields
+  return flatFields(app)
     .filter(f => /\$\s*[\d,]/.test(f.value) || /coverage|liabilit|deductible|csl|\bum\b|uim|pip|medical|physical damage|comprehensive|collision|limit/i.test(f.label))
     .filter(f => !/total.*premium|due today|policy term/i.test(f.label))
     .map(f => {
@@ -472,7 +476,7 @@ export function quoteFromCapture(app: CapturedApplication): QuoteDraft {
   const policy = policyFromCapture(app);
   const premium = str(app, "policy", "premium") ||
     fieldValue(app, /total\s+(annual\s+)?premium|^premium$/i);
-  const lines = app.fields
+  const lines = flatFields(app)
     .filter(f => /\$\s*[\d,]/.test(f.value) || /coverage|liabilit|deductible|csl|\bum\b|uim|pip|medical|physical damage|comprehensive|collision|limit/i.test(f.label))
     .map(f => `${f.label}: ${f.value}`);
   return {
@@ -510,7 +514,9 @@ export async function writeApplicationKnowledge(
 
   for (const field of app.fields) {
     if (field.section === "Related contacts") continue; // CRM-sourced context, not risk data
-    const label = clean(field.label);
+    // grid rows are records: "Vehicles list Row 2: VIN" is its own answer,
+    // never collapsed into Row 1's VIN
+    const label = isGridRow(field) ? clean(`${field.section} ${field.group}: ${field.label}`) : clean(field.label);
     const value = clean(field.value);
     const key = `capture:${canonical(label)}`.slice(0, 100);
     if (key === "capture:" || !value || seen.has(key)) continue;

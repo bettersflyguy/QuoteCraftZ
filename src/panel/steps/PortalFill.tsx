@@ -9,6 +9,7 @@ import { exportCaptureToExcel } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
+import { isGridRow } from "@/boldpenguin/normalize";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -44,6 +45,7 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`, borderRight: `1px solid ${tokens.colorNeutralStroke2}`
   },
   zebra: { backgroundColor: tokens.colorNeutralBackground2 },
+  gridTitle: { fontSize: "12px", fontWeight: 600, marginBottom: "4px" },
   match: {
     display: "flex",
     justifyContent: "space-between",
@@ -70,6 +72,20 @@ function businessName(app: CapturedApplication | null): string | null {
   return typeof name === "string" && name ? name : null;
 }
 
+
+/** Captured data grids (fields grouped "Row N") rebuilt as tables: the
+ * grid's own column headers, one line per row, in page order. */
+function gridTables(fields: CapturedApplication["fields"]): { title: string; columns: string[]; rows: Record<string, string>[] }[] {
+  const out = new Map<string, { columns: string[]; rows: Map<string, Record<string, string>> }>();
+  for (const f of fields) {
+    if (!isGridRow(f)) continue;
+    const t = out.get(f.section) ?? out.set(f.section, { columns: [], rows: new Map() }).get(f.section)!;
+    if (!t.columns.includes(f.label)) t.columns.push(f.label);
+    const row = t.rows.get(f.group) ?? t.rows.set(f.group, {}).get(f.group)!;
+    row[f.label] = f.value;
+  }
+  return [...out.entries()].map(([title, t]) => ({ title, columns: t.columns, rows: [...t.rows.values()] }));
+}
 
 /** Icon-only action with its description as the hover tooltip. Disabled
  * actions stay hoverable so the tooltip still says why/what. */
@@ -318,7 +334,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
       {autoCap && live?.replaced && (
         <div className={styles.result}>New person detected. Started a fresh capture.</div>
       )}
-      {app && (
+      {app && app.fields.some(f => !isGridRow(f)) && (
         <div className={styles.grid}>
           <table className={styles.table}>
             <colgroup><col style={{ width: "42%" }} /><col /></colgroup>
@@ -329,7 +345,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
               </tr>
             </thead>
             <tbody>
-              {[...new Set(app.fields.map(f => f.section))].map(section => (
+              {[...new Set(app.fields.filter(f => !isGridRow(f)).map(f => f.section))].map(section => (
                 <Fragment key={section}>
                   <tr>
                     <td colSpan={2} className={styles.groupCell}>
@@ -341,7 +357,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
                       ) : (section || "Page")}
                     </td>
                   </tr>
-                  {app.fields.filter(f => f.section === section).map((f, i) => (
+                  {app.fields.filter(f => f.section === section && !isGridRow(f)).map((f, i) => (
                     <tr key={`${f.label}:${i}`} className={i % 2 ? styles.zebra : undefined}>
                       <td className={styles.td} title={f.group ? `${f.group}: ${f.label}` : f.label}>
                         {f.group ? `${f.group}: ` : ""}{f.label}
@@ -355,6 +371,27 @@ export function PortalFill({ onChanged, onFlowActive }: {
           </table>
         </div>
       )}
+      {app && gridTables(app.fields).map(t => (
+        <div key={t.title}>
+          <div className={styles.gridTitle}>{t.title} ({t.rows.length} row{t.rows.length === 1 ? "" : "s"})</div>
+          <div className={styles.grid}>
+            <table className={styles.table} style={{ tableLayout: "auto", minWidth: "100%" }}>
+              <thead>
+                <tr>{t.columns.map(c => <th key={c} className={styles.th}>{c}</th>)}</tr>
+              </thead>
+              <tbody>
+                {t.rows.map((row, i) => (
+                  <tr key={i} className={i % 2 ? styles.zebra : undefined}>
+                    {t.columns.map(c => (
+                      <td key={c} className={styles.td} style={{ maxWidth: 180 }} title={row[c] ?? ""}>{row[c] ?? ""}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
       {app && (
         <Checkbox
           checked={overwrite}

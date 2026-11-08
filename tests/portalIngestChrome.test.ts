@@ -48,7 +48,7 @@ const PAGE = `
 describe("ingest skips page chrome", () => {
   it("names the section from the heading's own words, not its toolbar", () => {
     document.body.innerHTML = PAGE;
-    const sections = new Set(ingest().fields.map(f => f.section));
+    const sections = new Set(ingest().fields.filter(f => !/^Row \d+$/.test((f as { group?: string }).group ?? "")).map(f => f.section));
     expect([...sections]).toEqual(["Dittrich, Tracey"]);
   });
 
@@ -65,5 +65,60 @@ describe("ingest skips page chrome", () => {
     for (const junk of ["Show Archived", "Page Size", "Select All Rows", "Select Row", "row menu"]) {
       expect(controls.some(c => c.startsWith(junk + "="))).toBe(false);
     }
+  });
+});
+
+type GridField = Field & { group: string };
+const gridOf = (fields: GridField[], title: string) => {
+  const rows = new Map<string, Record<string, string>>();
+  for (const f of fields.filter(x => x.section === title && /^Row \d+$/.test(x.group))) {
+    rows.set(f.group, { ...(rows.get(f.group) ?? {}), [f.label]: f.value });
+  }
+  return [...rows.values()];
+};
+
+const LISTS = `
+  <main>
+    <div class="panel">
+      <div class="panel-heading"><span class="panel-title">VEHICLES LIST</span> <a class="btn">+ Add New</a></div>
+      <table>
+        <thead><tr><th></th><th>Visible</th><th>Type</th><th>VIN</th><th>Make</th><th>Year</th></tr></thead>
+        <tbody>
+          <tr><td><select aria-label="Actions"><option>Edit</option></select></td><td><input type="checkbox" checked disabled></td><td>Other</td><td>JTMBF4DV4A5030644</td><td>TOYOTA</td><td>2010</td></tr>
+          <tr><td><select aria-label="Actions"><option>Edit</option></select></td><td><input type="checkbox" checked disabled></td><td>Other</td><td>5TDDKRFH9FS121015</td><td>TOYOTA</td><td>2015</td></tr>
+          <tr style="display:none"><td></td><td></td><td>Hidden</td><td>X</td><td>X</td><td>X</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="panel-heading"><span class="panel-title">POLICIES LIST</span></div>
+      <div class="k-grid">
+        <div class="k-grid-header"><table><thead><tr><th></th><th>Number</th><th>Eff. Date</th><th>Premium</th><th>Status</th></tr></thead></table></div>
+        <div class="k-grid-content"><table><tbody>
+          <tr><td><select aria-label="Actions"><option>Edit</option></select></td><td><a>989815765</a> , <a>989815765</a> <button>+</button></td><td>06/01/2026</td><td>$2,692.00</td><td>Active</td></tr>
+          <tr><td><select aria-label="Actions"><option>Edit</option></select></td><td><a>502346899300</a></td><td>02/01/2026</td><td>$3,892.14</td><td>Active</td></tr>
+        </tbody></table></div>
+      </div>
+    </div>
+  </main>`;
+
+describe("data grids are captured as arrays", () => {
+  it("captures every visible row under the grid's own title and column headers", () => {
+    document.body.innerHTML = LISTS;
+    const fields = ingest().fields as GridField[];
+    expect(gridOf(fields, "Vehicles list")).toEqual([
+      { Visible: "Yes", Type: "Other", VIN: "JTMBF4DV4A5030644", Make: "TOYOTA", Year: "2010" },
+      { Visible: "Yes", Type: "Other", VIN: "5TDDKRFH9FS121015", Make: "TOYOTA", Year: "2015" }
+    ]);
+    // the loose page-text VIN scan stays quiet when a grid carries the VINs
+    expect(fields.some(f => /^VIN( \d)?$/.test(f.label) && f.group === "")).toBe(false);
+  });
+
+  it("reads split-header (Kendo) grids and strips row buttons from cell text", () => {
+    document.body.innerHTML = LISTS;
+    expect(gridOf(ingest().fields as GridField[], "Policies list")).toEqual([
+      { Number: "989815765, 989815765", "Eff. Date": "06/01/2026", Premium: "$2,692.00", Status: "Active" },
+      { Number: "502346899300", "Eff. Date": "02/01/2026", Premium: "$3,892.14", Status: "Active" }
+    ]);
   });
 });
