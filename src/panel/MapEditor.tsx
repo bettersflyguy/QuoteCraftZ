@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CursorClickRegular, EyeFilled, EyeRegular, StopRegular } from "@fluentui/react-icons";
+import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, StopRegular } from "@fluentui/react-icons";
 import { TargetPicker } from "./TargetPicker";
-import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
+import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import { MAP_PATH_GROUPS, PATH_LABEL, isArrayPath } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -265,6 +265,11 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                   currentText={orphanLabel ? `${orphanLabel} (saved; not in current capture)` : undefined}
                 />
               )}
+            {!r.payment && current && (
+              <Tooltip content="Delete this mapping (saved with Save mapping)" relationship="label" withArrow>
+                <Button size="small" appearance="subtle" icon={<DeleteRegular />} onClick={() => setTarget(r.key, "")} />
+              </Tooltip>
+            )}
           </div>
         );
       })}

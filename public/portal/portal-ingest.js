@@ -156,10 +156,54 @@
     return null;
   }
 
+  /* a heading's OWN words: AMS title bars carry their toolbar inside the
+   * heading element ("Dittrich, Tracey SEND CERTIFICATE RATE! ACTIONS EDIT"),
+   * so text inside buttons, menus and toolbars is left out */
+  const HEADING_CHROME = "button, select, input, textarea, svg, [role='button'], [role='menu'], [role='menubar'], [role='toolbar'], [class*='btn'], [class*='dropdown'], [class*='toolbar']";
+  function headingText(el) {
+    if (!el) return "";
+    const parts = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const p = n.parentElement;
+      if (!p || !isVisible(p)) continue;
+      const chrome = p.closest(HEADING_CHROME);
+      if (chrome && chrome !== el && el.contains(chrome)) continue;
+      parts.push(n.textContent);
+    }
+    return clean(parts.join(" "));
+  }
+
   function pageSection(scope) {
-    const heading = (scope || document).querySelector("h1, h2, h3, [class*='title']") ||
-      document.querySelector("main h1, main h2, h1, h2");
-    return text(heading) || location.hostname;
+    for (const root of [scope || document, document]) {
+      for (const h of root.querySelectorAll("h1, h2, h3, [class*='title']")) {
+        if (!isVisible(h)) continue;
+        const t = headingText(h);
+        if (t.length >= 2 && t.length <= 80) return t;
+      }
+    }
+    return location.hostname;
+  }
+
+  /* data-grid and toolbar chrome is not insured data: row selectors, "Select
+   * All", per-row Actions menus, view settings (Show Archived, Page Size).
+   * Only checkboxes/dropdowns are judged by placement - editable TEXT inputs
+   * inside grids (driver/vehicle tables on quote forms) are real data. */
+  const GRID_CHROME_LABEL = /^(select( all)?( rows?)?|select row|actions?|show (archived|inactive|deleted|all)|page size|rows per page|items per page|per page|show entries|sort( by)?|group by|columns?)$/i;
+  function isGridChrome(control, label) {
+    if (GRID_CHROME_LABEL.test(clean(label))) return true;
+    const type = (control.getAttribute("type") || "").toLowerCase();
+    const role = (control.getAttribute("role") || "").toLowerCase();
+    const choice = control.tagName === "SELECT" || type === "checkbox" || ["checkbox", "switch", "combobox"].includes(role);
+    if (!choice) return false;
+    if (control.closest("[role='grid'], [role='treegrid'], [role='toolbar'], thead, [class*='k-grid'], [class*='toolbar'], [class*='pager'], [class*='pagination'], [class*='dataTables']")) return true;
+    /* a table with 2+ rows of 3+ cells is a data grid; forms laid out as
+     * label/value tables have 2 cells per row and keep their controls */
+    const table = control.closest("table");
+    if (!table) return false;
+    let wideRows = 0;
+    table.querySelectorAll("tr").forEach((r) => { if (r.querySelectorAll(":scope > td, :scope > th").length >= 3) wideRows += 1; });
+    return wideRows >= 2;
   }
 
   function collect() {
@@ -175,6 +219,7 @@
       .forEach((control) => {
         const label = clean(labelFor(control));
         if (PAYMENT_FIELD.test(label) || PAYMENT_FIELD.test(clean(control.name || control.id))) return;
+        if (isGridChrome(control, label)) return;
         fields.push({ label, value: valueFor(control), name: clean(control.name || control.id), section, group: "", source: "control" });
       });
 
