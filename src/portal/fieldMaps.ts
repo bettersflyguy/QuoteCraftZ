@@ -35,18 +35,12 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "address.city", label: "City", group: "Primary address (account)" },
   { path: "address.state", label: "State", group: "Primary address (account)" },
   { path: "address.postalCode", label: "ZIP code", group: "Primary address (account)" },
-  { path: "contact2.firstName", label: "Contact 2 first name", group: "Related contact 2" },
-  { path: "contact2.lastName", label: "Contact 2 last name", group: "Related contact 2" },
-  { path: "contact2.fullName", label: "Contact 2 full name", group: "Related contact 2" },
-  { path: "contact2.email", label: "Contact 2 email", group: "Related contact 2" },
-  { path: "contact2.phone", label: "Contact 2 phone", group: "Related contact 2" },
-  { path: "contact2.dateOfBirth", label: "Contact 2 date of birth", group: "Related contact 2" },
-  { path: "contact3.firstName", label: "Contact 3 first name", group: "Related contact 3" },
-  { path: "contact3.lastName", label: "Contact 3 last name", group: "Related contact 3" },
-  { path: "contact3.fullName", label: "Contact 3 full name", group: "Related contact 3" },
-  { path: "contact3.email", label: "Contact 3 email", group: "Related contact 3" },
-  { path: "contact3.phone", label: "Contact 3 phone", group: "Related contact 3" },
-  { path: "contact3.dateOfBirth", label: "Contact 3 date of birth", group: "Related contact 3" },
+  { path: "contacts[].firstName", label: "Related contact first name", group: "Related contacts (all rows)" },
+  { path: "contacts[].lastName", label: "Related contact last name", group: "Related contacts (all rows)" },
+  { path: "contacts[].fullName", label: "Related contact full name", group: "Related contacts (all rows)" },
+  { path: "contacts[].email", label: "Related contact email", group: "Related contacts (all rows)" },
+  { path: "contacts[].phone", label: "Related contact phone", group: "Related contacts (all rows)" },
+  { path: "contacts[].dateOfBirth", label: "Related contact date of birth", group: "Related contacts (all rows)" },
   { path: "policy.number", label: "Policy number", group: "Policy" },
   { path: "policy.premium", label: "Policy premium", group: "Policy" },
   { path: "coverage.effectiveDate", label: "Effective date", group: "Quote & coverage" },
@@ -62,16 +56,27 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "building.totalSquareFeet", label: "Total square feet", group: "Building (risk data)" },
   { path: "building.yearBuilt", label: "Year built", group: "Building (risk data)" },
   { path: "building.constructionType", label: "Construction type", group: "Building (risk data)" },
-  { path: "vehicle1.year", label: "Vehicle 1 year", group: "Vehicle 1 (risk data)" },
-  { path: "vehicle1.make", label: "Vehicle 1 make", group: "Vehicle 1 (risk data)" },
-  { path: "vehicle1.model", label: "Vehicle 1 model", group: "Vehicle 1 (risk data)" },
-  { path: "vehicle1.vin", label: "Vehicle 1 VIN", group: "Vehicle 1 (risk data)" },
-  { path: "vehicle2.year", label: "Vehicle 2 year", group: "Vehicle 2 (risk data)" },
-  { path: "vehicle2.make", label: "Vehicle 2 make", group: "Vehicle 2 (risk data)" },
-  { path: "vehicle2.model", label: "Vehicle 2 model", group: "Vehicle 2 (risk data)" },
-  { path: "vehicle2.vin", label: "Vehicle 2 VIN", group: "Vehicle 2 (risk data)" }
+  { path: "vehicles[].year", label: "Vehicle year", group: "Vehicles (all rows, risk data)" },
+  { path: "vehicles[].make", label: "Vehicle make", group: "Vehicles (all rows, risk data)" },
+  { path: "vehicles[].model", label: "Vehicle model", group: "Vehicles (all rows, risk data)" },
+  { path: "vehicles[].vin", label: "Vehicle VIN", group: "Vehicles (all rows, risk data)" }
 ];
 export const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
+
+/** Array relationship ("contacts[].email"): teaching ONE row's cell makes the
+ * capture pull that cell from EVERY row of the repeated structure. Array
+ * targets are capture-only — a fill can't know which row to write. */
+export const isArrayPath = (path: string): boolean => path.includes("[].");
+
+/** Concrete per-row slots an array capture fans out into ("contact2.email",
+ * "vehicle5.vin"; contact1 is reserved for the primary insured). */
+const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin))$/;
+
+/** Paths the normalizer may route an explicitly mapped field to: the editor
+ * vocabulary (minus array forms, which fan out before normalize sees them)
+ * plus the concrete per-row slots. */
+export const isRoutablePath = (path: string): boolean =>
+  (PATH_LABEL.has(path) && !isArrayPath(path)) || SLOT_PATH.test(path);
 
 /** MAP_PATHS partitioned into ordered entity groups for the editor's
  * target dropdowns. */

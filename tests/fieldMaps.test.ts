@@ -129,16 +129,16 @@ describe("field-map share files", () => {
     }
   });
 
-  it("accepts entity-slot targets (related contacts, vehicles) in imports", () => {
+  it("accepts array-relationship targets (related contacts, vehicles) in imports", () => {
     const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
       "https://ams.example.com": {
-        "pick:#x > span": "contact2.email",
-        "text:vin": "vehicle1.vin"
+        "pick:#x > span": "contacts[].email",
+        "text:vin": "vehicles[].vin"
       }
     })));
     expect(parsed.maps["https://ams.example.com"]).toEqual({
-      "pick:#x > span": "contact2.email",
-      "text:vin": "vehicle1.vin"
+      "pick:#x > span": "contacts[].email",
+      "text:vin": "vehicles[].vin"
     });
     expect(parsed.dropped).toBe(0);
   });

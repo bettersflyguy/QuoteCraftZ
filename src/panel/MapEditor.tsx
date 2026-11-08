@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import { MAP_PATH_GROUPS, PATH_LABEL } from "@/portal/fieldMaps";
+import { MAP_PATH_GROUPS, PATH_LABEL, isArrayPath } from "@/portal/fieldMaps";
+
+/** Array targets ("Related contacts — all rows") are capture-only: a fill
+ * can't know which row a single control belongs to. */
+const FILL_GROUPS = MAP_PATH_GROUPS
+  .map(g => ({ ...g, paths: g.paths.filter(p => !isArrayPath(p.path)) }))
+  .filter(g => g.paths.length > 0);
 
 const useStyles = makeStyles({
   root: {
@@ -159,7 +165,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                 >
                   <option value="">{r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)"}</option>
                   <option value="skip">Never fill</option>
-                  {MAP_PATH_GROUPS.map(g => (
+                  {FILL_GROUPS.map(g => (
                     <optgroup key={g.group} label={g.group}>
                       {g.paths.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
                     </optgroup>

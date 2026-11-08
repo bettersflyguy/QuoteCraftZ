@@ -198,15 +198,30 @@ export function applicantFromIdentity(id: CaptureIdentity, isCommercial: boolean
   };
 }
 
-/** Related people from the capture's entity-slot groups (contact2/contact3 —
- * mapped or taught per-site). Each becomes a co-applicant, which the
- * enrichment pipeline find-or-creates as a Contact under the account AFTER
- * the account itself (hierarchy: account first, then related contacts). */
+/** A table-header cell that slipped into an array capture ("Name", "Email")
+ * must never become a person. */
+const HEADERISH = /^(name|full ?name|first ?name|last ?name|e-?mails?|phones?|contacts?|related contacts?)$/i;
+
+/** Related people from the capture's contact-array slots (contact2..contactN,
+ * mapped or taught per-site; array teachings fan a whole related-contacts
+ * table into these). Each becomes a co-applicant, which the enrichment
+ * pipeline find-or-creates as a Contact under the account AFTER the account
+ * itself (hierarchy: account first, then related contacts). A row restating
+ * the PRIMARY insured (NowCerts lists them among related contacts) is
+ * skipped — the primary contact is a one-to-one handled separately. */
 export function coApplicantsFromCapture(app: CapturedApplication): CapturedApplicant["coApplicants"] {
+  const primary = identityFromCapture(app);
+  const primaryName = canonical(`${primary.firstName} ${primary.lastName}`);
+  const primaryEmail = primary.email.toLowerCase();
+  const slots = Object.keys(app.normalized)
+    .map(k => /^contact(\d+)$/.exec(k))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map(m => Number(m[1]))
+    .filter(n => n >= 2)
+    .sort((a, b) => a - b);
   const out: CapturedApplicant["coApplicants"] = [];
-  for (const slot of ["contact2", "contact3"]) {
-    const grp = app.normalized[slot];
-    if (!grp) continue;
+  for (const n of slots) {
+    const grp = app.normalized[`contact${n}`]!;
     const get = (k: string) => { const v = grp[k]; return typeof v === "string" ? clean(v) : ""; };
     let firstName = stripNameDecorations(get("firstName"));
     let lastName = stripNameDecorations(get("lastName"));
@@ -216,7 +231,10 @@ export function coApplicantsFromCapture(app: CapturedApplication): CapturedAppli
       lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
     }
     if (!firstName && !lastName) continue;
+    if (HEADERISH.test(clean(`${firstName} ${lastName}`))) continue;
     const email = get("email");
+    if (canonical(`${firstName} ${lastName}`) === primaryName) continue;
+    if (primaryEmail && email.toLowerCase() === primaryEmail) continue;
     const phone = get("phone");
     out.push({
       firstName,
@@ -298,7 +316,9 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
 
 /** Rule paths whose fields are written to real CRM columns by the load —
  * everything else is supplemental and goes into the activity note. */
-const STRUCTURED_PATHS = ["contact.", "contact2.", "contact3.", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate"];
+// bare "contact" prefix covers the primary (contact.) AND every related-
+// contact array slot (contact2., contact3., …) — all become contact records
+const STRUCTURED_PATHS = ["contact", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate"];
 
 export interface SupplementalNote {
   subject: string;

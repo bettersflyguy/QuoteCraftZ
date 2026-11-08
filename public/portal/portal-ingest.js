@@ -404,18 +404,70 @@
   /* agent-taught read-only-text extractions: {selector, label} pairs saved
    * via the mapping editor's picker ("this element's text IS the email").
    * Labels come from the worker's own CRM-field vocabulary, never the page. */
+  /* Array relationships ("contacts[].email"): the plural names the CRM array,
+   * slot/start name the per-row groups the capture fans out into (contact1 is
+   * the primary insured, so related contacts start at 2). */
+  var ARRAY_SLOTS = { contacts: { slot: "contact", start: 2 }, vehicles: { slot: "vehicle", start: 1 } };
+
+  /* An array teaching's selector points at ONE row's cell. The repeating axis
+   * is found mechanically: vary each :nth-of-type index OUTERMOST FIRST and
+   * take the first axis with 2+ visible matches. The row element always sits
+   * higher in the tree than the cells inside it, so outermost-first picks the
+   * row axis even when a row's own cells repeat too (a 2-row table must
+   * expand down the rows, not across its columns); spurious outer wrappers
+   * break the chain immediately because their siblings lack the inner path.
+   * Returns [{n, el}] keyed by the row's nth index (so sibling teachings from
+   * other cells of the same table stay row-aligned even when a row hides one
+   * cell), or null when nothing repeats. */
+  function expandTaughtRows(selector) {
+    const marks = [];
+    const re = /:nth-of-type\((\d+)\)/g;
+    let m;
+    while ((m = re.exec(selector)) !== null) marks.push({ index: m.index, length: m[0].length });
+    for (let i = 0; i < marks.length; i += 1) {
+      const rows = [];
+      for (let n = 1; n <= 30; n += 1) {
+        const sel = selector.slice(0, marks[i].index) + ":nth-of-type(" + n + ")" + selector.slice(marks[i].index + marks[i].length);
+        let el = null;
+        try { el = document.querySelector(sel); } catch (_e) { break; }
+        if (!el) break; /* nth-of-type runs are contiguous */
+        rows.push({ n: n, el: el });
+      }
+      if (rows.filter(function (r) { return isVisible(r.el); }).length >= 2) return rows;
+    }
+    return null;
+  }
+
   function taughtFields(taught) {
     const out = [];
     (Array.isArray(taught) ? taught : []).forEach((t) => {
-      if (!t || typeof t.selector !== "string" || typeof t.label !== "string") return;
-      let el = null;
-      try { el = document.querySelector(t.selector); } catch (_e) { return; }
-      if (!el || !isVisible(el)) return;
-      const value = clean(el.innerText).slice(0, 300);
-      if (!value || PAYMENT_FIELD.test(t.label) || !taughtValueSafe(el, value)) return;
+      if (!t || typeof t.selector !== "string" || typeof t.label !== "string" || PAYMENT_FIELD.test(t.label)) return;
+      const path = typeof t.path === "string" ? t.path : "";
+      let anchor = null;
+      try { anchor = document.querySelector(t.selector); } catch (_e) { return; }
+      const row = (el) => {
+        if (!el || !isVisible(el)) return null;
+        const value = text(el).slice(0, 300);
+        return value && taughtValueSafe(el, value) ? value : null;
+      };
+      const arr = path.match(/^([a-z]+)\[\]\.([a-z][a-zA-Z0-9]{0,30})$/);
+      if (arr && ARRAY_SLOTS[arr[1]]) {
+        /* array teaching: pull the taught cell from EVERY repeated row */
+        const cfg = ARRAY_SLOTS[arr[1]];
+        const rows = expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : []);
+        rows.forEach(function (r) {
+          const value = row(r.el);
+          if (!value) return;
+          out.push({ label: t.label + " " + r.n, value, section: "", group: "", source: "taught",
+            mapped: cfg.slot + (cfg.start + r.n - 1) + "." + arr[2] });
+        });
+        return;
+      }
+      const value = row(anchor);
+      if (!value) return;
       /* the explicit rule path rides along so the normalizer routes the value
        * to its exact entity slot (worker validates it against MAP_PATHS) */
-      const mapped = typeof t.path === "string" && /^[a-z][a-zA-Z0-9]{0,30}\.[a-z][a-zA-Z0-9]{0,30}$/.test(t.path) ? t.path : undefined;
+      const mapped = /^[a-z][a-zA-Z0-9]{0,30}\.[a-z][a-zA-Z0-9]{0,30}$/.test(path) ? path : undefined;
       out.push({ label: t.label, value, section: "", group: "", source: "taught", mapped });
     });
     return out;

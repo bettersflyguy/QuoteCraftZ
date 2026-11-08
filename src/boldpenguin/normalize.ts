@@ -3,7 +3,7 @@
  * the rule list is the field inventory from live Bold Penguin applications
  * (docs/bold-penguin-field-inventory.md). */
 import type { NormalizedApplication } from "./types";
-import { PATH_LABEL } from "@/portal/fieldMaps";
+import { isRoutablePath } from "@/portal/fieldMaps";
 
 const rules: [string, string[]][] = [
   ["business.legalName", ["legal business name", "business legal name", "named insured", "company name", "business name"]],
@@ -114,7 +114,7 @@ function explicitRouting(fields: NormalizableField[]): { indices: Set<number>; b
   const paths = new Set<string>();
   fields.forEach((field, index) => {
     const path = field.mapped;
-    if (!path || !PATH_LABEL.has(path) || !clean(field.value)) return;
+    if (!path || !isRoutablePath(path) || !clean(field.value)) return;
     indices.add(index);
     if (paths.has(path)) return;
     paths.add(path);
