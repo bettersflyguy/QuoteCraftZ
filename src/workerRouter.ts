@@ -715,7 +715,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   const siteMap = origin ? await fieldMapFor(origin) : {};
   const taught = Object.entries(siteMap)
     .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && PATH_LABEL.has(v))
-    .map(([k, v]) => ({ selector: k.slice(5), label: PATH_LABEL.get(v) as string }));
+    .map(([k, v]) => ({ selector: k.slice(5), label: PATH_LABEL.get(v) as string, path: v }));
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: (t: unknown) => (globalThis as { __bettersPortalIngest?: (t: unknown) => unknown }).__bettersPortalIngest?.(t) ?? null,

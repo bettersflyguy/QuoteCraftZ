@@ -119,7 +119,27 @@ describe("field-map share files", () => {
     expect(() => parseFieldMapImport(JSON.stringify({ type: "iacrm-quote-connector-fieldmaps", maps: { "https://a.com": { k: "bogus" } } }))).toThrow(/no usable mappings/);
   });
 
-  it("every mappable path has a label", () => {
-    for (const p of MAP_PATHS) expect(p.label.length).toBeGreaterThan(0);
+  it("every mappable path has a label and an entity group; labels are unique", () => {
+    const labels = new Set<string>();
+    for (const p of MAP_PATHS) {
+      expect(p.label.length).toBeGreaterThan(0);
+      expect(p.group.length).toBeGreaterThan(0);
+      expect(labels.has(p.label)).toBe(false);
+      labels.add(p.label);
+    }
+  });
+
+  it("accepts entity-slot targets (related contacts, vehicles) in imports", () => {
+    const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
+      "https://ams.example.com": {
+        "pick:#x > span": "contact2.email",
+        "text:vin": "vehicle1.vin"
+      }
+    })));
+    expect(parsed.maps["https://ams.example.com"]).toEqual({
+      "pick:#x > span": "contact2.email",
+      "text:vin": "vehicle1.vin"
+    });
+    expect(parsed.dropped).toBe(0);
   });
 });

@@ -413,7 +413,10 @@
       if (!el || !isVisible(el)) return;
       const value = clean(el.innerText).slice(0, 300);
       if (!value || PAYMENT_FIELD.test(t.label) || !taughtValueSafe(el, value)) return;
-      out.push({ label: t.label, value, section: "", group: "", source: "taught" });
+      /* the explicit rule path rides along so the normalizer routes the value
+       * to its exact entity slot (worker validates it against MAP_PATHS) */
+      const mapped = typeof t.path === "string" && /^[a-z][a-zA-Z0-9]{0,30}\.[a-z][a-zA-Z0-9]{0,30}$/.test(t.path) ? t.path : undefined;
+      out.push({ label: t.label, value, section: "", group: "", source: "taught", mapped });
     });
     return out;
   }

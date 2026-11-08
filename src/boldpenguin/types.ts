@@ -9,7 +9,12 @@ export interface CapturedAppField {
   name?: string;
   section: string;
   group: string;
-  source: "control" | "choice-group" | "definition-list" | "table" | "review-row" | "entity-card" | "money-line" | "sale";
+  source: "control" | "choice-group" | "definition-list" | "table" | "review-row" | "entity-card" | "money-line" | "sale" | "taught";
+  /** Explicit rule path for agent-taught captures ("contact2.email") — the
+   * normalizer routes it directly, bypassing label-alias scoring, so entity
+   * slots with identical-looking values (account email vs contact 2 email)
+   * can never collide. Validated against MAP_PATHS before use. */
+  mapped?: string;
 }
 
 /** Alias-scored projection of the raw fields (business/contact/address/coverage/…).

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applicantFromCapture, accountNameFromCapture, carrierGuess, detectPhone, parseMoney, policyFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
+import { applicantFromCapture, accountNameFromCapture, buildSupplementalNote, coApplicantsFromCapture, carrierGuess, detectPhone, parseMoney, policyFromCapture, toIsoDate, writeApplicationKnowledge } from "@/crm/appCommit";
 import { normalize } from "@/boldpenguin/normalize";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CrmEnvironment } from "@/crm/environments";
@@ -393,5 +393,42 @@ describe("writeApplicationKnowledge", () => {
     expect(body["iacrm_accountid@odata.bind"]).toBe("/accounts(acc-1)");
     expect(String(body["iacrm_questionid@odata.bind"])).toMatch(/^\/iacrm_carrierquestions\(qg-\d+\)$/);
     expect(body["iacrm_amsexternalid"]).toBeUndefined();
+  });
+});
+
+describe("coApplicantsFromCapture (related-contact entity slots)", () => {
+  it("builds co-applicants from contact2/contact3 with validation, in slot order", () => {
+    const app = capture({
+      normalized: {
+        contact: { fullName: "Tracey Dittrich" },
+        contact2: { fullName: "Jamie Dittrich (spouse)", email: "jamie@example.com", phone: "612-555-0101", dateOfBirth: "03/02/1980" },
+        contact3: { firstName: "Kim", lastName: "Dittrich", email: "paperless delivery preferred", phone: "n/a" }
+      }
+    });
+    expect(coApplicantsFromCapture(app)).toEqual([
+      { firstName: "Jamie", lastName: "Dittrich", relationship: "", phone: "612-555-0101", email: "jamie@example.com", dateOfBirth: "1980-03-02", dlNumber: null, dlState: null },
+      // non-email / non-phone values never land in contact columns
+      { firstName: "Kim", lastName: "Dittrich", relationship: "", phone: null, email: null, dateOfBirth: null, dlNumber: null, dlState: null }
+    ]);
+  });
+
+  it("skips empty slots and rides along on applicantFromCapture", () => {
+    expect(coApplicantsFromCapture(capture())).toEqual([]);
+    const app = capture({ normalized: { contact: { fullName: "Tracey Dittrich" }, contact2: { fullName: "Jamie Dittrich" } } });
+    expect(applicantFromCapture(app).coApplicants.map(c => c.firstName)).toEqual(["Jamie"]);
+  });
+});
+
+describe("supplemental note with entity-slot fields", () => {
+  it("keeps taught related-contact fields out of the note (structured) while vehicle slots stay in it", () => {
+    const app = capture({
+      fields: [
+        { label: "Contact 2 email", value: "jamie@example.com", section: "", group: "", source: "taught", mapped: "contact2.email" },
+        { label: "Vehicle 1 VIN", value: "1HGCM82633A004352", section: "", group: "", source: "taught", mapped: "vehicle1.vin" }
+      ]
+    });
+    const note = buildSupplementalNote(app);
+    expect(note?.body).not.toContain("jamie@example.com");
+    expect(note?.body).toContain("1HGCM82633A004352");
   });
 });

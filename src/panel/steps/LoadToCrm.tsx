@@ -5,7 +5,7 @@ import { ErrorBar } from "../ErrorBar";
 import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages } from "@/crm/dataverse";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, carrierGuess, guessInsuredType, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { applicantFromIdentity, carrierGuess, coApplicantsFromCapture, guessInsuredType, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -208,7 +208,9 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       const rows = await send<BatchItemResult[]>({
         type: "panel/appCommit",
         accountId,
-        applicant: applicantFromIdentity(identity, insuredType === 2),
+        // identity is agent-reviewed; related contacts (contact2/contact3
+        // entity slots) ride along and are find-or-created AFTER the account
+        applicant: { ...applicantFromIdentity(identity, insuredType === 2), coApplicants: coApplicantsFromCapture(app) },
         insuredType
       });
       let createdOppId: string | null = null;

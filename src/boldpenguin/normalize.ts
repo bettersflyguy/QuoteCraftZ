@@ -3,6 +3,7 @@
  * the rule list is the field inventory from live Bold Penguin applications
  * (docs/bold-penguin-field-inventory.md). */
 import type { NormalizedApplication } from "./types";
+import { PATH_LABEL } from "@/portal/fieldMaps";
 
 const rules: [string, string[]][] = [
   ["business.legalName", ["legal business name", "business legal name", "named insured", "company name", "business name"]],
@@ -99,18 +100,44 @@ export interface NormalizableField {
   value: string;
   name?: string;
   section?: string;
+  /** Explicit rule path (agent-taught capture) — routed directly, never
+   * alias-scored. Only known MAP_PATHS paths are honored. */
+  mapped?: string;
+}
+
+/** Field indices carrying a valid explicit path, with the paths they set
+ * (first capture of a path wins). These are spoken for: alias scoring must
+ * never claim them, and alias rules must never overwrite their paths. */
+function explicitRouting(fields: NormalizableField[]): { indices: Set<number>; byIndex: Map<number, string>; paths: Set<string> } {
+  const indices = new Set<number>();
+  const byIndex = new Map<number, string>();
+  const paths = new Set<string>();
+  fields.forEach((field, index) => {
+    const path = field.mapped;
+    if (!path || !PATH_LABEL.has(path) || !clean(field.value)) return;
+    indices.add(index);
+    if (paths.has(path)) return;
+    paths.add(path);
+    byIndex.set(index, path);
+  });
+  return { indices, byIndex, paths };
 }
 
 /** Which field indices the rules under the given path prefixes would claim —
  * used to decide what is "structurally mapped" (written to CRM columns)
  * versus supplemental data that belongs in an activity note. */
 export function claimedIndices(fields: NormalizableField[], pathPrefixes: string[]): Set<number> {
+  const explicit = explicitRouting(fields);
   const claimed = new Set<number>();
+  for (const index of explicit.indices) {
+    const path = fields[index]!.mapped!;
+    if (pathPrefixes.some(p => path.startsWith(p))) claimed.add(index);
+  }
   for (const [path, aliases] of rules) {
     if (!pathPrefixes.some(p => path.startsWith(p))) continue;
     let best: { index: number; score: number } | null = null;
     fields.forEach((field, index) => {
-      if (claimed.has(index) || !clean(field.value)) return;
+      if (claimed.has(index) || explicit.indices.has(index) || !clean(field.value)) return;
       const label = canonical([field.label, field.name, field.section].filter(Boolean).join(" "));
       if (excludes[path]?.test(label)) return;
       const fieldScore = Math.max(...aliases.map(alias => score(label, canonical(alias))));
@@ -125,7 +152,14 @@ export function normalize(fields: NormalizableField[]): NormalizedApplication {
   const result: NormalizedApplication = {};
   const claimed = new Set<number>();
 
+  // explicitly routed (agent-taught) fields first: they claim their index and
+  // own their path outright — alias scoring never sees them or overwrites them
+  const explicit = explicitRouting(fields);
+  for (const index of explicit.indices) claimed.add(index);
+  for (const [index, path] of explicit.byIndex) setPath(result, path, clean(fields[index]!.value));
+
   for (const [path, aliases] of rules) {
+    if (explicit.paths.has(path)) continue;
     let best: { index: number; score: number; value: string } | null = null;
     fields.forEach((field, index) => {
       if (claimed.has(index) || !clean(field.value)) return;

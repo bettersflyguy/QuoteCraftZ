@@ -198,10 +198,47 @@ export function applicantFromIdentity(id: CaptureIdentity, isCommercial: boolean
   };
 }
 
+/** Related people from the capture's entity-slot groups (contact2/contact3 —
+ * mapped or taught per-site). Each becomes a co-applicant, which the
+ * enrichment pipeline find-or-creates as a Contact under the account AFTER
+ * the account itself (hierarchy: account first, then related contacts). */
+export function coApplicantsFromCapture(app: CapturedApplication): CapturedApplicant["coApplicants"] {
+  const out: CapturedApplicant["coApplicants"] = [];
+  for (const slot of ["contact2", "contact3"]) {
+    const grp = app.normalized[slot];
+    if (!grp) continue;
+    const get = (k: string) => { const v = grp[k]; return typeof v === "string" ? clean(v) : ""; };
+    let firstName = stripNameDecorations(get("firstName"));
+    let lastName = stripNameDecorations(get("lastName"));
+    if (!firstName && !lastName) {
+      const parts = stripNameDecorations(get("fullName")).split(" ").filter(Boolean);
+      firstName = parts[0] ?? "";
+      lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
+    }
+    if (!firstName && !lastName) continue;
+    const email = get("email");
+    const phone = get("phone");
+    out.push({
+      firstName,
+      lastName,
+      relationship: "",
+      phone: digitsOf(phone).length >= 7 ? phone : null,
+      email: EMAIL_RX.test(email) ? email : null,
+      dateOfBirth: toIsoDate(get("dateOfBirth") || null),
+      dlNumber: null,
+      dlState: null
+    });
+  }
+  return out;
+}
+
 /** Projects the capture's normalized identity into the shape the existing
  * enrichment pipeline (ensureInsuredData) already consumes. */
 export function applicantFromCapture(app: CapturedApplication): CapturedApplicant {
-  return applicantFromIdentity(identityFromCapture(app), Boolean(str(app, "business", "legalName")));
+  return {
+    ...applicantFromIdentity(identityFromCapture(app), Boolean(str(app, "business", "legalName"))),
+    coApplicants: coApplicantsFromCapture(app)
+  };
 }
 
 /** "$3,089.50" -> 3089.5; null when no parsable amount. */
@@ -261,7 +298,7 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
 
 /** Rule paths whose fields are written to real CRM columns by the load —
  * everything else is supplemental and goes into the activity note. */
-const STRUCTURED_PATHS = ["contact.", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate"];
+const STRUCTURED_PATHS = ["contact.", "contact2.", "contact3.", "address.", "business.legalName", "policy.", "coverage.effectiveDate", "coverage.expirationDate"];
 
 export interface SupplementalNote {
   subject: string;

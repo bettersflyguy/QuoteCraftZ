@@ -75,3 +75,37 @@ describe("Bold Penguin normalizer", () => {
     });
   });
 });
+
+describe("explicit entity-slot routing (agent-taught captures)", () => {
+  it("routes mapped fields to their exact slot, bypassing alias scoring", () => {
+    const result = normalize([
+      { label: "Email", value: "owner@northwind.com" },
+      { label: "Contact 2 email", value: "spouse@northwind.com", mapped: "contact2.email" },
+      { label: "Contact 2 full name", value: "Jamie Dittrich", mapped: "contact2.fullName" }
+    ]);
+    expect(result["contact"]?.["email"]).toBe("owner@northwind.com");
+    expect(result["contact2"]).toEqual({ email: "spouse@northwind.com", fullName: "Jamie Dittrich" });
+  });
+
+  it("explicit path wins over a later alias claim of the same path", () => {
+    // taught capture owns contact.email; the page's own "Email" field must
+    // not overwrite it (the capture teaching is the agent's correction)
+    const result = normalize([
+      { label: "Preferred Email", value: "taught@example.com", mapped: "contact.email" },
+      { label: "Email", value: "page-guess@example.com" }
+    ]);
+    expect(result["contact"]?.["email"]).toBe("taught@example.com");
+  });
+
+  it("first capture of a slot wins; unknown mapped paths fall back to aliases", () => {
+    const result = normalize([
+      { label: "Contact 2 phone", value: "612-555-0101", mapped: "contact2.phone" },
+      { label: "Contact 2 phone", value: "612-555-0202", mapped: "contact2.phone" },
+      { label: "Email", value: "a@b.com", mapped: "window.location" }
+    ]);
+    expect(result["contact2"]?.["phone"]).toBe("612-555-0101");
+    // invalid path ignored -> alias scoring still routes the value
+    expect(result["contact"]?.["email"]).toBe("a@b.com");
+    expect(result["window"]).toBeUndefined();
+  });
+});

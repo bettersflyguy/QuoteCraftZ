@@ -7,45 +7,81 @@ export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
 /** { [origin]: { [controlKey]: rulePath | "skip" } } */
 export type FieldMaps = Record<string, Record<string, string>>;
 
-/** CRM fields the mapping editor can bind a page control to — mirrors the
- * mapper's rule paths (public/portal/portal-mapper.js). */
-export const MAP_PATHS: { path: string; label: string }[] = [
-  { path: "contact.firstName", label: "First name" },
-  { path: "contact.lastName", label: "Last name" },
-  { path: "contact.fullName", label: "Full name" },
-  { path: "contact.email", label: "Email" },
-  { path: "contact.phone", label: "Phone" },
-  { path: "contact.dateOfBirth", label: "Date of birth" },
-  { path: "contact.gender", label: "Gender" },
-  { path: "contact.maritalStatus", label: "Marital status" },
-  { path: "address.street1", label: "Street address" },
-  { path: "address.street2", label: "Street line 2 / unit" },
-  { path: "address.city", label: "City" },
-  { path: "address.state", label: "State" },
-  { path: "address.postalCode", label: "ZIP code" },
-  { path: "business.legalName", label: "Business name" },
-  { path: "business.dba", label: "DBA" },
-  { path: "business.entityType", label: "Entity type" },
-  { path: "business.fein", label: "FEIN" },
-  { path: "business.industry", label: "Industry" },
-  { path: "business.description", label: "Business description" },
-  { path: "business.foundingYear", label: "Year established" },
-  { path: "business.annualRevenue", label: "Annual revenue" },
-  { path: "coverage.effectiveDate", label: "Effective date" },
-  { path: "coverage.expirationDate", label: "Expiration date" },
-  { path: "coverage.currentCarrier", label: "Current carrier" },
-  { path: "coverage.currentPremium", label: "Current premium" },
-  { path: "employment.fullTimeEmployees", label: "Full-time employees" },
-  { path: "employment.partTimeEmployees", label: "Part-time employees" },
-  { path: "payroll.owners", label: "Owner payroll" },
-  { path: "payroll.employees", label: "Employee payroll" },
-  { path: "payroll.subcontractors", label: "Subcontractor cost" },
-  { path: "building.floors", label: "Building floors" },
-  { path: "building.totalSquareFeet", label: "Total square feet" },
-  { path: "building.yearBuilt", label: "Year built" },
-  { path: "building.constructionType", label: "Construction type" }
+/** CRM fields the mapping editor can bind a page control to, grouped by the
+ * CRM entity the value lands on. The hierarchy mirrors the commit order:
+ * account first, then related contacts, then policy/quote/opportunity;
+ * groups marked "risk data" have no CRM column yet and land in the
+ * account's captured-data note + knowledge tables. Labels are unique across
+ * ALL paths (they double as taught-capture field labels). */
+export const MAP_PATHS: { path: string; label: string; group: string }[] = [
+  { path: "business.legalName", label: "Business name", group: "Insured business (account)" },
+  { path: "business.dba", label: "DBA", group: "Insured business (account)" },
+  { path: "business.entityType", label: "Entity type", group: "Insured business (account)" },
+  { path: "business.fein", label: "FEIN", group: "Insured business (account)" },
+  { path: "business.industry", label: "Industry", group: "Insured business (account)" },
+  { path: "business.description", label: "Business description", group: "Insured business (account)" },
+  { path: "business.foundingYear", label: "Year established", group: "Insured business (account)" },
+  { path: "business.annualRevenue", label: "Annual revenue", group: "Insured business (account)" },
+  { path: "contact.firstName", label: "First name", group: "Primary insured (account + contact)" },
+  { path: "contact.lastName", label: "Last name", group: "Primary insured (account + contact)" },
+  { path: "contact.fullName", label: "Full name", group: "Primary insured (account + contact)" },
+  { path: "contact.email", label: "Email", group: "Primary insured (account + contact)" },
+  { path: "contact.phone", label: "Phone", group: "Primary insured (account + contact)" },
+  { path: "contact.dateOfBirth", label: "Date of birth", group: "Primary insured (account + contact)" },
+  { path: "contact.gender", label: "Gender", group: "Primary insured (account + contact)" },
+  { path: "contact.maritalStatus", label: "Marital status", group: "Primary insured (account + contact)" },
+  { path: "address.street1", label: "Street address", group: "Primary address (account)" },
+  { path: "address.street2", label: "Street line 2 / unit", group: "Primary address (account)" },
+  { path: "address.city", label: "City", group: "Primary address (account)" },
+  { path: "address.state", label: "State", group: "Primary address (account)" },
+  { path: "address.postalCode", label: "ZIP code", group: "Primary address (account)" },
+  { path: "contact2.firstName", label: "Contact 2 first name", group: "Related contact 2" },
+  { path: "contact2.lastName", label: "Contact 2 last name", group: "Related contact 2" },
+  { path: "contact2.fullName", label: "Contact 2 full name", group: "Related contact 2" },
+  { path: "contact2.email", label: "Contact 2 email", group: "Related contact 2" },
+  { path: "contact2.phone", label: "Contact 2 phone", group: "Related contact 2" },
+  { path: "contact2.dateOfBirth", label: "Contact 2 date of birth", group: "Related contact 2" },
+  { path: "contact3.firstName", label: "Contact 3 first name", group: "Related contact 3" },
+  { path: "contact3.lastName", label: "Contact 3 last name", group: "Related contact 3" },
+  { path: "contact3.fullName", label: "Contact 3 full name", group: "Related contact 3" },
+  { path: "contact3.email", label: "Contact 3 email", group: "Related contact 3" },
+  { path: "contact3.phone", label: "Contact 3 phone", group: "Related contact 3" },
+  { path: "contact3.dateOfBirth", label: "Contact 3 date of birth", group: "Related contact 3" },
+  { path: "policy.number", label: "Policy number", group: "Policy" },
+  { path: "policy.premium", label: "Policy premium", group: "Policy" },
+  { path: "coverage.effectiveDate", label: "Effective date", group: "Quote & coverage" },
+  { path: "coverage.expirationDate", label: "Expiration date", group: "Quote & coverage" },
+  { path: "coverage.currentCarrier", label: "Current carrier", group: "Quote & coverage" },
+  { path: "coverage.currentPremium", label: "Current premium", group: "Quote & coverage" },
+  { path: "employment.fullTimeEmployees", label: "Full-time employees", group: "Workforce & payroll (risk data)" },
+  { path: "employment.partTimeEmployees", label: "Part-time employees", group: "Workforce & payroll (risk data)" },
+  { path: "payroll.owners", label: "Owner payroll", group: "Workforce & payroll (risk data)" },
+  { path: "payroll.employees", label: "Employee payroll", group: "Workforce & payroll (risk data)" },
+  { path: "payroll.subcontractors", label: "Subcontractor cost", group: "Workforce & payroll (risk data)" },
+  { path: "building.floors", label: "Building floors", group: "Building (risk data)" },
+  { path: "building.totalSquareFeet", label: "Total square feet", group: "Building (risk data)" },
+  { path: "building.yearBuilt", label: "Year built", group: "Building (risk data)" },
+  { path: "building.constructionType", label: "Construction type", group: "Building (risk data)" },
+  { path: "vehicle1.year", label: "Vehicle 1 year", group: "Vehicle 1 (risk data)" },
+  { path: "vehicle1.make", label: "Vehicle 1 make", group: "Vehicle 1 (risk data)" },
+  { path: "vehicle1.model", label: "Vehicle 1 model", group: "Vehicle 1 (risk data)" },
+  { path: "vehicle1.vin", label: "Vehicle 1 VIN", group: "Vehicle 1 (risk data)" },
+  { path: "vehicle2.year", label: "Vehicle 2 year", group: "Vehicle 2 (risk data)" },
+  { path: "vehicle2.make", label: "Vehicle 2 make", group: "Vehicle 2 (risk data)" },
+  { path: "vehicle2.model", label: "Vehicle 2 model", group: "Vehicle 2 (risk data)" },
+  { path: "vehicle2.vin", label: "Vehicle 2 VIN", group: "Vehicle 2 (risk data)" }
 ];
 export const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
+
+/** MAP_PATHS partitioned into ordered entity groups for the editor's
+ * target dropdowns. */
+export const MAP_PATH_GROUPS: { group: string; paths: { path: string; label: string }[] }[] =
+  MAP_PATHS.reduce<{ group: string; paths: { path: string; label: string }[] }[]>((acc, p) => {
+    const last = acc[acc.length - 1];
+    if (last && last.group === p.group) last.paths.push(p);
+    else acc.push({ group: p.group, paths: [p] });
+    return acc;
+  }, []);
 
 export async function getAllFieldMaps(): Promise<FieldMaps> {
   const s = await chrome.storage.local.get(FIELDMAP_STORAGE_KEY);

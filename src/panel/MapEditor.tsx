@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import type { PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import { MAP_PATHS, PATH_LABEL } from "@/portal/fieldMaps";
+import { MAP_PATH_GROUPS, PATH_LABEL } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: {
@@ -145,9 +145,11 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                   onChange={e => { const v = e.target.value; setDraft(d => ({ ...d, [r.key]: v })); }}
                 >
                   <option value="">Not captured</option>
-                  <optgroup label="Capture as (CRM field)">
-                    {MAP_PATHS.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
-                  </optgroup>
+                  {MAP_PATH_GROUPS.map(g => (
+                    <optgroup key={g.group} label={`Capture as — ${g.group}`}>
+                      {g.paths.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
               ) : (
                 <select
@@ -157,9 +159,11 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                 >
                   <option value="">{r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)"}</option>
                   <option value="skip">Never fill</option>
-                  <optgroup label="CRM fields">
-                    {MAP_PATHS.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
-                  </optgroup>
+                  {MAP_PATH_GROUPS.map(g => (
+                    <optgroup key={g.group} label={g.group}>
+                      {g.paths.map(p => <option key={p.path} value={p.path}>{p.label}</option>)}
+                    </optgroup>
+                  ))}
                   {captured.length > 0 && (
                     <optgroup label="Captured fields (drivers, vehicles, extra records…)">
                       {captured.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
