@@ -53,6 +53,7 @@ export type PanelRequest =
   | { type: "panel/getStagesForLob"; lobId: string | null; insuredType?: 1 | 2 | null; lobName?: string | null }
   | { type: "panel/portalScan"; tabId: number }
   | { type: "panel/portalPick"; tabId: number }
+  | { type: "panel/portalPickCancel"; tabId: number }
   | { type: "panel/saveFieldMap"; origin: string; map: Record<string, string> }
   | { type: "panel/saveCarrierAlias"; ezlynxId: number; carrierId: string }
   | { type: "panel/commit"; payload: CommitPayload }

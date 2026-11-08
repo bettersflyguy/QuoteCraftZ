@@ -303,7 +303,10 @@ export function PortalFill({ onChanged, onFlowActive }: { onChanged: () => void;
           onCancel={() => setMapScan(null)}
           onPick={mapTabId === null
             ? undefined
-            : () => send<PortalScanRow | null>({ type: "panel/portalPick", tabId: mapTabId })}
+            : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: mapTabId })}
+          onPickCancel={mapTabId === null
+            ? undefined
+            : () => send<null>({ type: "panel/portalPickCancel", tabId: mapTabId })}
         />
       )}
       {mapNote && <div className={styles.result}>{mapNote}</div>}

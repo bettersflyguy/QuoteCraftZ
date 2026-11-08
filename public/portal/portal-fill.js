@@ -451,28 +451,48 @@
   /* "Click a field to map it": one-shot picker installed in EVERY frame.
    * The frame whose field is clicked resolves with that control's row and
    * broadcasts a cancel so every other frame's instance resolves too
-   * (allFrames executeScript waits for all of them). Esc cancels; the
-   * timeout is the backstop against an abandoned pick. */
+   * (allFrames executeScript waits for all of them). Esc cancels (null);
+   * the short timeout resolves "timeout" so the panel can re-arm — one long
+   * wait would outlive the panel's message timeout and the worker's life. */
   var activePickCancel = null;
 
+  /* identification is NOT filling: readonly/disabled controls (Kendo and
+   * other widget suites render their visible input readonly) are still
+   * identifiable — only control-less types are rejected */
   function pickable(node) {
     if (!node || !node.tagName) return null;
     var tag = node.tagName.toLowerCase();
     if (tag === "label" && node.control) return pickable(node.control);
     if (tag !== "input" && tag !== "select" && tag !== "textarea") return null;
-    if (node.disabled || node.readOnly) return null;
     var type = (node.type || "").toLowerCase();
-    if (["hidden", "password", "file", "submit", "button", "reset"].indexOf(type) !== -1) return null;
+    if (["hidden", "password", "file", "submit", "button", "reset", "image"].indexOf(type) !== -1) return null;
     return node;
   }
 
+  var PICK_STOP = { form: 1, table: 1, tbody: 1, main: 1, section: 1, body: 1, html: 1 };
+
   /* composedPath reaches inside shadow roots (web-component carrier pages),
-   * so a pick can identify fields the flat query scan cannot see */
+   * so a pick can identify fields the flat query scan cannot see. Returns
+   * { control, box }: box is the element to outline — for composite widgets
+   * (Kendo dropdowns, styled date pickers) the user clicks a wrapper span
+   * while the real control sits CSS-hidden inside it, so the smallest
+   * wrapper on the click path holding a couple of controls resolves too. */
   function pickTarget(event) {
     var path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
-    for (var i = 0; i < path.length; i += 1) {
+    var i;
+    for (i = 0; i < path.length; i += 1) {
       var hit = pickable(path[i]);
-      if (hit) return hit;
+      if (hit) return { control: hit, box: hit };
+    }
+    for (i = 0; i < path.length; i += 1) {
+      var node = path[i];
+      if (!node || !node.tagName || !node.querySelectorAll) continue;
+      if (PICK_STOP[node.tagName.toLowerCase()]) break;
+      var inner = Array.prototype.filter.call(
+        node.querySelectorAll("input, select, textarea"),
+        function (c) { return pickable(c); }
+      );
+      if (inner.length >= 1 && inner.length <= 3) return { control: inner[0], box: node };
     }
     return null;
   }
@@ -520,20 +540,22 @@
       }
 
       function onHover(event) {
-        var el = pickTarget(event);
-        if (el === hovered) return;
+        var t = pickTarget(event);
+        var box = t ? t.box : null;
+        if (box === hovered) return;
         clearHover();
-        if (!el) return;
-        hovered = el;
-        hoveredOutline = el.style.outline;
-        hoveredOffset = el.style.outlineOffset;
-        el.style.outline = "2px solid #0f6cbd";
-        el.style.outlineOffset = "1px";
+        if (!box) return;
+        hovered = box;
+        hoveredOutline = box.style.outline;
+        hoveredOffset = box.style.outlineOffset;
+        box.style.outline = "2px solid #0f6cbd";
+        box.style.outlineOffset = "1px";
       }
 
       function onClick(event) {
-        var el = pickTarget(event);
-        if (!el) return;
+        var t = pickTarget(event);
+        if (!t) return;
+        var el = t.control;
         event.preventDefault();
         event.stopPropagation();
         var name = fieldName(el) || "";
@@ -559,7 +581,10 @@
         if (event.data && event.data.__bettersPick === "cancel") finish(null);
       }
 
-      timer = setTimeout(function () { finish(null); }, timeoutMs || 25000);
+      /* "timeout" (vs null for a cancel) lets the panel tell "nothing yet,
+       * re-arm" apart from "user said stop"; 20s keeps each round trip
+       * safely under the panel's 25s message timeout */
+      timer = setTimeout(function () { finish("timeout"); }, timeoutMs || 20000);
       activePickCancel = function () { finish(null); };
       document.addEventListener("mouseover", onHover, true);
       document.addEventListener("click", onClick, true);
@@ -574,4 +599,5 @@
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
   globalThis.__bettersPortalPick = (timeoutMs) => pickField(timeoutMs);
+  globalThis.__bettersPortalPickCancel = () => { if (activePickCancel) activePickCancel(); };
 })();

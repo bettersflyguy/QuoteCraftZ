@@ -167,7 +167,10 @@ export function MappingsManager({ onClose }: { onClose: () => void }) {
           onCancel={() => setScan(null)}
           onPick={scanTabId === null
             ? undefined
-            : () => send<PortalScanRow | null>({ type: "panel/portalPick", tabId: scanTabId })}
+            : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: scanTabId })}
+          onPickCancel={scanTabId === null
+            ? undefined
+            : () => send<null>({ type: "panel/portalPickCancel", tabId: scanTabId })}
         />
       )}
       <div className={styles.row}>

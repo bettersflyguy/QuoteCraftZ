@@ -100,8 +100,11 @@ export interface Deps {
   ingestPortalTab: (tabId: number) => Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string }>;
   /** Mapping editor: enumerates the page's fillable controls with auto/saved mappings. */
   scanPortalTab: (tabId: number) => Promise<import("@/boldpenguin/types").PortalScanResult>;
-  /** Waits for the user to click one field on the page and returns its identity. */
-  pickPortalTab: (tabId: number) => Promise<import("@/boldpenguin/types").PortalScanRow | null>;
+  /** Waits for the user to click one field on the page and returns its identity.
+   * "timeout" = nothing happened in this ~20s round (panel re-arms); null = user cancelled. */
+  pickPortalTab: (tabId: number) => Promise<import("@/boldpenguin/types").PortalScanRow | "timeout" | null>;
+  /** Resolves a pending pick in every frame (the panel's Stop button). */
+  cancelPortalPick: (tabId: number) => Promise<void>;
   /** Persists the agent-taught per-site field map (empty map deletes the site). */
   saveFieldMap: (origin: string, map: Record<string, string>) => Promise<void>;
   /** Starts/stops passive auto-capture on the tab (observer scripts, no clicks). */
@@ -363,6 +366,10 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/portalPick":
         return { ok: true, data: await deps.pickPortalTab(msg.tabId) };
+
+      case "panel/portalPickCancel":
+        await deps.cancelPortalPick(msg.tabId);
+        return { ok: true, data: null };
 
       case "panel/saveFieldMap":
         await deps.saveFieldMap(msg.origin, msg.map);
@@ -634,16 +641,29 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
 }
 
 /** One-shot "click a field to identify it" pick. Every frame arms a picker;
- * the clicked frame returns the control's row, the rest resolve null. */
-async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanRow | null> {
+ * the clicked frame returns the control's row and cancels the rest. Each
+ * round lasts ~20s: a frame that saw nothing resolves "timeout" and the
+ * PANEL re-arms, keeping every worker round trip short. Precedence across
+ * frames: a row wins; else any "timeout" (keep going — an Esc broadcast
+ * can race one frame's timer); else null (user cancelled). */
+async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanRow | "timeout" | null> {
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: () => (globalThis as { __bettersPortalPick?: () => unknown }).__bettersPortalPick?.() ?? null
   });
-  return frames
-    .map(f => f.result as import("@/boldpenguin/types").PortalScanRow | null)
-    .find((r): r is import("@/boldpenguin/types").PortalScanRow => r !== null && r !== undefined) ?? null;
+  const results = frames.map(f => f.result as import("@/boldpenguin/types").PortalScanRow | "timeout" | null | undefined);
+  const row = results.find((r): r is import("@/boldpenguin/types").PortalScanRow => r !== null && r !== undefined && r !== "timeout");
+  if (row) return row;
+  return results.includes("timeout") ? "timeout" : null;
+}
+
+/** Stop button: resolves the pending pick (as a cancel) in every frame. */
+async function cancelPortalPick(tabId: number): Promise<void> {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => (globalThis as { __bettersPortalPickCancel?: () => void }).__bettersPortalPickCancel?.()
+  });
 }
 
 async function fillPortalTab(
@@ -804,6 +824,7 @@ export const realDeps: Deps = {
   ingestPortalTab,
   scanPortalTab,
   pickPortalTab,
+  cancelPortalPick,
   saveFieldMap,
   setAutoCapture,
   isAutoCapturing

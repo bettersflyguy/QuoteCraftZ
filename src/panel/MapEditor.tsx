@@ -38,7 +38,7 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel }: {
   scan: PortalScanResult;
   draft: Record<string, string>;
   setDraft: (updater: (d: Record<string, string>) => Record<string, string>) => void;
@@ -46,9 +46,12 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   busy: boolean;
   onSave: () => void;
   onCancel: () => void;
-  /** Arms the on-page click-to-identify picker; resolves with the clicked
-   * field's row (null on Esc/timeout). */
-  onPick?: () => Promise<PortalScanRow | null>;
+  /** Arms the on-page click-to-identify picker for one ~20s round; resolves
+   * with the clicked field's row, "timeout" (nothing yet — re-arm), or null
+   * (user cancelled on the page with Esc). */
+  onPick?: () => Promise<PortalScanRow | "timeout" | null>;
+  /** Resolves a pending pick immediately (the Stop button). */
+  onPickCancel?: () => Promise<unknown>;
 }) {
   const styles = useStyles();
   const capturedValues = new Set(captured.map(c => c.value));
@@ -65,26 +68,41 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     rowRefs.current.get(focusKey)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [focusKey]);
 
+  const stopRequested = useRef(false);
+
   const pick = async () => {
     if (!onPick || picking) return;
     setPicking(true);
     setPickNote(null);
     setFocusKey(null);
+    stopRequested.current = false;
     try {
-      const row = await onPick();
-      if (!row) {
-        setPickNote("No field was picked (Esc or timeout). Try again and click an input on the page.");
+      // each page-side round lasts ~20s (kept under the message timeout);
+      // "timeout" means nothing happened yet, so re-arm — up to ~3 minutes
+      for (let round = 0; round < 9; round += 1) {
+        const row = await onPick();
+        if (row === "timeout") {
+          if (stopRequested.current) break;
+          continue;
+        }
+        if (!row) break; // Esc on the page, or Stop landed mid-round
+        const known = scan.rows.some(r => r.key === row.key) || extraRows.some(r => r.key === row.key);
+        if (!known) setExtraRows(x => [...x, row]);
+        setFocusKey(row.key);
+        setPickNote(`Selected: ${row.label}`);
         return;
       }
-      const known = scan.rows.some(r => r.key === row.key) || extraRows.some(r => r.key === row.key);
-      if (!known) setExtraRows(x => [...x, row]);
-      setFocusKey(row.key);
-      setPickNote(`Selected: ${row.label}`);
+      setPickNote("No field was picked. Try again and click a field on the page.");
     } catch (e) {
       setPickNote(String((e as Error).message ?? e));
     } finally {
       setPicking(false);
     }
+  };
+
+  const stopPick = () => {
+    stopRequested.current = true;
+    void onPickCancel?.().catch(() => {});
   };
 
   const rows = [...scan.rows, ...extraRows.filter(x => !scan.rows.some(r => r.key === x.key))];
@@ -95,11 +113,12 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
       </div>
       {onPick && (
         <div className={styles.row}>
-          <Button size="small" disabled={picking || busy} onClick={() => void pick()}>
-            {picking ? <Spinner size="tiny" /> : "Click a field on the page…"}
+          <Button size="small" disabled={busy} onClick={() => (picking ? stopPick() : void pick())}>
+            {picking ? "Stop picking" : "Click a field on the page…"}
           </Button>
+          {picking && <Spinner size="tiny" />}
           <span className={styles.label} style={{ maxWidth: "none" }}>
-            {picking ? "Now click the field in the page (Esc cancels)." : pickNote ?? "Jumps to that field's row below."}
+            {picking ? "Now click the field in the page (Esc or Stop cancels)." : pickNote ?? "Jumps to that field's row below."}
           </span>
         </div>
       )}
