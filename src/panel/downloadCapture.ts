@@ -1,25 +1,17 @@
 import type { CapturedApplication } from "@/messages";
+import { buildWorkbook } from "./xlsx";
+import { captureSheets } from "./captureSheets";
 
-function csvCell(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
-/** Exports the held application as a CSV that opens cleanly in Excel
- * (BOM for UTF-8, one row per captured field). */
+/** Exports the held capture as an .xlsx workbook: a Summary tab, the
+ * captured single values, and every table (Vehicles, Drivers, Policies,
+ * taught arrays, timeline notes) on its own tab as a formatted Excel Table. */
 export function exportCaptureToExcel(app: CapturedApplication): void {
-  const rows = [
-    ["Section", "Group", "Field", "Value"],
-    ...app.fields.map(f => [f.section, f.group, f.label, f.value])
-  ];
-  const csv = "﻿" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
-  const id = app.normalized["application"]?.["id"];
-  const safeId = typeof id === "string" && id
-    ? id.replace(/[^a-z0-9_-]/gi, "-")
-    : new Date().toISOString().slice(0, 10);
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const bytes = buildWorkbook(captureSheets(app));
+  const who = (app.source.title || app.source.system).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 40) || "capture";
+  const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `captured-application-${safeId}.csv`;
+  anchor.download = `quotecraftz-${who}-${new Date().toISOString().slice(0, 10)}.xlsx`;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

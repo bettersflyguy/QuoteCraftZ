@@ -6,3 +6,5 @@ dist/
 tests/fixtures/raw-unscrubbed/
 keys/
 .vite/
+
+.tmp/
