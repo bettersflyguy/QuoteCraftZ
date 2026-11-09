@@ -6,7 +6,7 @@ import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages, UserRow } from "@/crm/dataverse";
 import type { CapturedApplicant } from "@/types";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { accountAddressColumns, addressChoices, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { accountAddressColumns, addressChoices, otherLine, priorCoverageColumns, priorCoveragesFromCapture, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -396,6 +396,29 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           quoteIds.push(...written.filter(r => r.entityId && r.key.startsWith("Quote:")).map(r => r.entityId!));
         } catch (e) {
           rows.push({ key: "Quotes", status: 0, error: String((e as Error).message ?? e), entityId: null });
+        }
+      }
+      // each captured prior policy (a "Prior Auto Policy" table) becomes the
+      // insured's Prior Coverage for that line, on that line's opportunity
+      const priors = priorCoveragesFromCapture(app);
+      if (priors.length) {
+        const lobList = lobs ?? await send<LobRow[]>({ type: "panel/getLobs" }).catch(() => [] as LobRow[]);
+        const carrierList = carriers ?? await send<CarrierRow[]>({ type: "panel/getCarriers" }).catch(() => [] as CarrierRow[]);
+        const near = (a: string, b: string) => { const x = a.toLowerCase().trim(), y = b.toLowerCase().trim(); return Boolean(x && y && (x === y || x.includes(y) || y.includes(x))); };
+        for (const pc of priors) {
+          const oppId = [...oppLine.entries()].find(([, lob]) => !otherLine(`Prior ${pc.line} Policy`, lob))?.[0] ??
+            (oppLine.size === 0 && createdOppId ? createdOppId : null);
+          const lobId = lobList.find(l => near(l.name, pc.line))?.lobId ?? null;
+          const carrierId = pc.carrier ? carrierList.find(c => near(c.name, pc.carrier))?.carrierId ?? null : null;
+          try {
+            const r = await send<{ outcome: "created" | "filled" | "unchanged" }>({
+              type: "panel/upsertPriorCoverage", accountId, opportunityId: oppId, lobId, carrierId,
+              values: priorCoverageColumns(pc, app.source.system)
+            });
+            rows.push({ key: `Prior ${pc.line} Policy: ${r.outcome === "created" ? "added to Prior Coverage" : r.outcome === "filled" ? "Prior Coverage updated" : "already in Prior Coverage"}`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            rows.push({ key: `Prior ${pc.line} Policy`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
         }
       }
       // values tagged for an opportunity / quote / policy timeline land on the

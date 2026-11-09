@@ -53,6 +53,7 @@ export type PanelRequest =
   | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string; pipelineId: string | null; stageId: string | null; leadSource?: string | null; extra?: Record<string, string> }
   | { type: "panel/crmFieldCatalog"; refresh?: boolean }
   /** Writes a "Non Mapped Timeline Entries" note on a record the panel created. */
+  | { type: "panel/upsertPriorCoverage"; accountId: string; opportunityId: string | null; lobId: string | null; carrierId: string | null; values: Record<string, unknown> }
   | { type: "panel/upsertNote"; record: "account" | "contact" | "opportunity" | "quote" | "policy"; id: string; subject: string; html: string }
   | { type: "panel/getStagesForLob"; lobId: string | null; insuredType?: 1 | 2 | null; lobName?: string | null }
   | { type: "panel/portalScan"; tabId: number }

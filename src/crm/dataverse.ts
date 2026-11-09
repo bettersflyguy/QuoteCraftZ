@@ -716,6 +716,48 @@ export async function updateAccount(env: CrmEnvironment, accountId: string, patc
   }
 }
 
+/** One prior (incumbent) policy onto the insured's Prior Coverage: the same
+ * line, carrier and expiration is that record (filled where empty, missing
+ * links set); a later term or another carrier is a new record, so history
+ * is kept. Returns what happened. */
+export async function upsertPriorCoverage(
+  env: CrmEnvironment,
+  p: { accountId: string; opportunityId: string | null; lobId: string | null; carrierId: string | null; values: Record<string, unknown> }
+): Promise<{ outcome: "created" | "filled" | "unchanged"; id: string }> {
+  const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+  const filters = [`_iacrm_accountid_value eq ${p.accountId}`, "statecode eq 0"];
+  if (p.lobId) filters.push(`_iacrm_lineofbusinessid_value eq ${p.lobId}`);
+  else if (typeof p.values["iacrm_name"] === "string") filters.push(`iacrm_name eq ${q(p.values["iacrm_name"] as string)}`);
+  const carrier = p.values["iacrm_priorcarriername"];
+  filters.push(typeof carrier === "string" ? `iacrm_priorcarriername eq ${q(carrier)}` : "iacrm_priorcarriername eq null");
+  const exp = p.values["iacrm_expirationdate"];
+  filters.push(typeof exp === "string" ? `iacrm_expirationdate eq ${exp}` : "iacrm_expirationdate eq null");
+  const { value } = await dvJson<{ value: Record<string, string | null>[] }>(env,
+    `iacrm_priorcoverages?$select=iacrm_priorcoverageid,_iacrm_opportunityid_value,_iacrm_lineofbusinessid_value,_iacrm_carrierid_value&$filter=${encodeURIComponent(filters.join(" and "))}&$top=1`);
+  const binds = (have: Record<string, string | null> | null): Record<string, string> => {
+    const out: Record<string, string> = {};
+    if (p.opportunityId && !have?.["_iacrm_opportunityid_value"]) out["iacrm_OpportunityId@odata.bind"] = `/opportunities(${p.opportunityId})`;
+    if (p.lobId && !have?.["_iacrm_lineofbusinessid_value"]) out["iacrm_LineOfBusinessId@odata.bind"] = `/iacrm_lineofbusinesses(${p.lobId})`;
+    if (p.carrierId && !have?.["_iacrm_carrierid_value"]) out["iacrm_CarrierId@odata.bind"] = `/iacrm_carriers(${p.carrierId})`;
+    return out;
+  };
+  const existing = value[0];
+  if (existing) {
+    const id = existing["iacrm_priorcoverageid"]!;
+    const written = await fillIfEmpty(env, "iacrm_priorcoverages", id, p.values);
+    const links = binds(existing);
+    if (Object.keys(links).length) {
+      const res = await dv(env, `iacrm_priorcoverages(${id})`, { method: "PATCH", body: JSON.stringify(links) });
+      if (!res.ok) throw new Error(`Dataverse ${res.status} linking prior coverage: ${(await res.text().catch(() => "")).slice(0, 300)}`);
+    }
+    return { outcome: written.length || Object.keys(links).length ? "filled" : "unchanged", id };
+  }
+  const created = await dvPost<{ iacrm_priorcoverageid: string }>(env, "iacrm_priorcoverages?$select=iacrm_priorcoverageid", {
+    ...p.values, ...binds(null), "iacrm_AccountId@odata.bind": `/accounts(${p.accountId})`
+  });
+  return { outcome: "created", id: created.iacrm_priorcoverageid };
+}
+
 /** A record's addresses with any data, by address number (1-3 on a contact
  * and 1-2 on an account are its own Address 1/2/3 columns, kept in sync by
  * Dataverse; higher numbers are its More Addresses). */

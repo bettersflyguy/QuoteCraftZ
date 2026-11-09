@@ -39,7 +39,7 @@ import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { slotOf, withSlot } from "@/boldpenguin/people";
 import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
-import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertPriorCoverage, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
 import { buildFillValues } from "@/portal/fillValues";
@@ -84,6 +84,7 @@ export interface Deps {
   createQuote: typeof createQuote;
   fillIfEmpty: typeof fillIfEmpty;
   upsertRecordAddress: typeof upsertRecordAddress;
+  upsertPriorCoverage: typeof upsertPriorCoverage;
   upsertRecordNote: typeof upsertRecordNote;
   /** Live CRM column catalog for capture mappings (cached per environment). */
   getFieldCatalog: (env: CrmEnvironment, refresh?: boolean) => Promise<FieldCatalog>;
@@ -502,6 +503,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           data: await withExtrasFallback(extra, x =>
             deps.createOpportunity(env, msg.accountId, msg.lobId, msg.name, msg.pipelineId, msg.stageId, msg.leadSource ?? null, x))
         };
+      }
+
+      case "panel/upsertPriorCoverage": {
+        const env = await deps.getActiveEnvironment();
+        return { ok: true, data: await deps.upsertPriorCoverage(env, { accountId: msg.accountId, opportunityId: msg.opportunityId, lobId: msg.lobId, carrierId: msg.carrierId, values: msg.values }) };
       }
 
       case "panel/upsertNote": {
@@ -1569,6 +1575,7 @@ export const realDeps: Deps = {
   createQuote,
   fillIfEmpty,
   upsertRecordAddress,
+  upsertPriorCoverage,
   upsertRecordNote,
   getFieldCatalog: (env, refresh) => getFieldCatalog(env, { dvJson }, refresh),
   dvQuery: dvJson,

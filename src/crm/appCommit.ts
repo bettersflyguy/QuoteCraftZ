@@ -494,6 +494,62 @@ export function noteOutcomeText(outcome: "created" | "updated" | "unchanged"): s
  * single values as a Field/Value table, grid columns as a table under the
  * grid's title with its real headers. Stable subject, so a re-load updates
  * the same note. */
+/** A captured prior (incumbent) policy: one per "Prior <Line> Policy" table
+ * (EZLynx's rating Policy Info step), as text the load turns into a CRM
+ * Prior Coverage record. */
+export interface PriorCoverageDraft {
+  line: string; carrier: string; policyNumber: string; effectiveDate: string; expirationDate: string;
+  term: string; premium: string; liabilityLimits: string; yearsWithCarrier: string; yearsContinuous: string;
+}
+
+export function priorCoveragesFromCapture(app: CapturedApplication): PriorCoverageDraft[] {
+  const byLine = new Map<string, PriorCoverageDraft>();
+  for (const f of app.fields) {
+    const m = /^prior (.{1,30}) policy$/i.exec(f.section ?? "");
+    const value = clean(f.value);
+    if (!m || !value) continue;
+    const line = m[1]!;
+    const d = byLine.get(line) ?? byLine.set(line, {
+      line, carrier: "", policyNumber: "", effectiveDate: "", expirationDate: "", term: "", premium: "",
+      liabilityLimits: "", yearsWithCarrier: "", yearsContinuous: ""
+    }).get(line)!;
+    const l = f.label.toLowerCase();
+    const set = (k: keyof PriorCoverageDraft) => { if (!d[k]) d[k] = value; };
+    if (/continuous coverage/.test(l)) set("yearsContinuous");
+    else if (/years with (prior |current )?(carrier|insurer)/.test(l)) set("yearsWithCarrier");
+    else if (/carrier|insurer|company/.test(l)) set("carrier");
+    else if (/policy\s*(number|no\b|#)/.test(l)) set("policyNumber");
+    else if (/expiration|expires/.test(l)) set("expirationDate");
+    else if (/effective/.test(l)) set("effectiveDate");
+    else if (/term/.test(l)) set("term");
+    else if (/premium/.test(l)) set("premium");
+    else if (/limit/.test(l)) set("liabilityLimits");
+  }
+  return [...byLine.values()].filter(d => d.carrier || d.expirationDate || d.policyNumber);
+}
+
+/** A prior coverage as CRM Prior Coverage columns (dates ISO, premium a
+ * number, term the 6 / 12 Month / Other choice). */
+export function priorCoverageColumns(d: PriorCoverageDraft, source: string): Record<string, unknown> {
+  const iso = (v: string) => toIsoDate(v || null) ?? undefined;
+  const term = /\b6\b/.test(d.term) ? 298400000 : /\b12\b/.test(d.term) ? 298400001 : d.term ? 298400002 : undefined;
+  const out: Record<string, unknown> = {
+    iacrm_name: `Prior ${d.line} Policy${d.carrier ? ` - ${d.carrier}` : ""}`.slice(0, 200),
+    iacrm_priorcarriername: d.carrier.slice(0, 200) || undefined,
+    iacrm_policynumber: d.policyNumber.slice(0, 100) || undefined,
+    iacrm_effectivedate: iso(d.effectiveDate),
+    iacrm_expirationdate: iso(d.expirationDate),
+    iacrm_policyterm: term,
+    iacrm_premium: parseMoney(d.premium) ?? undefined,
+    iacrm_liabilitylimits: d.liabilityLimits.slice(0, 100) || undefined,
+    iacrm_yearswithpriorcarrier: d.yearsWithCarrier.slice(0, 50) || undefined,
+    iacrm_yearscontinuouscoverage: d.yearsContinuous.slice(0, 50) || undefined,
+    iacrm_source: source.slice(0, 100) || undefined
+  };
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+  return out;
+}
+
 /** The line of business a section names: "Prior Home Policy", "New Auto
  * Policy", "Auto: Vehicles"; "" when it names none. */
 export function lineOfSection(section: string | undefined): string {
