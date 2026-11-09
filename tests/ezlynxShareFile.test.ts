@@ -54,17 +54,18 @@ describe("EZLynx share file", () => {
     };
     const fields = translateCapturedChoices(ezlynxFields(a, ez), parsed.options["dataservice:ezlynx"], catalog);
     const by = (label: string, group = "") => fields.find(f => f.label === label && f.group === group);
-    expect(by("Education")).toMatchObject({ mapped: "crm:primarycontact.educationcode", value: "Bachelors" });
+    // Contacts row 1 is the applicant (the primary contact), row 2 the first related contact
+    expect(by("Education", "Row 1")).toMatchObject({ mapped: "crm:primarycontact.educationcode", value: "Bachelors" });
     expect(by("Commercial applicant")).toMatchObject({ mapped: "crm:account.iacrm_insuredtype", value: "Personal" });
-    expect(by("Occupation")?.mapped).toBe("crm:primarycontact.iacrm_employmentoccupation");
+    expect(by("Occupation", "Row 1")?.mapped).toBe("crm:primarycontact.iacrm_employmentoccupation");
     // "Spouse" is listed twice in the CRM: the file's binding picks the one
-    expect(by("Relationship", "Row 1")).toMatchObject({ mapped: "crm:contact2.iacrm_role", value: "Spouse" });
+    expect(by("Relationship", "Row 2")).toMatchObject({ mapped: "crm:contact2.iacrm_role", value: "Spouse" });
   });
 
   it("the defaults match the file, so users who never import get the same routes", () => {
     const defaults = effectiveTargets(undefined);
     for (const [id, t] of Object.entries(ez)) {
-      if (t.startsWith("crm:") && !["applicant.isCommercial", "coApplicant.relationship", "applicant.unit"].includes(id)) {
+      if (t.startsWith("crm:") && !["applicant.isCommercial", "person.relationship", "applicant.unit"].includes(id)) {
         expect(defaults[id], id).toBe(t);
       }
     }

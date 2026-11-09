@@ -84,7 +84,9 @@ export type PanelRequest =
   | { type: "panel/portalIngest"; tabId: number }
   /** applicant is the agent-REVIEWED identity from the panel, not the raw
    * capture; insuredType is iacrm_insuredtype (1 Personal, 2 Commercial). */
-  | { type: "panel/appCommit"; accountId: string; applicant: CapturedApplicant; insuredType: 1 | 2 | null }
+  | { type: "panel/appCommit"; accountId: string; applicant: CapturedApplicant; insuredType: 1 | 2 | null;
+      /** Who becomes the account's primary contact (slot 1 = the applicant). */
+      primary?: { slot: number; explicit: boolean } }
   | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
   | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
   | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }

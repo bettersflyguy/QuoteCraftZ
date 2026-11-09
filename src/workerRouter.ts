@@ -36,7 +36,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { addressRows, buildRelatedContactNote, noteOutcomeText, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAccountAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -799,7 +799,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             getAccountContacts: deps.getAccountContacts,
             createContact: deps.createContact,
             contactHasDlColumns: deps.contactHasDlColumns
-          });
+          }, msg.primary ?? { slot: 1, explicit: false });
           const bits = [];
           if (en.filledFields.length) bits.push(`filled ${en.filledFields.length} field${en.filledFields.length === 1 ? "" : "s"}`);
           if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
@@ -905,7 +905,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         for (const slot of relatedNoteSlots(app)) {
           const tl = buildRelatedContactNote(app, slot);
           if (!tl) continue;
-          const id = coContactIds.find(c => c.slot === slot)?.contactId ?? null;
+          // a row that restates the primary insured goes on the primary contact
+          const id = coContactIds.find(c => c.slot === slot)?.contactId ??
+            (primarySlots(app).includes(slot) ? primaryContactId : null);
           const who = `Related contact ${slot - 1}`;
           if (!id) {
             results.push({ key: `Notes for ${who}: no contact record to attach to`, status: 0, error: "skipped", entityId: null });

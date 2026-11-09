@@ -52,7 +52,7 @@ export interface DataServicePageHooks {
 
 /** What a list section's rows are. */
 const SECTION_NOTE: Record<string, string> = {
-  Contacts: " (one row per contact added with Add contact)",
+  Contacts: " (row 1 is the applicant, then each contact added with Add contact)",
   Phones: " (one row per phone after the primary)",
   Emails: " (one row per email after the primary)",
   Addresses: " (one row per address, primary first)"
@@ -107,7 +107,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
 
   // built-in targets (they also drive identity, dedupe and fill) plus every CRM column
   const groups = useMemo(() => {
-    // groups can share a name ("Related contacts (all rows)" is both the
+    // groups can share a name ("Contacts (all rows)" is both the
     // built-in list and the CRM table): merge their paths, never drop one
     const merged = new Map<string, { path: string; label: string }[]>();
     for (const g of [...MAP_PATH_GROUPS, ...(catalog ? captureGroups(catalog) : [])]) {
@@ -121,10 +121,11 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
   const secured = useMemo(() => securedGroups(catalog), [catalog]);
   const targets = effectiveTargets(saved);
   const choose = (id: string, value: string) => void setDataServiceMap(source, { ...(saved ?? {}), [id]: value });
-  // a related contact's own timeline only exists for a contact row
+  // a person row goes to THAT person's own timeline (row 1 = the primary
+  // contact); account-level fields can still pick the primary contact's
   const specialsFor = (section: string) => [
     { value: "", label: "Not mapped (kept in the capture)" },
-    ...NOTE_TARGETS.filter(t => section === "Contacts" || t.record !== "relatedcontact")
+    ...NOTE_TARGETS.filter(t => (section === "Contacts" ? t.record !== "contact" : t.record !== "relatedcontact"))
       .map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> }))
   ];
   const labelsOf = (f: DataServiceField) => [f.label, ...(f.pageLabels ?? [])];
@@ -186,18 +187,18 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
-      {(["Applicant", "Contacts", "Phones", "Emails", "Addresses"] as const).map(section => {
+      {(["Insured", "Contacts", "Phones", "Emails", "Addresses"] as const).map(section => {
         // a field picked on the page always shows, whatever the filter
         const listed = EZLYNX_FIELDS.filter(f => f.section === section &&
           (show === "all" || f.id === focus || (show === "mapped" ? Boolean(targets[f.id]) : !targets[f.id])));
         if (!listed.length) return null;
         return (
         <div key={section}>
-          <Text size={200} className={styles.section} block>{section}{SECTION_NOTE[section]}</Text>
+          <Text size={200} className={styles.section} block>{section === "Insured" ? "Insured (account)" : section}{SECTION_NOTE[section]}</Text>
           {listed.map(f => {
             const target = targets[f.id] ?? "";
             // co-applicant list targets resolve per row; the CRM column is the same
-            const concrete = target.replace("crm:contacts[]", "crm:contact2").replace("crm:addresses[]", "crm:address1");
+            const concrete = target.replace("crm:contacts[]", "crm:contact2").replace("crm:primarycontact", "crm:contact2").replace("crm:addresses[]", "crm:address1");
             const col = choiceColumnOf(concrete, catalog);
             const key = col ? columnKeyOf(concrete) : null;
             return (

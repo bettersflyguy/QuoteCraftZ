@@ -42,7 +42,7 @@ export interface FieldCatalog { envId: string; fetchedAt: number; entities: Cata
 export const CATALOG_ENTITIES: Omit<CatalogEntity, "columns">[] = [
   { key: "account", logical: "account", set: "accounts", label: "Insured (account)", array: false },
   { key: "primarycontact", logical: "contact", set: "contacts", label: "Primary contact", array: false },
-  { key: "contacts", logical: "contact", set: "contacts", label: "Related contacts (all rows)", array: true },
+  { key: "contacts", logical: "contact", set: "contacts", label: "Contacts (all rows)", array: true },
   { key: "policies", logical: "iacrm_policy", set: "iacrm_policies", label: "Policies (all rows)", array: true },
   /* Dataverse's own address list (More Addresses): unlimited per insured;
    * row N is address number N, so rows 1 and 2 ARE the account's Address 1
@@ -256,8 +256,9 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
   return { envId: env.id, fetchedAt: Date.now(), entities };
 }
 
-// v2: entities carry their secured (pass-through) columns; v3: addresses
-const CACHE_PREFIX = "crm/fieldCatalog/v3/";
+// v2: entities carry their secured (pass-through) columns; v3: addresses;
+// v4: "Contacts (all rows)"
+const CACHE_PREFIX = "crm/fieldCatalog/v4/";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 /** How many CRM columns the saved mappings (page sites and data services,

@@ -42,9 +42,10 @@ describe("EZLynx data-service source", () => {
     expect(n["contact"]?.["firstName"]).toBe("Tracy");
     expect(n["contact"]?.["lastName"]).toBe("Dittrich");
     expect(n["address"]?.["city"]).toBe("CHAMPLIN");
-    // contacts are a table (Row N) fanned into related-contact slots
-    expect(fields.filter(f => f.section === "Contacts" && f.label === "First name").map(f => [f.group, f.value]))
-      .toEqual([["Row 1", "Alexander"], ["Row 2", "Elizabeth"]]);
+    // every person is one Contacts table: row 1 the applicant (the primary
+    // contact), then the related contacts in their slots
+    expect(fields.filter(f => f.section === "Contacts" && f.label === "First name").map(f => [f.group, f.value, f.mapped]))
+      .toEqual([["Row 1", "Tracy", "contact.firstName"], ["Row 2", "Alexander", "contact2.firstName"], ["Row 3", "Elizabeth", "contact3.firstName"]]);
     expect(n["contact2"]?.["firstName"]).toBe("Alexander");
     expect(n["contact3"]?.["firstName"]).toBe("Elizabeth");
     // the primary insured's own first name is never taken from a co-applicant
@@ -58,7 +59,7 @@ describe("EZLynx data-service source", () => {
       "applicant.city": ""
     });
     expect(fields.find(f => f.label === "Primary phone")?.mapped).toBe("crm:account.telephone2");
-    expect(fields.find(f => f.label === "Relationship" && f.group === "Row 1")?.mapped).toBe("note");
+    expect(fields.find(f => f.label === "Relationship" && f.group === "Row 2")?.mapped).toBe("note");
     expect(fields.find(f => f.label === "City")?.mapped).toBeUndefined();
     expect(effectiveTargets({ "applicant.city": "" })["applicant.city"]).toBe("");
     expect(effectiveTargets({})["applicant.city"]).toBe("address.city");
@@ -107,7 +108,8 @@ describe("premium status on write", () => {
 describe("everything the data service returns is listed and captured", () => {
   it("captures detail fields: gender/marital default to CRM, the rest kept unmapped", () => {
     const fields = ezlynxFields(applicant, undefined);
-    const by = (label: string) => fields.find(f => f.section === "Applicant" && f.label === label);
+    // the applicant: account-level fields, and their own row 1 of Contacts
+    const by = (label: string) => fields.find(f => (f.section === "Insured" || (f.section === "Contacts" && f.group === "Row 1")) && f.label === label);
     // gender/marital go to the CRM columns and still bridge to the
     // semantic fields that drive fill
     expect(by("Gender")?.mapped).toBe("crm:primarycontact.gendercode");

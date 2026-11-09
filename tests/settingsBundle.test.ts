@@ -47,7 +47,8 @@ describe("all settings", () => {
     ]);
     expect(Object.keys(file.maps).sort()).toEqual(["https://app.ezlynx.com", "https://www8.nowcerts.com"]);
     expect(text).not.toContain("secure:");                     // secured mappings stay local
-    expect(file.dataServices?.["ezlynx"]?.["applicant.education"]).toBe("crm:primarycontact.educationcode");
+    // the effective mapping: the applicant and every contact are one Contacts list
+    expect(file.dataServices?.["ezlynx"]?.["person.education"]).toBe("crm:contacts[].educationcode");
     expect(file.carrierAliases).toEqual({ [PROD]: { "11": GUID } });
     expect(file.preferences).toEqual({ autoAdvance: false });
     expect(text).not.toContain("someone");

@@ -208,6 +208,30 @@ export function applicantFromIdentity(id: CaptureIdentity, isCommercial: boolean
  * must never become a person. */
 const HEADERISH = /^(name|full ?name|first ?name|last ?name|e-?mails?|phones?|contacts?|related contacts?)$/i;
 
+/** Does a contact row restate the primary insured (by name or email)? */
+function primaryMatcher(app: CapturedApplication): (name: string, email: string) => boolean {
+  const primary = identityFromCapture(app);
+  const primaryName = canonical(`${primary.firstName} ${primary.lastName}`);
+  const primaryEmail = primary.email.toLowerCase();
+  return (name, email) => name === primaryName || Boolean(primaryEmail && email.toLowerCase() === primaryEmail);
+}
+
+/** Contact slots that are the primary insured restated (a page's contacts
+ * list includes them): a note for such a row belongs on the primary contact. */
+export function primarySlots(app: CapturedApplication): number[] {
+  const isPrimaryRow = primaryMatcher(app);
+  return Object.keys(app.normalized)
+    .map(k => /^contact(\d+)$/.exec(k))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map(m => Number(m[1]))
+    .filter(n => {
+      const grp = app.normalized[`contact${n}`] ?? {};
+      const get = (k: string) => { const v = grp[k]; return typeof v === "string" ? clean(v) : ""; };
+      const name = canonical(stripNameDecorations(`${get("firstName")} ${get("lastName")}`.trim() || get("fullName")));
+      return n >= 2 && Boolean(name) && isPrimaryRow(name, get("email"));
+    });
+}
+
 /** Related people from the capture's contact-array slots (contact2..contactN,
  * mapped or taught per-site; array teachings fan a whole related-contacts
  * table into these). Each becomes a co-applicant, which the enrichment
@@ -216,9 +240,7 @@ const HEADERISH = /^(name|full ?name|first ?name|last ?name|e-?mails?|phones?|co
  * the PRIMARY insured (NowCerts lists them among related contacts) is
  * skipped - the primary contact is a one-to-one handled separately. */
 export function coApplicantsFromCapture(app: CapturedApplication): CapturedApplicant["coApplicants"] {
-  const primary = identityFromCapture(app);
-  const primaryName = canonical(`${primary.firstName} ${primary.lastName}`);
-  const primaryEmail = primary.email.toLowerCase();
+  const isPrimaryRow = primaryMatcher(app);
   const slots = [...new Set(Object.keys(app.normalized)
     .map(k => /^(?:crm:)?contact(\d+)$/.exec(k))
     .filter((m): m is RegExpExecArray => m !== null)
@@ -241,8 +263,7 @@ export function coApplicantsFromCapture(app: CapturedApplication): CapturedAppli
     if (!firstName && !lastName) continue;
     if (HEADERISH.test(clean(`${firstName} ${lastName}`))) continue;
     const email = get("email");
-    if (canonical(`${firstName} ${lastName}`) === primaryName) continue;
-    if (primaryEmail && email.toLowerCase() === primaryEmail) continue;
+    if (isPrimaryRow(canonical(`${firstName} ${lastName}`), email)) continue;
     const phone = get("phone");
     out.push({
       firstName,

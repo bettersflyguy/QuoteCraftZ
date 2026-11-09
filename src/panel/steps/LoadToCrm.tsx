@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Checkbox, Combobox, Dropdown, Input, Option, Radio, RadioGroup, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
@@ -66,6 +66,10 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   const [identity, setIdentity] = useState<CaptureIdentity>(() => identityFromCapture(app));
   const [target, setTarget] = useState<"insured" | "lead">("insured");
   const [insuredType, setInsuredType] = useState<1 | 2>(() => guessInsuredType(app));
+  // the account's primary contact: the applicant unless the agent picks one
+  // of the related people (an existing primary only changes on a pick)
+  const related = useMemo(() => coApplicantsFromCapture(app), [app]);
+  const [primary, setPrimary] = useState<{ slot: number; explicit: boolean }>({ slot: 1, explicit: false });
   const [opp, setOpp] = useState<OppState>({ create: false, lobId: null, name: "", nameEdited: false });
   // A captured policy number means the ingest happened on a SALE screen -
   // policy creation offers itself pre-checked with the captured terms.
@@ -276,7 +280,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         // identity is agent-reviewed; related contacts (contact2/contact3
         // entity slots) ride along and are find-or-created AFTER the account
         applicant: withServiceLicenses({ ...applicantFromIdentity(identity, insuredType === 2), coApplicants: coApplicantsFromCapture(app) }),
-        insuredType
+        insuredType,
+        primary
       });
       let createdOppId: string | null = null;
       const oppLobId = opp.lobId;
@@ -542,6 +547,19 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           <Radio value="1" label="Personal" />
           <Radio value="2" label="Commercial" />
         </RadioGroup>
+        {related.length > 0 && (
+          <>
+            <div className={styles.label}>Primary contact</div>
+            <Dropdown
+              value={primary.slot === 1 ? personName || "Applicant" : (() => { const c = related.find(r => r.slot === primary.slot); return c ? `${c.firstName} ${c.lastName}`.trim() : ""; })()}
+              selectedOptions={[String(primary.slot)]}
+              onOptionSelect={(_, d) => setPrimary({ slot: Number(d.optionValue ?? 1), explicit: true })}
+            >
+              <Option value="1">{personName || "Applicant"}</Option>
+              {related.filter(c => c.slot).map(c => <Option key={c.slot} value={String(c.slot)}>{`${c.firstName} ${c.lastName}`.trim()}</Option>)}
+            </Dropdown>
+          </>
+        )}
         <div className={styles.label}>Create as</div>
         <RadioGroup layout="horizontal" value={target} onChange={(_, d) => setTarget(d.value as "insured" | "lead")}>
           <Radio value="insured" label="Insured (Account)" />

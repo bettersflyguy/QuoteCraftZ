@@ -39,7 +39,7 @@ describe("phones and emails", () => {
     ]);
     expect(fields.filter(f => f.section === "Emails").map(f => f.value)).toEqual(["Tracy Dittrich", "Work", "tracey@work.example.com"]);
     // the contact's FIRST phone is their own CRM contact's phone
-    expect(fields.find(f => f.section === "Contacts" && f.label === "Primary phone")?.value).toBe("6125550111");
+    expect(fields.find(f => f.section === "Contacts" && f.group === "Row 2" && f.label === "Primary phone")).toMatchObject({ value: "6125550111", mapped: "contact2.phone" });
   });
 
   it("the agent's routing decides where the rows go", () => {

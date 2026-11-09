@@ -106,15 +106,24 @@ function contactMatches(existing: ContactRow, cand: Candidate): boolean {
   return false;
 }
 
+/** Who becomes the account's primary contact: a person's slot (1 = the
+ * applicant, N = related contact slot N). `explicit`: the agent picked it -
+ * only then may an account that already HAS a primary contact change. */
+export interface PrimaryChoice { slot: number; explicit: boolean }
+
 /** Fill-if-empty enrichment of the matched/created insured from the EZLynx
- * applicant, plus find-or-create Contacts (applicant + co-applicants) with the
- * applicant as primary contact when none is set. NEVER overwrites a non-empty
- * value - agent-entered data always wins over rater data. */
+ * applicant, plus find-or-create Contacts (applicant + co-applicants). The
+ * primary contact pointer is set to the chosen person (default the
+ * applicant) when the account has none, and changed on an existing account
+ * ONLY when the agent explicitly picked someone else. The named insured
+ * (insured first/last name) stays the applicant either way. NEVER
+ * overwrites a non-empty value - agent-entered data always wins. */
 export async function ensureInsuredData(
   env: CrmEnvironment,
   accountId: string,
   applicant: CapturedApplicant,
-  api: EnrichApi
+  api: EnrichApi,
+  primary: PrimaryChoice = { slot: 1, explicit: false }
 ): Promise<EnrichResult> {
   const state = await api.getAccountEnrichmentState(env, accountId);
 
@@ -181,8 +190,10 @@ export async function ensureInsuredData(
   }
 
   let primaryContactSet = false;
-  if (!state.primaryContactId && applicantContactId) {
-    patch["primarycontactid@odata.bind"] = `/contacts(${applicantContactId})`;
+  const chosenId = primary.slot === 1 ? applicantContactId : coContactIds.find(c => c.slot === primary.slot)?.contactId ?? null;
+  const target = chosenId ?? (primary.explicit ? null : applicantContactId);
+  if (target && (!state.primaryContactId || (primary.explicit && target !== state.primaryContactId))) {
+    patch["primarycontactid@odata.bind"] = `/contacts(${target})`;
     primaryContactSet = true;
   }
 

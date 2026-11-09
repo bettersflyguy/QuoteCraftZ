@@ -37,12 +37,12 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "address.city", label: "City", group: "Primary address (account)" },
   { path: "address.state", label: "State", group: "Primary address (account)" },
   { path: "address.postalCode", label: "ZIP code", group: "Primary address (account)" },
-  { path: "contacts[].firstName", label: "Related contact first name", group: "Related contacts (all rows)" },
-  { path: "contacts[].lastName", label: "Related contact last name", group: "Related contacts (all rows)" },
-  { path: "contacts[].fullName", label: "Related contact full name", group: "Related contacts (all rows)" },
-  { path: "contacts[].email", label: "Related contact email", group: "Related contacts (all rows)" },
-  { path: "contacts[].phone", label: "Related contact phone", group: "Related contacts (all rows)" },
-  { path: "contacts[].dateOfBirth", label: "Related contact date of birth", group: "Related contacts (all rows)" },
+  { path: "contacts[].firstName", label: "Related contact first name", group: "Contacts (all rows)" },
+  { path: "contacts[].lastName", label: "Related contact last name", group: "Contacts (all rows)" },
+  { path: "contacts[].fullName", label: "Related contact full name", group: "Contacts (all rows)" },
+  { path: "contacts[].email", label: "Related contact email", group: "Contacts (all rows)" },
+  { path: "contacts[].phone", label: "Related contact phone", group: "Contacts (all rows)" },
+  { path: "contacts[].dateOfBirth", label: "Related contact date of birth", group: "Contacts (all rows)" },
   { path: "policy.number", label: "Policy number", group: "Policy" },
   { path: "policy.premium", label: "Policy premium", group: "Policy" },
   { path: "coverage.effectiveDate", label: "Effective date", group: "Quote & coverage" },
@@ -166,9 +166,9 @@ export type NoteRecord = "account" | "contact" | "relatedcontact" | "opportunity
 export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[] = [
   { value: "note", record: "account", label: "Notes: Insured (account)" },
   { value: "note:contact", record: "contact", label: "Notes: Primary contact" },
-  // each row's values on THAT related contact's own timeline (resolved per
-  // row to note:contact2, note:contact3 ... like the related-contact slots)
-  { value: "note:contacts[]", record: "relatedcontact", label: "Notes: Related contact (each row)" },
+  // each person's values on THEIR own timeline (resolved per row: the
+  // primary insured to note:contact, others to note:contact2, note:contact3 ...)
+  { value: "note:contacts[]", record: "relatedcontact", label: "Notes: Each contact's own timeline" },
   { value: "note:opportunity", record: "opportunity", label: "Notes: Opportunity" },
   { value: "note:quote", record: "quote", label: "Notes: Quote" },
   { value: "note:policy", record: "policy", label: "Notes: Policy" }
