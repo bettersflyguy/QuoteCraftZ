@@ -146,6 +146,38 @@ function allAddresses(a: Record<string, unknown>): import("@/types").CapturedAdd
     .filter(x => x.street || x.city || x.postalCode);
 }
 
+/** A person's phones and emails, spread over CRM's fixed slots: one phone
+ * per type (Home, Work, Mobile, Fax), emails 2 and 3 by order (email 1 is
+ * the identity email). Whatever doesn't fit a slot (a second Home phone, a
+ * 4th email) is listed in morePhones / moreEmails instead of being lost. */
+export function contactChannels(r: Record<string, unknown>): Record<string, string> {
+  const d: Record<string, string> = {};
+  const more: string[] = [];
+  const SLOT: Record<string, string> = { home: "homePhone", work: "workPhone", business: "workPhone", mobile: "mobile", cell: "mobile", fax: "fax" };
+  for (const p of Array.isArray(r["phoneNumbers"]) ? r["phoneNumbers"] as Record<string, unknown>[] : []) {
+    const num = text(p?.["number"]);
+    if (!num) continue;
+    const ext = text(p["extension"]);
+    const value = ext ? `${num} x${ext}` : num;
+    const type = text(p["type"]);
+    const slot = SLOT[type.toLowerCase()];
+    if (slot && !d[slot]) d[slot] = value;
+    else more.push(type ? `${type}: ${value}` : value);
+  }
+  if (more.length) d["morePhones"] = more.join("; ");
+  const emails = (Array.isArray(r["emailAddresses"]) ? r["emailAddresses"] as unknown[] : [])
+    .map(e => {
+      if (typeof e === "string") return { type: "", email: e.trim() };
+      const o = (e ?? {}) as Record<string, unknown>;
+      return { type: text(o["type"]), email: text(o["email"] ?? o["emailAddress"]) };
+    })
+    .filter(e => e.email);
+  if (emails[1]) d["email2"] = emails[1].email;
+  if (emails[2]) d["email3"] = emails[2].email;
+  if (emails.length > 3) d["moreEmails"] = emails.slice(3).map(e => (e.type ? `${e.type}: ${e.email}` : e.email)).join("; ");
+  return d;
+}
+
 /** The person's other values (the data service returns far more than the
  * identity fields). SSN and license NUMBERS are not in here: they travel
  * only on the secured channel (see sources/ezlynxSource ezlynxSecure). */
@@ -173,7 +205,8 @@ function personDetails(r: Record<string, unknown>, address?: Record<string, unkn
     isVip: text(r["isVip"]),
     isDeceased: text(r["isDeceased"]),
     ratingState: text(r["ratingState"]),
-    isCommercial: text(r["isCommercial"])
+    isCommercial: text(r["isCommercial"]),
+    ...contactChannels(r)
   };
   if (address) {
     d["unit"] = text(address["unit"]);

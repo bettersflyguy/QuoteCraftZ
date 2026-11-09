@@ -75,7 +75,7 @@ describe("normalizeApplicant", () => {
         postalCode: "55112", postalCodeSuffix: "", yearsAtAddress: "", monthsAtAddress: ""
       }],
       phones: [{ type: "Mobile", number: "6125550100" }], emails: ["alex.sample@example.com"],
-      details: { assignedProducer: "Nathan Betters", county: "Ramsey", isCommercial: "No", ratingState: "MN" },
+      details: { assignedProducer: "Nathan Betters", county: "Ramsey", isCommercial: "No", ratingState: "MN", mobile: "6125550100" },
       coApplicants: [{ details: {}, firstName: "Blake", lastName: "Sample", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1952-10-11", dlNumber: null, dlState: null, ssn: null }],
       isCommercial: false
     });
