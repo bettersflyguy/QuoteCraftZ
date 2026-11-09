@@ -177,7 +177,11 @@
     "address.street1": /line\s*2|address\s*2\b|suite|\bapt\b|apartment|\bunit\b/,
     "address.street2": /line\s*1|address\s*1\b/,
     /* other people's / other kinds of names are never the insured's name */
-    "contact.fullName": /\bfirst\b|\blast\b|\bmiddle\b|\bmaiden\b|\bnick ?name\b|\baccount\b|\bbusiness\b|\bcompany\b|\bproducer\b|\bagent\b|\bcsr\b|\bemployer\b|\bspouse\b|\bowner\b|\buser ?name\b/
+    "contact.fullName": /\bfirst\b|\blast\b|\bmiddle\b|\bmaiden\b|\bnick ?name\b|\baccount\b|\bbusiness\b|\bcompany\b|\bproducer\b|\bagent\b|\bcsr\b|\bemployer\b|\bspouse\b|\bowner\b|\buser ?name\b/,
+    /* the policy being written is never the PRIOR one: "Prior Policy
+     * Expiration Date" is not this policy's expiration */
+    "coverage.effectiveDate": /\bprior\b|\bprevious\b|\bcurrent\b/,
+    "coverage.expirationDate": /\bprior\b|\bprevious\b|\bcurrent\b/
   };
 
   function matchField(fieldName, candidates) {

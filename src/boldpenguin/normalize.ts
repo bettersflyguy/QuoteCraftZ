@@ -64,7 +64,10 @@ const rules: [string, string[]][] = [
  * business name. */
 const excludes: Record<string, RegExp> = {
   "business.legalName": /financ|leas|lien|mortgag|\bbank\b|lender/,
-  "business.dba": /financ|leas|lien|mortgag|\bbank\b|lender/
+  "business.dba": /financ|leas|lien|mortgag|\bbank\b|lender/,
+  // the policy being written is never the PRIOR one (label or its section)
+  "coverage.effectiveDate": /\bprior\b|\bprevious\b|\bcurrent\b/,
+  "coverage.expirationDate": /\bprior\b|\bprevious\b|\bcurrent\b/
 };
 
 export function clean(value: unknown): string {

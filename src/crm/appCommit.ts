@@ -399,10 +399,14 @@ export interface PolicyDraft {
   carrierName: string;
 }
 
-function fieldValue(app: CapturedApplication, labelRe: RegExp): string {
-  const f = flatFields(app).find(x => labelRe.test(x.label) && x.value);
+function fieldValue(app: CapturedApplication, labelRe: RegExp, notRe?: RegExp): string {
+  const f = flatFields(app).find(x => labelRe.test(x.label) && x.value && !(notRe && notRe.test(`${x.label} ${x.section ?? ""}`)));
   return f ? clean(f.value) : "";
 }
+
+/** A prior policy's value (its label or its "Prior Auto Policy" table):
+ * never the dates of the policy being written. */
+const PRIOR_POLICY = /\bprior\b|\bprevious\b|current carrier|continuous coverage/i;
 
 function addMonthsUs(usDate: string, months: number): string {
   const m = usDate.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
@@ -415,8 +419,8 @@ export function policyFromCapture(app: CapturedApplication): PolicyDraft {
   const number = str(app, "policy", "number") ?? fieldValue(app, /^policy\s*(number|no|#)\b/i);
   const premium = str(app, "policy", "premium") ||
     fieldValue(app, /total\s+premium|premium\s*:?\s*$/i);
-  const effectiveDate = str(app, "coverage", "effectiveDate") ?? fieldValue(app, /effective\s*date/i);
-  let expirationDate = str(app, "coverage", "expirationDate") ?? fieldValue(app, /expiration\s*date/i);
+  const effectiveDate = str(app, "coverage", "effectiveDate") ?? fieldValue(app, /effective\s*date/i, PRIOR_POLICY);
+  let expirationDate = str(app, "coverage", "expirationDate") ?? fieldValue(app, /expiration\s*date/i, PRIOR_POLICY);
   if (!expirationDate && effectiveDate) {
     // sale screens rarely print the expiration - derive it from the term
     // ("Policy Term: 6 months" / "6 Month Auto Premium")
