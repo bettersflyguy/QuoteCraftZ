@@ -19,7 +19,7 @@ export interface CrmSourceRecords {
     primary: Record<string, unknown> | null;
     /** Related (non-primary) contacts in slot order: [0] = contact2. */
     related: Record<string, unknown>[];
-    /** The account's addresses (customeraddress) with an address number. */
+    /** The insured person's addresses (customeraddress on their contact). */
     addresses?: Record<string, unknown>[];
   };
 }
@@ -54,7 +54,7 @@ export function buildCrmColumnFields(records: CrmSourceRecords, catalog: FieldCa
   add(records.full.account, "account", "crm:account", "CRM: Insured (account)");
   add(records.full.primary, "primarycontact", "crm:primarycontact", "CRM: Primary contact");
   records.full.related.forEach((c, i) => add(c, "contacts", `crm:contact${i + 2}`, "Related contacts (CRM)", `Row ${i + 1}`));
-  // row N = address number N (1 and 2 are the account's Address 1 / 2)
+  // row N = address number N on the insured person's contact
   for (const a of records.full.addresses ?? []) {
     const n = Number(a["addressnumber"]);
     if (Number.isInteger(n) && n >= 1 && n <= 40) add(a, "addresses", `crm:address${n}`, "Addresses (CRM)", `Row ${n}`);

@@ -44,9 +44,9 @@ export const CATALOG_ENTITIES: Omit<CatalogEntity, "columns">[] = [
   { key: "primarycontact", logical: "contact", set: "contacts", label: "Primary contact", array: false },
   { key: "contacts", logical: "contact", set: "contacts", label: "Contacts (all rows)", array: true },
   { key: "policies", logical: "iacrm_policy", set: "iacrm_policies", label: "Policies (all rows)", array: true },
-  /* Dataverse's own address list (More Addresses): unlimited per insured;
-   * row N is address number N, so rows 1 and 2 ARE the account's Address 1
-   * and Address 2 (Dataverse keeps them in sync) and 3+ are the rest */
+  /* Dataverse's own address list (More Addresses): unlimited per person;
+   * row N is address number N on the applicant's contact, so rows 1-3 ARE
+   * the contact's Address 1-3 (Dataverse keeps them in sync), 4+ the rest */
   { key: "addresses", logical: "customeraddress", set: "customeraddresses", label: "Addresses (all rows)", array: true },
   { key: "quote", logical: "iacrm_quote", set: "iacrm_quotes", label: "Quote", array: false },
   { key: "opportunity", logical: "opportunity", set: "opportunities", label: "Opportunity", array: false }

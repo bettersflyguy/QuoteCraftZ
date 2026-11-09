@@ -84,8 +84,8 @@ const ROW_SLOTS: Record<string, { slot: string; start: number }> = {
   vehicles: { slot: "vehicle", start: 1 },
   "crm:contacts": { slot: "crm:contact", start: 2 },
   "crm:policies": { slot: "crm:policy", start: 1 },
-  /* the insured's addresses: row N is address number N on the account
-   * (1 and 2 are its Address 1 / Address 2, 3+ its More Addresses) */
+  /* the applicant's addresses: row N is address number N on their contact
+   * (1-3 are its Address 1-3, 4+ its More Addresses) */
   "crm:addresses": { slot: "crm:address", start: 1 },
   "secure:contacts": { slot: "secure:contact", start: 2 }
 };
@@ -174,7 +174,7 @@ export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[
   { value: "note:policy", record: "policy", label: "Notes: Policy" }
 ];
 /** A row of a list whose values land on the PRIMARY record: the primary
- * contact (the applicant's row of a Contacts list) or the account's
+ * contact (the applicant's row of a Contacts list) or the applicant's
  * Address 1 (the primary address row of an Addresses list). */
 export const isPrimaryTarget = (path: string | undefined): boolean =>
   /^(contact|crm:primarycontact|secure:primarycontact|crm:address1)\.|^note:contact$/.test(path ?? "");

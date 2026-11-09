@@ -55,7 +55,7 @@ const SECTION_NOTE: Record<string, string> = {
   Contacts: " (row 1 is the applicant, then each contact added with Add contact)",
   Phones: " (one row per phone after the primary)",
   Emails: " (one row per email after the primary)",
-  Addresses: " (one row per address, primary first)"
+  Addresses: " (the applicant's addresses on their contact, primary first)"
 };
 
 /** Every field a data service returns, each routed to a CRM target, with

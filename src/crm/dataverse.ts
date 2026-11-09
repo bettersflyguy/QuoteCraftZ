@@ -370,8 +370,11 @@ export async function getInsuredSourceRecords(
       full.related = value.filter(c => c["contactid"] !== primaryId).slice(0, 10);
     }
   } catch { /* the basic fields above still fill */ }
-  if (accountId) {
-    try { full.addresses = await getAccountAddresses(env, accountId); } catch { /* addresses are optional context */ }
+  // the insured person's addresses live on their contact (EZLynx: the
+  // applicant has many, each other contact one)
+  const addressOwner = (full.primary?.["contactid"] as string | undefined) ?? null;
+  if (addressOwner) {
+    try { full.addresses = await getRecordAddresses(env, addressOwner); } catch { /* addresses are optional context */ }
   }
 
   return { account, contact, riskAnswers, relatedContacts, full };
@@ -713,20 +716,22 @@ export async function updateAccount(env: CrmEnvironment, accountId: string, patc
   }
 }
 
-/** The account's addresses with any data, by address number (1 and 2 are
- * the account's own Address 1 / Address 2, kept in sync by Dataverse). */
-export async function getAccountAddresses(env: CrmEnvironment, accountId: string): Promise<Record<string, unknown>[]> {
+/** A record's addresses with any data, by address number (1-3 on a contact
+ * and 1-2 on an account are its own Address 1/2/3 columns, kept in sync by
+ * Dataverse; higher numbers are its More Addresses). */
+export async function getRecordAddresses(env: CrmEnvironment, parentId: string): Promise<Record<string, unknown>[]> {
   const { value } = await dvJson<{ value: Record<string, unknown>[] }>(env,
-    `customeraddresses?$filter=_parentid_value eq ${accountId}&$orderby=addressnumber asc&$top=40`);
+    `customeraddresses?$filter=_parentid_value eq ${parentId}&$orderby=addressnumber asc&$top=40`);
   return value.filter(a => ["line1", "city", "postalcode", "stateorprovince"].some(c => typeof a[c] === "string" && a[c]));
 }
 
-/** One captured address row onto the insured: address number N on the
- * account. An existing row is filled where empty (agent-entered CRM data
- * wins); a missing one is created. Returns what happened. */
-export async function upsertAccountAddress(
-  env: CrmEnvironment, accountId: string, addressNumber: number, values: Record<string, unknown>
+/** One captured address row onto a person (or account): address number N
+ * on that record. An existing row is filled where empty (agent-entered CRM
+ * data wins); a missing one is created. Returns what happened. */
+export async function upsertRecordAddress(
+  env: CrmEnvironment, parent: "contact" | "account", parentId: string, addressNumber: number, values: Record<string, unknown>
 ): Promise<{ outcome: "created" | "filled" | "unchanged"; columns: string[] }> {
+  const accountId = parentId;
   const cols = Object.keys(values).filter(c => /^[a-z][a-z0-9_]*$/.test(c));
   if (!cols.length || !Number.isInteger(addressNumber) || addressNumber < 1) return { outcome: "unchanged", columns: [] };
   const { value } = await dvJson<{ value: { customeraddressid: string }[] }>(env,
@@ -739,7 +744,7 @@ export async function upsertAccountAddress(
   const body: Record<string, unknown> = {};
   for (const c of cols) body[c] = values[c];
   body["addressnumber"] = addressNumber;
-  body["parentid_account@odata.bind"] = `/accounts(${accountId})`;
+  body[`parentid_${parent}@odata.bind`] = `/${parent === "contact" ? "contacts" : "accounts"}(${accountId})`;
   await dvPost(env, "customeraddresses?$select=customeraddressid", body);
   return { outcome: "created", columns: cols };
 }

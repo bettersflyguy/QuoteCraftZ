@@ -139,7 +139,8 @@
       "person.city": "crm:contacts[].address1_city",
       "person.state": "crm:contacts[].address1_stateorprovince",
       "person.county": "crm:contacts[].address1_county",
-      "person.postalCode": "crm:contacts[].address1_postalcode"
+      "person.postalCode": "crm:contacts[].address1_postalcode",
+      "address.person": ""
     }
   },
   "options": {

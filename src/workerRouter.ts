@@ -38,7 +38,7 @@ import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
-import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAccountAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
 import { buildFillValues } from "@/portal/fillValues";
@@ -82,7 +82,7 @@ export interface Deps {
   createPolicy: typeof createPolicy;
   createQuote: typeof createQuote;
   fillIfEmpty: typeof fillIfEmpty;
-  upsertAccountAddress: typeof upsertAccountAddress;
+  upsertRecordAddress: typeof upsertRecordAddress;
   upsertRecordNote: typeof upsertRecordNote;
   /** Live CRM column catalog for capture mappings (cached per environment). */
   getFieldCatalog: (env: CrmEnvironment, refresh?: boolean) => Promise<FieldCatalog>;
@@ -824,13 +824,19 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
               results.push({ key: `${w.label} mapped columns`, status: 0, error: String((e as Error).message ?? e), entityId: null });
             }
           }
-          // the insured's addresses: captured row N -> address number N on
-          // the account (fill-if-empty; missing rows created)
+          // the applicant's addresses: captured row N -> address number N on
+          // THEIR contact (row 1 = the contact's Address 1; fill-if-empty,
+          // missing rows created). Other contacts' one address rides on their
+          // own contact's Address 1 columns.
           for (const n of addressRows(app)) {
             const values = coerceGroup(entityOf("addresses"), groupOf(`crm:address${n}`));
             if (!Object.keys(values).length) continue;
+            if (!en.applicantContactId) {
+              results.push({ key: `Address ${n}: no contact record to attach to`, status: 0, error: "skipped", entityId: null });
+              continue;
+            }
             try {
-              const r = await deps.upsertAccountAddress(env, msg.accountId, n, values);
+              const r = await deps.upsertRecordAddress(env, "contact", en.applicantContactId, n, values);
               if (r.outcome !== "unchanged") results.push({ key: `Address ${n}: ${r.outcome === "created" ? "added" : `filled ${r.columns.length} column${r.columns.length === 1 ? "" : "s"}`}`, status: 204, error: null, entityId: null });
             } catch (e) {
               results.push({ key: `Address ${n}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
@@ -1537,7 +1543,7 @@ export const realDeps: Deps = {
   createPolicy,
   createQuote,
   fillIfEmpty,
-  upsertAccountAddress,
+  upsertRecordAddress,
   upsertRecordNote,
   getFieldCatalog: (env, refresh) => getFieldCatalog(env, { dvJson }, refresh),
   dvQuery: dvJson,

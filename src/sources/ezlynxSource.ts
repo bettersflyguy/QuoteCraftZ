@@ -115,7 +115,10 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "email.person", label: "Person", section: "Emails", defaultTarget: "note" },
   { id: "email.type", label: "Email type", section: "Emails", defaultTarget: "note" },
   { id: "email.email", label: "Email address", section: "Emails", defaultTarget: "note" },
-  // every address the insured has: row N = CRM address N (1 = Address 1)
+  // every address of the applicant (EZLynx gives other contacts one each,
+  // on their Contacts row): row N = address N on the applicant's CRM
+  // contact (1 = their Address 1, the primary address)
+  { id: "address.person", label: "Person", section: "Addresses", defaultTarget: "" },
   { id: "address.type", label: "Address type", section: "Addresses", defaultTarget: "crm:addresses[].name", pageLabels: EVERY_ADDRESS("address type") },
   { id: "address.street", label: "Street address", section: "Addresses", defaultTarget: "crm:addresses[].line1", pageLabels: EVERY_ADDRESS("address") },
   { id: "address.address2", label: "Address line 2", section: "Addresses", defaultTarget: "crm:addresses[].line2", pageLabels: EVERY_ADDRESS("address line 2") },
@@ -258,9 +261,11 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
   });
   list("Phones", "phone.", a.morePhones ?? []);
   list("Emails", "email.", a.moreEmails ?? []);
+  const owner = `${a.firstName} ${a.lastName}`.trim();
   (a.addresses ?? []).slice(0, 40).forEach((ad, i) => {
+    const row: Record<string, string> = { ...ad, person: owner };
     for (const f of EZLYNX_FIELDS.filter(x => x.section === "Addresses")) {
-      const value = (ad[f.id.slice("address.".length) as keyof typeof ad] ?? "").trim();
+      const value = (row[f.id.slice("address.".length)] ?? "").trim();
       if (value) out.push({ label: f.label, value, section: "Addresses", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
     }
   });
