@@ -76,8 +76,8 @@ describe("normalizeApplicant", () => {
       }],
       phones: [{ type: "Mobile", number: "6125550100" }], emails: ["alex.sample@example.com"],
       morePhones: [], moreEmails: [],
-      details: { assignedProducer: "Nathan Betters", county: "Ramsey", isCommercial: "No", ratingState: "MN" },
-      coApplicants: [{ details: {}, firstName: "Blake", lastName: "Sample", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1952-10-11", dlNumber: null, dlState: null, ssn: null }],
+      details: { assignedProducer: "Nathan Betters", county: "Ramsey", isCommercial: "No", ratingState: "MN", street: "100 EXAMPLE RD", city: "MOUNDS VIEW", state: "MN", postalCode: "55112" },
+      coApplicants: [{ details: { isCoApplicant: "Yes" }, firstName: "Blake", lastName: "Sample", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1952-10-11", dlNumber: null, dlState: null, ssn: null }],
       isCommercial: false
     });
   });

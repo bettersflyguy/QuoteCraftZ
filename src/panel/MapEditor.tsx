@@ -97,7 +97,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   inject?: PortalScanRow | null;
   /** On-screen fields another mapping covers (a data service): outlined by
    * the peek with the CRM target they feed. */
-  extraPeek?: { key: string; target: string; family?: boolean }[];
+  extraPeek?: { key: string; target: string; family?: boolean; labels?: string[] }[];
   scan: PortalScanResult;
   /** This site's one-for-one choice mappings ({table.column: {text: value}}). */
   choices?: Record<string, ColumnOptionMap>;
@@ -238,7 +238,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v), family: r.key.startsWith("field:") && isArrayPath(v) }];
     if (r.autoPath && !hideAuto) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
     return [];
-  }).concat((extraPeek ?? []).map(x => ({ key: x.key, label: targetText(x.target), kind: "mapped" as const, ...(x.family ? { family: true } : {}) })));
+  }).concat((extraPeek ?? []).map(x => ({ key: x.key, label: targetText(x.target), kind: "mapped" as const, ...(x.family ? { family: true } : {}), ...(x.labels ? { labels: x.labels } : {}) })));
   const peekSignature = JSON.stringify(peekItems);
   // on from the start: the page shows green/red while mapping and re-colors
   // with every change (the eye turns it off)

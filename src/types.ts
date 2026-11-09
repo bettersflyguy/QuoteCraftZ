@@ -3,8 +3,9 @@ export interface CapturedAddress {
   county: string; postalCode: string; postalCodeSuffix: string; yearsAtAddress: string; monthsAtAddress: string;
 }
 
-export interface CapturedPhone { type: string; number: string; extension: string }
-export interface CapturedEmail { type: string; email: string }
+/** "person": whose it is (the applicant's or a contact's name). */
+export interface CapturedPhone { type: string; number: string; extension: string; person?: string }
+export interface CapturedEmail { type: string; email: string; person?: string }
 
 export interface CapturedApplicant {
   ezlynxApplicantId: number;

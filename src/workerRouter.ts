@@ -37,7 +37,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { addressRows, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
-import { EZLYNX_FIELDS, coveredPageLabels, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
+import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAccountAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
@@ -1166,17 +1166,10 @@ function peekLabel(target: string, catalog: FieldCatalog | null): string {
 
 /** Fields a data service fills on its own site (EZLynx: Gender, DOB...),
  * as labelled-field peek items with the CRM target they feed. */
-async function dataServicePeekItems(origin: string, catalog: FieldCatalog | null): Promise<import("@/boldpenguin/types").PeekItem[]> {
+async function serviceItemsFor(origin: string, catalog: FieldCatalog | null): Promise<import("@/boldpenguin/types").PeekItem[]> {
   if (origin !== "https://app.ezlynx.com") return [];
-  const targets = effectiveTargets((await getDataServiceMaps())["ezlynx"]);
-  const out: import("@/boldpenguin/types").PeekItem[] = [];
-  for (const f of EZLYNX_FIELDS.filter(x => x.section !== "Co-applicants" && targets[x.id])) {
-    for (const l of f.pageLabels ?? (f.section === "Applicant" ? [f.label] : [])) {
-      const key = fieldKeyOf("", l);
-      if (!out.some(o => o.key === key)) out.push({ key, label: peekLabel(targets[f.id]!, catalog), kind: "mapped", ...(l.startsWith("*") ? { family: true } : {}) });
-    }
-  }
-  return out;
+  return dataServicePeekItems((await getDataServiceMaps())["ezlynx"], t => peekLabel(t, catalog))
+    .map(({ key, label, kind, labels }) => ({ key, label, kind, labels }));
 }
 
 /** Green for mapped, red for what the capture reads that nothing covers -
@@ -1195,9 +1188,11 @@ async function peekPortalTab(
     const origin = await tabOrigin(tabId);
     let catalog: FieldCatalog | null = null;
     try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
-    const service = origin ? await dataServicePeekItems(origin, catalog) : [];
+    const service = origin ? await serviceItemsFor(origin, catalog) : [];
     arg = {
-      items: [...items, ...service.filter(s => !items.some(i => i.key === s.key))],
+      // the editor's service items only signal a change: the saved
+      // data-service mapping is the truth
+      items: [...items.filter(i => !i.key.startsWith("service:")), ...service],
       map: {},
       payload: await getCapturedApplication(),
       pageLabels: origin === "https://app.ezlynx.com" ? coveredPageLabels((await getDataServiceMaps())["ezlynx"]) : []

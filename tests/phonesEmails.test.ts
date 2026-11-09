@@ -32,17 +32,19 @@ describe("phones and emails", () => {
     expect(fields.find(f => f.mapped === "contact.email")?.value).toBe("tracey@example.com");
     const phones = fields.filter(f => f.section === "Phones").map(f => [f.group, f.label, f.value, f.mapped]);
     expect(phones).toEqual([
-      ["Row 1", "Phone type", "Work", "note"], ["Row 1", "Phone number", "(612) 813-3300", "note"], ["Row 1", "Extension", "22", "note"],
-      ["Row 2", "Phone type", "Mobile", "note"], ["Row 2", "Phone number", "(612) 555-0111", "note"]
+      ["Row 1", "Person", "Tracy Dittrich", "note"], ["Row 1", "Phone type", "Work", "note"], ["Row 1", "Phone number", "(612) 813-3300", "note"], ["Row 1", "Extension", "22", "note"],
+      ["Row 2", "Person", "Tracy Dittrich", "note"], ["Row 2", "Phone type", "Mobile", "note"], ["Row 2", "Phone number", "(612) 555-0111", "note"],
+      // a contact's phones after their own primary join the same list
+      ["Row 3", "Person", "Alex Dittrich", "note"], ["Row 3", "Phone type", "Home", "note"], ["Row 3", "Phone number", "6125550112", "note"]
     ]);
-    expect(fields.filter(f => f.section === "Emails").map(f => f.value)).toEqual(["Work", "tracey@work.example.com"]);
-    // a co-applicant's extras ride on their row
-    expect(fields.find(f => f.label === "Additional phones")?.value).toBe("Home: 6125550112");
+    expect(fields.filter(f => f.section === "Emails").map(f => f.value)).toEqual(["Tracy Dittrich", "Work", "tracey@work.example.com"]);
+    // the contact's FIRST phone is their own CRM contact's phone
+    expect(fields.find(f => f.section === "Contacts" && f.label === "Primary phone")?.value).toBe("6125550111");
   });
 
   it("the agent's routing decides where the rows go", () => {
     const fields = ezlynxFields(normalizeApplicant(raw), { "phone.type": "note:contact", "phone.number": "note:contact", "phone.extension": "" });
-    expect(fields.filter(f => f.section === "Phones" && f.mapped === "note:contact")).toHaveLength(4);
+    expect(fields.filter(f => f.section === "Phones" && f.mapped === "note:contact")).toHaveLength(6);
     expect(fields.find(f => f.label === "Extension")?.mapped).toBeUndefined();
   });
 
@@ -51,8 +53,9 @@ describe("phones and emails", () => {
     const app = { fields, normalized: normalize(fields), capturedAt: 0, source: { system: "EZLynx" } } as unknown as CapturedApplication;
     const note = buildTimelineNote(app, "account")!;
     expect(note.html).toContain("<h3>Phones</h3>");
-    expect(note.html).toContain("<th>Phone type</th><th>Phone number</th><th>Extension</th>");
-    expect(note.html).toContain("<td>Work</td><td>(612) 813-3300</td><td>22</td>");
+    expect(note.html).toContain("<th>Person</th><th>Phone type</th><th>Phone number</th><th>Extension</th>");
+    expect(note.html).toContain("<td>Tracy Dittrich</td><td>Work</td><td>(612) 813-3300</td><td>22</td>");
+    expect(note.html).toContain("<td>Alex Dittrich</td><td>Home</td><td>6125550112</td><td></td>");
     expect(note.html).not.toContain("986-7235");
   });
 });

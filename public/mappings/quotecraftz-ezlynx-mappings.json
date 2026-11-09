@@ -41,9 +41,6 @@
       "field:drivers|driver education": "note",
       "field:drivers|mature driver": "note",
       "field:drivers|good driver": "note",
-      "field:details|prefix": "crm:primarycontact.salutation",
-      "field:details|suffix": "crm:primarycontact.suffix",
-      "field:details|preferred language": "note:contact",
       "field:policy info|prior carrier": "coverage.currentCarrier",
       "field:policy info|prior policy premium": "coverage.currentPremium",
       "field:policy info|effective date new policy": "coverage.effectiveDate",
@@ -68,7 +65,10 @@
       "field:coverage|collision": "note:opportunity",
       "field:coverage|towing labor": "note:opportunity",
       "field:coverage|rental expense": "note:opportunity",
-      "field:coverage|stated amount": "note:opportunity"
+      "field:coverage|stated amount": "note:opportunity",
+      "field:details|applicant info>prefix": "crm:primarycontact.salutation",
+      "field:details|applicant info>suffix": "crm:primarycontact.suffix",
+      "field:details|applicant info>preferred language": "note:contact"
     }
   },
   "dataServices": {
@@ -137,13 +137,27 @@
       "address.postalCodeSuffix": "",
       "address.yearsAtAddress": "",
       "address.monthsAtAddress": "",
-      "coApplicant.morePhones": "",
-      "coApplicant.moreEmails": "",
       "phone.type": "note",
       "phone.number": "note",
       "phone.extension": "note",
       "email.type": "note",
-      "email.email": "note"
+      "email.email": "note",
+      "coApplicant.nickName": "crm:contacts[].nickname",
+      "coApplicant.maidenName": "",
+      "coApplicant.isCoApplicant": "",
+      "coApplicant.isDriver": "",
+      "coApplicant.yearsAtOccupation": "crm:contacts[].iacrm_yearsemployed",
+      "coApplicant.priorEmployerInYears": "crm:contacts[].iacrm_prioryearsemployed",
+      "coApplicant.preferredContactMethod": "crm:contacts[].preferredcontactmethodcode",
+      "coApplicant.street": "crm:contacts[].address1_line1",
+      "coApplicant.address2": "crm:contacts[].address1_line2",
+      "coApplicant.unit": "crm:contacts[].address1_line3",
+      "coApplicant.city": "crm:contacts[].address1_city",
+      "coApplicant.state": "crm:contacts[].address1_stateorprovince",
+      "coApplicant.county": "crm:contacts[].address1_county",
+      "coApplicant.postalCode": "crm:contacts[].address1_postalcode",
+      "phone.person": "note",
+      "email.person": "note"
     }
   },
   "options": {

@@ -46,7 +46,7 @@ describe("EZLynx addresses", () => {
   });
 
   it("covers every address card on the page", () => {
-    expect(coveredPageLabels(undefined)).toEqual(expect.arrayContaining(["*address>city", "primary address>city"]));
+    expect(coveredPageLabels(undefined)).toEqual(expect.arrayContaining(["applicant info/*address>city", "applicant info/primary address>city"]));
   });
 });
 

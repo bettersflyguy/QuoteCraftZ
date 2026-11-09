@@ -42,8 +42,8 @@ describe("EZLynx data-service source", () => {
     expect(n["contact"]?.["firstName"]).toBe("Tracy");
     expect(n["contact"]?.["lastName"]).toBe("Dittrich");
     expect(n["address"]?.["city"]).toBe("CHAMPLIN");
-    // co-applicants are a table (Row N) fanned into related-contact slots
-    expect(fields.filter(f => f.section === "Co-applicants" && f.label === "First name").map(f => [f.group, f.value]))
+    // contacts are a table (Row N) fanned into related-contact slots
+    expect(fields.filter(f => f.section === "Contacts" && f.label === "First name").map(f => [f.group, f.value]))
       .toEqual([["Row 1", "Alexander"], ["Row 2", "Elizabeth"]]);
     expect(n["contact2"]?.["firstName"]).toBe("Alexander");
     expect(n["contact3"]?.["firstName"]).toBe("Elizabeth");
@@ -122,12 +122,17 @@ describe("everything the data service returns is listed and captured", () => {
 
   it("reports which on-screen labels mapped service fields cover", () => {
     const labels = coveredPageLabels(undefined);
-    expect(labels).toEqual(expect.arrayContaining(["first name", "dob", "primary address>postal code", "gender"]));
-    // the service returns the PRIMARY address: its Other Address twin is not covered
-    expect(labels).not.toContain("postal code");
+    // scoped: the applicant's own panel, the primary address inside it, and
+    // each contact's panel / the new-contact form
+    expect(labels).toEqual(expect.arrayContaining([
+      "applicant info>first name", "applicant info>dob", "applicant info/primary address>postal code", "applicant info>gender",
+      "co applicant>gender", "#contact>gender", "applicant info/*address>city"
+    ]));
+    // never unscoped: a contact's Gender or the Other Address City is not the applicant's
+    expect(labels).not.toContain("gender");
     expect(labels).not.toContain("city");
-    expect(labels).toContain("occupation");
-    expect(labels).not.toContain("lead source");
-    expect(coveredPageLabels({ "applicant.leadSource": "note" })).toContain("lead source");
+    expect(labels).toContain("applicant info>occupation");
+    expect(labels).not.toContain("applicant info>lead source");
+    expect(coveredPageLabels({ "applicant.leadSource": "note" })).toContain("applicant info>lead source");
   });
 });

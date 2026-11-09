@@ -165,16 +165,19 @@ export function contactChannels(r: Record<string, unknown>): {
   return { phones, emails };
 }
 
-/** A co-applicant's additional phones / emails as one line each ("Work:
- * 612... x22; Mobile: 612..."), for the related contact's row. */
-function moreChannels(r: Record<string, unknown>): Record<string, string> {
-  const { phones, emails } = contactChannels(r);
-  const d: Record<string, string> = {};
-  const morePhones = phones.slice(1).map(p => `${p.type ? `${p.type}: ` : ""}${p.number}${p.extension ? ` x${p.extension}` : ""}`);
-  const moreEmails = emails.slice(1).map(e => `${e.type ? `${e.type}: ` : ""}${e.email}`);
-  if (morePhones.length) d["morePhones"] = morePhones.join("; ");
-  if (moreEmails.length) d["moreEmails"] = moreEmails.join("; ");
-  return d;
+/** Every person's phones / emails after their primary (the applicant's,
+ * then each contact's), one row each, named by whose they are. */
+function extraChannels(a: Record<string, unknown>): { phones: import("@/types").CapturedPhone[]; emails: import("@/types").CapturedEmail[] } {
+  const people = [a, ...(Array.isArray(a["contacts"]) ? a["contacts"] as Record<string, unknown>[] : [])];
+  const phones: import("@/types").CapturedPhone[] = [];
+  const emails: import("@/types").CapturedEmail[] = [];
+  for (const p of people) {
+    const person = `${text(p["firstName"])} ${text(p["lastName"])}`.trim();
+    const c = contactChannels(p);
+    for (const ph of c.phones.slice(1)) phones.push({ ...ph, person });
+    for (const em of c.emails.slice(1)) emails.push({ ...em, person });
+  }
+  return { phones, emails };
 }
 
 /** The person's other values (the data service returns far more than the
@@ -204,9 +207,15 @@ function personDetails(r: Record<string, unknown>, address?: Record<string, unkn
     isVip: text(r["isVip"]),
     isDeceased: text(r["isDeceased"]),
     ratingState: text(r["ratingState"]),
-    isCommercial: text(r["isCommercial"])
+    isCommercial: text(r["isCommercial"]),
+    isCoApplicant: text(r["isCoApplicant"]),
+    isDriver: text(r["isDriver"])
   };
   if (address) {
+    d["street"] = text(address["address1"]);
+    d["city"] = text(address["city"]);
+    d["state"] = text(address["state"]);
+    d["postalCode"] = text(address["postalCode"]);
     d["unit"] = text(address["unit"]);
     d["address2"] = text(address["address2"]);
     d["county"] = text(address["county"]);
@@ -238,8 +247,8 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
       : null,
     addresses: allAddresses(a as Record<string, unknown>),
     // every phone / email after the primary, one row each
-    morePhones: contactChannels(a as Record<string, unknown>).phones.slice(1),
-    moreEmails: contactChannels(a as Record<string, unknown>).emails.slice(1),
+    morePhones: extraChannels(a as Record<string, unknown>).phones,
+    moreEmails: extraChannels(a as Record<string, unknown>).emails,
     phones: (a.phoneNumbers ?? []).map(pn => ({ type: pn.type ?? null, number: pn.number })),
     emails: (a.emailAddresses ?? [])
       .map(e => {
@@ -249,7 +258,7 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
       })
       .filter(Boolean),
     coApplicants: (a.contacts ?? []).map(c => ({
-      details: { ...personDetails(c as Record<string, unknown>), ...moreChannels(c as Record<string, unknown>) },
+      details: personDetails(c as Record<string, unknown>, (c as Record<string, unknown>)["primaryAddress"] as Record<string, unknown> | null | undefined),
       firstName: c.firstName,
       lastName: c.lastName,
       relationship: c.relationship?.name ?? "",

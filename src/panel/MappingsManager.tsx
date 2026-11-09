@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { DATA_SERVICE_STORAGE_KEY, EZLYNX_FIELDS, effectiveTargets, getDataServiceMaps } from "@/sources/ezlynxSource";
+import { DATA_SERVICE_STORAGE_KEY, dataServicePeekItems, getDataServiceMaps } from "@/sources/ezlynxSource";
 import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
@@ -106,17 +106,7 @@ export function MappingsManager() {
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
-  const dsPeek = useMemo(() => {
-    const targets = effectiveTargets(dsMaps);
-    const out: { key: string; target: string; family?: boolean }[] = [];
-    for (const f of EZLYNX_FIELDS.filter(x => x.section !== "Co-applicants" && targets[x.id])) {
-      for (const l of f.pageLabels ?? (f.section === "Applicant" ? [f.label] : [])) {
-        const key = fieldKeyOf("", l);
-        if (!out.some(o => o.key === key)) out.push({ key, target: targets[f.id]!, ...(l.startsWith("*") ? { family: true } : {}) });
-      }
-    }
-    return out;
-  }, [dsMaps]);
+  const dsPeek = useMemo(() => dataServicePeekItems(dsMaps, t => t).map(({ key, target, labels }) => ({ key, target, labels })), [dsMaps]);
   const rowOrigins = [
     ...(currentOrigin ? [currentOrigin] : []),
     ...Object.keys(maps).sort().filter(o => o !== currentOrigin)

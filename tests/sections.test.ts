@@ -36,11 +36,11 @@ describe("section-scoped field keys", () => {
     }
   });
 
-  it("keys twin controls by their section, top-level ones stay plain", () => {
+  it("keys twin controls by their section (expansion panels and sub-sections)", () => {
     document.body.innerHTML = PAGE;
     const rows = g.__bettersPortalScan!(null, {}) as { key: string; label: string }[];
     const byKey = Object.fromEntries(rows.map(r => [r.key, r.label]));
-    expect(byKey["text:prefix"]).toBe("Prefix");
+    expect(byKey["text:prefix@applicant info"]).toBe("Applicant Info: Prefix");
     expect(byKey["text:addressCity@primary address"]).toBe("Primary Address: City");
     expect(byKey["text:addressCity@other address"]).toBe("Other Address: City");
     expect(byKey["text:addressCity"]).toBeUndefined();
@@ -76,6 +76,26 @@ describe("section-scoped field keys", () => {
     expect(outline("c2")).toMatch(red);
     expect(outline("s2")).toMatch(red);
     expect(outline("prefix")).not.toMatch(red);
+    g.__bettersPortalPeekAll!(null);
+  });
+
+  it("a contact's panel is not the applicant's: service labels stay in their own panel", () => {
+    document.body.innerHTML = `<main>${panel("app", "Applicant Info", field("Gender", "g1", "gender", "Female"))}${panel("co", "Co-Applicant", field("Gender", "g2", "gender", "Male"))}</main>`;
+    g.__bettersPortalPeekAll!({
+      items: [{ key: "service:applicant.gender", label: "Primary contact: Gender", kind: "mapped", labels: ["applicant info>gender"] }],
+      map: {}, payload: null, pageLabels: ["applicant info>gender"]
+    });
+    const outline = (id: string) => (document.getElementById(id)!.closest("mat-form-field") as HTMLElement).style.outline + (document.getElementById(id) as HTMLElement).style.outline;
+    expect(outline("g1")).toMatch(/13a10e|rgb\(19, 161, 14\)/);
+    expect(outline("g2")).toMatch(/d13438|rgb\(209, 52, 56\)/);
+    expect(document.body.textContent).not.toMatch(/Primary contact: Gender[\s\S]*Primary contact: Gender/);
+    g.__bettersPortalPeekAll!(null);
+  });
+
+  it("the new-contact form is known by its page heading", () => {
+    document.body.innerHTML = `<header><h1>Contact</h1></header><main>${field("Gender", "g3", "gender", "")}</main>`;
+    g.__bettersPortalPeekAll!({ items: [], map: {}, payload: null, pageLabels: ["applicant info>gender", "#contact>gender"] });
+    expect((document.getElementById("g3") as HTMLElement).style.outline).not.toMatch(/d13438|rgb\(209, 52, 56\)/);
     g.__bettersPortalPeekAll!(null);
   });
 

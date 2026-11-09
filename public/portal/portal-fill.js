@@ -536,11 +536,33 @@
     if (!wanted.length) return null;
     return Array.from(document.querySelectorAll(LABELLED_FIELDS))
       .filter((el) => visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0))
-      .find((el) => {
-        const lab = mapper.canonical(primaryLabel(el));
-        const sec = mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "";
-        return wanted.some((w) => w.label === lab && (mapper.sectionMatches ? mapper.sectionMatches(w.section, sec) : !w.section || w.section === sec));
-      }) || null;
+      .find((el) => labelsHit(wanted, el)) || null;
+  }
+  /* does a control answer to one of these scoped labels ("applicant
+   * info>gender", "*address>city", "#contact>gender")? */
+  function labelsHit(wanted, el) {
+    const lab = mapper.canonical(primaryLabel(el));
+    const scopes = mapper && mapper.scopesOf ? mapper.scopesOf(el) : [];
+    return wanted.some((w) => w.label === lab && (mapper && mapper.scopeMatches ? mapper.scopeMatches(w.section, scopes) : !w.section));
+  }
+  function parseLabels(labels) {
+    return (labels || []).map((l) => {
+      const p = mapper && mapper.splitSection ? mapper.splitSection(l) : { section: "", label: l };
+      return { section: p.section, label: mapper.canonical(p.label) };
+    }).filter((w) => w.label);
+  }
+  /* every on-screen field a data-service field covers, as its outlined box */
+  function serviceElements(labels) {
+    const wanted = parseLabels(labels);
+    if (!wanted.length) return [];
+    const out = [];
+    Array.from(document.querySelectorAll(LABELLED_FIELDS))
+      .filter((el) => visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0) && labelsHit(wanted, el))
+      .forEach((el) => {
+        const box = el.closest("mat-form-field, .mat-mdc-form-field") || el;
+        if (out.indexOf(box) < 0) out.push(box);
+      });
+    return out;
   }
 
   async function readChoices(key, labels) {
@@ -863,6 +885,7 @@
             label: inSection(el, plain) || controlKey(el),
             fieldLabel: plain,
             section: mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "",
+            scopes: mapper && mapper.scopesOf ? mapper.scopesOf(el) : [],
             type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
             payment: PAYMENT_FIELD.test(name),
             autoPath: null,
@@ -892,6 +915,7 @@
             label: (labelKey && inSection(tx, boxLabel)) || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,
+            scopes: mapper && mapper.scopesOf ? mapper.scopesOf(tx) : [],
             type: "text",
             payment: PAYMENT_FIELD.test(inferred),
             autoPath: null,
@@ -1048,7 +1072,10 @@
       if (!it || typeof it.key !== "string") return;
       var els = [];
       var fk = FIELD_KEY_RE.exec(it.key);
-      if (fk) {
+      if (Array.isArray(it.labels)) {
+        /* a data-service field: the on-screen fields its scoped labels name */
+        els = serviceElements(it.labels);
+      } else if (fk) {
         els = (typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2], it.family) : [])
           .filter(function (e) { return visible(e); });
       } else if (it.key.indexOf("pick:") === 0) {
@@ -1136,8 +1163,8 @@
     });
     const serviceCovers = function (el) {
       const lab = canon(primaryLabel(el) || fieldName(el));
-      const sec = mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "";
-      return serviceLabels.some(function (s) { return s.label === lab && (mapper.sectionMatches ? mapper.sectionMatches(s.section, sec) : !s.section || s.section === sec); });
+      const scopes = mapper && mapper.scopesOf ? mapper.scopesOf(el) : [];
+      return serviceLabels.some(function (s) { return s.label === lab && (mapper && mapper.scopeMatches ? mapper.scopeMatches(s.section, scopes) : !s.section); });
     };
     Object.keys(keys).forEach(function (k) {
       const fk = FIELD_KEY_RE.exec(k);

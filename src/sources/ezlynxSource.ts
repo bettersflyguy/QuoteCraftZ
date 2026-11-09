@@ -9,108 +9,147 @@ import { isNoteTarget, isRoutablePath } from "@/portal/fieldMaps";
 export interface DataServiceField {
   id: string;
   label: string;
-  /** "Applicant" fields are one record; "Co-applicants" repeat per person;
-   * "Addresses" repeat per address (primary first). */
-  section: "Applicant" | "Co-applicants" | "Phones" | "Emails" | "Addresses";
+  /** "Applicant" fields are one record; "Contacts" repeat per contact
+   * (Add contact, co-applicant or not); "Phones" / "Emails" per additional
+   * phone / email; "Addresses" per address (primary first). */
+  section: "Applicant" | "Contacts" | "Phones" | "Emails" | "Addresses";
   defaultTarget: string;
   /** How the source's own screens label it (canonical), so the page peek
    * knows which on-screen fields the data service already covers.
    * "primary address>city": only the City inside the Primary Address
    * section (the Other Address twin is a separate page field);
-   * "*address>city": the City in EVERY address section, one row each. */
+   * "*address>city": the City in EVERY address section, one row each;
+   * "#contact>gender": on the page headed "Contact"; "a/b>x": inside both. */
   pageLabels?: string[];
   /** Identifier (SSN, DL#): secured pass-through only - never a capture
    * field, a note or a share file; mapped only to a secured CRM column. */
   secured?: boolean;
 }
 
+/** On-screen labels, scoped (see the page scripts' scopeMatches): the
+ * applicant's fields sit in the "Applicant Info" panel; a contact's in its
+ * own panel ("Co-Applicant" / "Contact") or on the new-contact form (page
+ * heading "Contact"). "a/b>x": inside both. */
+const APP = (...labels: string[]): string[] => labels.map(l => `applicant info>${l}`);
+const PRIMARY_ADDRESS = (...labels: string[]): string[] => labels.map(l => `applicant info/primary address>${l}`);
+const EVERY_ADDRESS = (...labels: string[]): string[] => labels.map(l => `applicant info/*address>${l}`);
+const CONTACT = (...labels: string[]): string[] => labels.flatMap(l => [`co applicant>${l}`, `contact>${l}`, `#contact>${l}`]);
+
 /** EVERYTHING the EZLynx data service returns for a person (SSN never; the
  * license NUMBER goes to the secured license columns and is not listed),
  * so Settings shows exactly what goes to CRM. Defaults reproduce what the
  * dedicated importer always wrote; the rest start "not mapped". */
 export const EZLYNX_FIELDS: DataServiceField[] = [
-  { id: "applicant.firstName", label: "First name", section: "Applicant", defaultTarget: "contact.firstName", pageLabels: ["first name"] },
-  { id: "applicant.middleInitial", label: "Middle initial", section: "Applicant", defaultTarget: "crm:primarycontact.middlename", pageLabels: ["middle initial"] },
-  { id: "applicant.lastName", label: "Last name", section: "Applicant", defaultTarget: "contact.lastName", pageLabels: ["last name"] },
-  { id: "applicant.nickName", label: "Nickname", section: "Applicant", defaultTarget: "crm:primarycontact.nickname", pageLabels: ["nickname"] },
-  { id: "applicant.maidenName", label: "Maiden name", section: "Applicant", defaultTarget: "", pageLabels: ["maiden name"] },
-  { id: "applicant.dateOfBirth", label: "Date of birth", section: "Applicant", defaultTarget: "contact.dateOfBirth", pageLabels: ["dob", "date of birth"] },
-  { id: "applicant.ssn", label: "SSN", section: "Applicant", defaultTarget: "secure:primarycontact.iacrm_socialsecuritynumber", pageLabels: ["ssn"], secured: true },
-  { id: "applicant.dlNumber", label: "DL#", section: "Applicant", defaultTarget: "secure:primarycontact.iacrm_driverslicense", pageLabels: ["dl"], secured: true },
-  { id: "applicant.gender", label: "Gender", section: "Applicant", defaultTarget: "crm:primarycontact.gendercode", pageLabels: ["gender"] },
-  { id: "applicant.maritalStatus", label: "Marital status", section: "Applicant", defaultTarget: "crm:primarycontact.familystatuscode", pageLabels: ["marital status"] },
-  { id: "applicant.education", label: "Education", section: "Applicant", defaultTarget: "crm:primarycontact.educationcode", pageLabels: ["education"] },
-  { id: "applicant.industry", label: "Industry", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_employmentindustry", pageLabels: ["industry"] },
-  { id: "applicant.occupation", label: "Occupation", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_employmentoccupation", pageLabels: ["occupation"] },
-  { id: "applicant.yearsAtOccupation", label: "Years at occupation", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_yearsemployed", pageLabels: ["years"] },
-  { id: "applicant.priorEmployerInYears", label: "Prior employer (years)", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_prioryearsemployed", pageLabels: ["prior employer in years"] },
-  { id: "applicant.driversLicenseStatus", label: "License status", section: "Applicant", defaultTarget: "", pageLabels: ["dl status"] },
-  { id: "applicant.driversLicenseState", label: "License state", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_dlstate", pageLabels: ["dl state"] },
-  { id: "applicant.applicantType", label: "Applicant type", section: "Applicant", defaultTarget: "", pageLabels: ["applicant type"] },
-  { id: "applicant.customerSince", label: "Customer since", section: "Applicant", defaultTarget: "", pageLabels: ["customer since"] },
-  { id: "applicant.accountName", label: "Account name", section: "Applicant", defaultTarget: "", pageLabels: ["account name"] },
-  { id: "applicant.leadSource", label: "Lead source", section: "Applicant", defaultTarget: "", pageLabels: ["lead source"] },
-  { id: "applicant.assignedProducer", label: "Assigned producer", section: "Applicant", defaultTarget: "", pageLabels: ["assigned producer"] },
-  { id: "applicant.csr", label: "CSR", section: "Applicant", defaultTarget: "", pageLabels: ["csr"] },
-  { id: "applicant.preferredContactMethod", label: "Preferred contact method", section: "Applicant", defaultTarget: "crm:primarycontact.preferredcontactmethodcode", pageLabels: ["preferred contact method"] },
-  { id: "applicant.isVip", label: "VIP", section: "Applicant", defaultTarget: "", pageLabels: ["vip"] },
-  { id: "applicant.isDeceased", label: "Deceased", section: "Applicant", defaultTarget: "", pageLabels: ["deceased"] },
-  { id: "applicant.ratingState", label: "Rating state", section: "Applicant", defaultTarget: "", pageLabels: ["rating state"] },
+  { id: "applicant.firstName", label: "First name", section: "Applicant", defaultTarget: "contact.firstName", pageLabels: APP("first name") },
+  { id: "applicant.middleInitial", label: "Middle initial", section: "Applicant", defaultTarget: "crm:primarycontact.middlename", pageLabels: APP("middle initial") },
+  { id: "applicant.lastName", label: "Last name", section: "Applicant", defaultTarget: "contact.lastName", pageLabels: APP("last name") },
+  { id: "applicant.nickName", label: "Nickname", section: "Applicant", defaultTarget: "crm:primarycontact.nickname", pageLabels: APP("nickname") },
+  { id: "applicant.maidenName", label: "Maiden name", section: "Applicant", defaultTarget: "", pageLabels: APP("maiden name") },
+  { id: "applicant.dateOfBirth", label: "Date of birth", section: "Applicant", defaultTarget: "contact.dateOfBirth", pageLabels: APP("dob", "date of birth") },
+  { id: "applicant.ssn", label: "SSN", section: "Applicant", defaultTarget: "secure:primarycontact.iacrm_socialsecuritynumber", pageLabels: APP("ssn"), secured: true },
+  { id: "applicant.dlNumber", label: "DL#", section: "Applicant", defaultTarget: "secure:primarycontact.iacrm_driverslicense", pageLabels: APP("dl"), secured: true },
+  { id: "applicant.gender", label: "Gender", section: "Applicant", defaultTarget: "crm:primarycontact.gendercode", pageLabels: APP("gender") },
+  { id: "applicant.maritalStatus", label: "Marital status", section: "Applicant", defaultTarget: "crm:primarycontact.familystatuscode", pageLabels: APP("marital status") },
+  { id: "applicant.education", label: "Education", section: "Applicant", defaultTarget: "crm:primarycontact.educationcode", pageLabels: APP("education") },
+  { id: "applicant.industry", label: "Industry", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_employmentindustry", pageLabels: APP("industry") },
+  { id: "applicant.occupation", label: "Occupation", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_employmentoccupation", pageLabels: APP("occupation") },
+  { id: "applicant.yearsAtOccupation", label: "Years at occupation", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_yearsemployed", pageLabels: APP("years") },
+  { id: "applicant.priorEmployerInYears", label: "Prior employer (years)", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_prioryearsemployed", pageLabels: APP("prior employer in years") },
+  { id: "applicant.driversLicenseStatus", label: "License status", section: "Applicant", defaultTarget: "", pageLabels: APP("dl status") },
+  { id: "applicant.driversLicenseState", label: "License state", section: "Applicant", defaultTarget: "crm:primarycontact.iacrm_dlstate", pageLabels: APP("dl state") },
+  { id: "applicant.applicantType", label: "Applicant type", section: "Applicant", defaultTarget: "", pageLabels: APP("applicant type") },
+  { id: "applicant.customerSince", label: "Customer since", section: "Applicant", defaultTarget: "", pageLabels: APP("customer since") },
+  { id: "applicant.accountName", label: "Account name", section: "Applicant", defaultTarget: "", pageLabels: APP("account name") },
+  { id: "applicant.leadSource", label: "Lead source", section: "Applicant", defaultTarget: "", pageLabels: APP("lead source") },
+  { id: "applicant.assignedProducer", label: "Assigned producer", section: "Applicant", defaultTarget: "", pageLabels: APP("assigned producer") },
+  { id: "applicant.csr", label: "CSR", section: "Applicant", defaultTarget: "", pageLabels: APP("csr") },
+  { id: "applicant.preferredContactMethod", label: "Preferred contact method", section: "Applicant", defaultTarget: "crm:primarycontact.preferredcontactmethodcode", pageLabels: APP("preferred contact method", "contact method") },
+  { id: "applicant.isVip", label: "VIP", section: "Applicant", defaultTarget: "", pageLabels: APP("vip") },
+  { id: "applicant.isDeceased", label: "Deceased", section: "Applicant", defaultTarget: "", pageLabels: APP("deceased") },
+  { id: "applicant.ratingState", label: "Rating state", section: "Applicant", defaultTarget: "", pageLabels: APP("rating state") },
   { id: "applicant.isCommercial", label: "Commercial applicant", section: "Applicant", defaultTarget: "" },
   // the PRIMARY (first) email and phone feed the insured; every other one
   // is a row of the Phones / Emails lists below
-  { id: "applicant.email", label: "Primary email", section: "Applicant", defaultTarget: "contact.email", pageLabels: ["email", "email address", "email type"] },
-  { id: "applicant.phone", label: "Primary phone", section: "Applicant", defaultTarget: "contact.phone", pageLabels: ["phone number", "phone", "phone type", "extension"] },
+  { id: "applicant.email", label: "Primary email", section: "Applicant", defaultTarget: "contact.email", pageLabels: APP("email", "email address", "email type") },
+  { id: "applicant.phone", label: "Primary phone", section: "Applicant", defaultTarget: "contact.phone", pageLabels: APP("phone number", "phone", "phone type", "extension") },
   { id: "applicant.mobile", label: "Mobile phone", section: "Applicant", defaultTarget: "crm:primarycontact.mobilephone" },
-  { id: "applicant.street", label: "Street address", section: "Applicant", defaultTarget: "address.street1", pageLabels: ["primary address>address"] },
-  { id: "applicant.unit", label: "Unit", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>unit"] },
-  { id: "applicant.address2", label: "Address line 2", section: "Applicant", defaultTarget: "address.street2", pageLabels: ["primary address>address line 2"] },
-  { id: "applicant.city", label: "City", section: "Applicant", defaultTarget: "address.city", pageLabels: ["primary address>city"] },
-  { id: "applicant.state", label: "State", section: "Applicant", defaultTarget: "address.state", pageLabels: ["primary address>state", "address state"] },
-  { id: "applicant.county", label: "County", section: "Applicant", defaultTarget: "crm:account.address1_county", pageLabels: ["primary address>county"] },
-  { id: "applicant.postalCode", label: "ZIP code", section: "Applicant", defaultTarget: "address.postalCode", pageLabels: ["primary address>postal code", "zip code"] },
-  { id: "applicant.postalCodeSuffix", label: "ZIP suffix", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>postal code suffix"] },
-  { id: "applicant.yearsAtAddress", label: "Years at address", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>years at address"] },
-  { id: "applicant.monthsAtAddress", label: "Months at address", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>months at address"] },
-  { id: "coApplicant.firstName", label: "First name", section: "Co-applicants", defaultTarget: "contacts[].firstName" },
-  { id: "coApplicant.middleInitial", label: "Middle initial", section: "Co-applicants", defaultTarget: "crm:contacts[].middlename" },
-  { id: "coApplicant.lastName", label: "Last name", section: "Co-applicants", defaultTarget: "contacts[].lastName" },
-  { id: "coApplicant.relationship", label: "Relationship", section: "Co-applicants", defaultTarget: "" },
-  { id: "coApplicant.dateOfBirth", label: "Date of birth", section: "Co-applicants", defaultTarget: "contacts[].dateOfBirth" },
-  { id: "coApplicant.ssn", label: "SSN", section: "Co-applicants", defaultTarget: "secure:contacts[].iacrm_socialsecuritynumber", secured: true },
-  { id: "coApplicant.dlNumber", label: "DL#", section: "Co-applicants", defaultTarget: "secure:contacts[].iacrm_driverslicense", secured: true },
-  { id: "coApplicant.gender", label: "Gender", section: "Co-applicants", defaultTarget: "crm:contacts[].gendercode" },
-  { id: "coApplicant.maritalStatus", label: "Marital status", section: "Co-applicants", defaultTarget: "crm:contacts[].familystatuscode" },
-  { id: "coApplicant.education", label: "Education", section: "Co-applicants", defaultTarget: "crm:contacts[].educationcode" },
-  { id: "coApplicant.industry", label: "Industry", section: "Co-applicants", defaultTarget: "crm:contacts[].iacrm_employmentindustry" },
-  { id: "coApplicant.occupation", label: "Occupation", section: "Co-applicants", defaultTarget: "crm:contacts[].iacrm_employmentoccupation" },
-  { id: "coApplicant.driversLicenseStatus", label: "License status", section: "Co-applicants", defaultTarget: "" },
-  { id: "coApplicant.driversLicenseState", label: "License state", section: "Co-applicants", defaultTarget: "crm:contacts[].iacrm_dlstate" },
-  { id: "coApplicant.email", label: "Email", section: "Co-applicants", defaultTarget: "contacts[].email" },
-  { id: "coApplicant.phone", label: "Phone", section: "Co-applicants", defaultTarget: "contacts[].phone" },
-  // a co-applicant's phones / emails after the first, as one line each
-  { id: "coApplicant.morePhones", label: "Additional phones", section: "Co-applicants", defaultTarget: "" },
-  { id: "coApplicant.moreEmails", label: "Additional emails", section: "Co-applicants", defaultTarget: "" },
-  // every phone / email after the primary: one row each, to the note the
-  // agent picks (the primary already fills the insured's phone and email)
+  { id: "applicant.street", label: "Street address", section: "Applicant", defaultTarget: "address.street1", pageLabels: PRIMARY_ADDRESS("address") },
+  { id: "applicant.unit", label: "Unit", section: "Applicant", defaultTarget: "", pageLabels: PRIMARY_ADDRESS("unit") },
+  { id: "applicant.address2", label: "Address line 2", section: "Applicant", defaultTarget: "address.street2", pageLabels: PRIMARY_ADDRESS("address line 2") },
+  { id: "applicant.city", label: "City", section: "Applicant", defaultTarget: "address.city", pageLabels: PRIMARY_ADDRESS("city") },
+  { id: "applicant.state", label: "State", section: "Applicant", defaultTarget: "address.state", pageLabels: PRIMARY_ADDRESS("state") },
+  { id: "applicant.county", label: "County", section: "Applicant", defaultTarget: "crm:account.address1_county", pageLabels: PRIMARY_ADDRESS("county") },
+  { id: "applicant.postalCode", label: "ZIP code", section: "Applicant", defaultTarget: "address.postalCode", pageLabels: PRIMARY_ADDRESS("postal code", "zip code") },
+  { id: "applicant.postalCodeSuffix", label: "ZIP suffix", section: "Applicant", defaultTarget: "", pageLabels: PRIMARY_ADDRESS("postal code suffix") },
+  { id: "applicant.yearsAtAddress", label: "Years at address", section: "Applicant", defaultTarget: "", pageLabels: PRIMARY_ADDRESS("years at address") },
+  { id: "applicant.monthsAtAddress", label: "Months at address", section: "Applicant", defaultTarget: "", pageLabels: PRIMARY_ADDRESS("months at address") },
+  // every contact added with "Add contact" (co-applicant or not): one row
+  // each, one related contact in CRM each
+  { id: "coApplicant.firstName", label: "First name", section: "Contacts", defaultTarget: "contacts[].firstName", pageLabels: CONTACT("first name") },
+  { id: "coApplicant.middleInitial", label: "Middle initial", section: "Contacts", defaultTarget: "crm:contacts[].middlename", pageLabels: CONTACT("middle initial") },
+  { id: "coApplicant.lastName", label: "Last name", section: "Contacts", defaultTarget: "contacts[].lastName", pageLabels: CONTACT("last name") },
+  { id: "coApplicant.nickName", label: "Nickname", section: "Contacts", defaultTarget: "crm:contacts[].nickname", pageLabels: CONTACT("nickname") },
+  { id: "coApplicant.maidenName", label: "Maiden name", section: "Contacts", defaultTarget: "", pageLabels: CONTACT("maiden name") },
+  { id: "coApplicant.relationship", label: "Relationship", section: "Contacts", defaultTarget: "", pageLabels: CONTACT("relationship") },
+  { id: "coApplicant.isCoApplicant", label: "Co-applicant", section: "Contacts", defaultTarget: "", pageLabels: CONTACT("make this contact co applicant") },
+  { id: "coApplicant.isDriver", label: "Driver", section: "Contacts", defaultTarget: "" },
+  { id: "coApplicant.dateOfBirth", label: "Date of birth", section: "Contacts", defaultTarget: "contacts[].dateOfBirth", pageLabels: CONTACT("dob", "date of birth") },
+  { id: "coApplicant.ssn", label: "SSN", section: "Contacts", defaultTarget: "secure:contacts[].iacrm_socialsecuritynumber", pageLabels: CONTACT("ssn"), secured: true },
+  { id: "coApplicant.dlNumber", label: "DL#", section: "Contacts", defaultTarget: "secure:contacts[].iacrm_driverslicense", pageLabels: CONTACT("dl"), secured: true },
+  { id: "coApplicant.gender", label: "Gender", section: "Contacts", defaultTarget: "crm:contacts[].gendercode", pageLabels: CONTACT("gender") },
+  { id: "coApplicant.maritalStatus", label: "Marital status", section: "Contacts", defaultTarget: "crm:contacts[].familystatuscode", pageLabels: CONTACT("marital status") },
+  { id: "coApplicant.education", label: "Education", section: "Contacts", defaultTarget: "crm:contacts[].educationcode", pageLabels: CONTACT("education") },
+  { id: "coApplicant.industry", label: "Industry", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_employmentindustry", pageLabels: CONTACT("industry") },
+  { id: "coApplicant.occupation", label: "Occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_employmentoccupation", pageLabels: CONTACT("occupation") },
+  { id: "coApplicant.yearsAtOccupation", label: "Years at occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_yearsemployed", pageLabels: CONTACT("years") },
+  { id: "coApplicant.priorEmployerInYears", label: "Prior employer (years)", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_prioryearsemployed", pageLabels: CONTACT("prior employer in years") },
+  { id: "coApplicant.driversLicenseStatus", label: "License status", section: "Contacts", defaultTarget: "", pageLabels: CONTACT("dl status") },
+  { id: "coApplicant.driversLicenseState", label: "License state", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_dlstate", pageLabels: CONTACT("dl state") },
+  { id: "coApplicant.preferredContactMethod", label: "Preferred contact method", section: "Contacts", defaultTarget: "crm:contacts[].preferredcontactmethodcode", pageLabels: CONTACT("contact method") },
+  // a contact's FIRST email / phone fill their CRM contact; the others are
+  // rows of the Phones / Emails lists, with the contact's name
+  { id: "coApplicant.email", label: "Primary email", section: "Contacts", defaultTarget: "contacts[].email", pageLabels: CONTACT("email", "email address", "email type") },
+  { id: "coApplicant.phone", label: "Primary phone", section: "Contacts", defaultTarget: "contacts[].phone", pageLabels: CONTACT("phone number", "phone", "phone type", "extension") },
+  // a contact's own address (EZLynx keeps one per contact): their CRM Address 1
+  { id: "coApplicant.street", label: "Street address", section: "Contacts", defaultTarget: "crm:contacts[].address1_line1", pageLabels: CONTACT("address") },
+  { id: "coApplicant.address2", label: "Address line 2", section: "Contacts", defaultTarget: "crm:contacts[].address1_line2", pageLabels: CONTACT("address line 2") },
+  { id: "coApplicant.unit", label: "Unit", section: "Contacts", defaultTarget: "crm:contacts[].address1_line3", pageLabels: CONTACT("unit") },
+  { id: "coApplicant.city", label: "City", section: "Contacts", defaultTarget: "crm:contacts[].address1_city", pageLabels: CONTACT("city") },
+  { id: "coApplicant.state", label: "State", section: "Contacts", defaultTarget: "crm:contacts[].address1_stateorprovince", pageLabels: CONTACT("state") },
+  { id: "coApplicant.county", label: "County", section: "Contacts", defaultTarget: "crm:contacts[].address1_county", pageLabels: CONTACT("county") },
+  { id: "coApplicant.postalCode", label: "ZIP code", section: "Contacts", defaultTarget: "crm:contacts[].address1_postalcode", pageLabels: CONTACT("postal code") },
+  // every phone / email after a person's primary (the applicant's and each
+  // contact's): one row each, with whose it is, to the note the agent picks
+  { id: "phone.person", label: "Person", section: "Phones", defaultTarget: "note" },
   { id: "phone.type", label: "Phone type", section: "Phones", defaultTarget: "note" },
   { id: "phone.number", label: "Phone number", section: "Phones", defaultTarget: "note" },
   { id: "phone.extension", label: "Extension", section: "Phones", defaultTarget: "note" },
+  { id: "email.person", label: "Person", section: "Emails", defaultTarget: "note" },
   { id: "email.type", label: "Email type", section: "Emails", defaultTarget: "note" },
   { id: "email.email", label: "Email address", section: "Emails", defaultTarget: "note" },
   // every address the insured has: row N = CRM address N (1 = Address 1)
-  { id: "address.type", label: "Address type", section: "Addresses", defaultTarget: "crm:addresses[].name", pageLabels: ["*address>address type"] },
-  { id: "address.street", label: "Street address", section: "Addresses", defaultTarget: "crm:addresses[].line1", pageLabels: ["*address>address"] },
-  { id: "address.address2", label: "Address line 2", section: "Addresses", defaultTarget: "crm:addresses[].line2", pageLabels: ["*address>address line 2"] },
-  { id: "address.unit", label: "Unit", section: "Addresses", defaultTarget: "crm:addresses[].line3", pageLabels: ["*address>unit"] },
-  { id: "address.city", label: "City", section: "Addresses", defaultTarget: "crm:addresses[].city", pageLabels: ["*address>city"] },
-  { id: "address.state", label: "State", section: "Addresses", defaultTarget: "crm:addresses[].stateorprovince", pageLabels: ["*address>state"] },
-  { id: "address.county", label: "County", section: "Addresses", defaultTarget: "crm:addresses[].county", pageLabels: ["*address>county"] },
-  { id: "address.postalCode", label: "ZIP code", section: "Addresses", defaultTarget: "crm:addresses[].postalcode", pageLabels: ["*address>postal code"] },
-  { id: "address.postalCodeSuffix", label: "ZIP suffix", section: "Addresses", defaultTarget: "", pageLabels: ["*address>postal code suffix"] },
-  { id: "address.yearsAtAddress", label: "Years at address", section: "Addresses", defaultTarget: "", pageLabels: ["*address>years at address"] },
-  { id: "address.monthsAtAddress", label: "Months at address", section: "Addresses", defaultTarget: "", pageLabels: ["*address>months at address"] }
+  { id: "address.type", label: "Address type", section: "Addresses", defaultTarget: "crm:addresses[].name", pageLabels: EVERY_ADDRESS("address type") },
+  { id: "address.street", label: "Street address", section: "Addresses", defaultTarget: "crm:addresses[].line1", pageLabels: EVERY_ADDRESS("address") },
+  { id: "address.address2", label: "Address line 2", section: "Addresses", defaultTarget: "crm:addresses[].line2", pageLabels: EVERY_ADDRESS("address line 2") },
+  { id: "address.unit", label: "Unit", section: "Addresses", defaultTarget: "crm:addresses[].line3", pageLabels: EVERY_ADDRESS("unit") },
+  { id: "address.city", label: "City", section: "Addresses", defaultTarget: "crm:addresses[].city", pageLabels: EVERY_ADDRESS("city") },
+  { id: "address.state", label: "State", section: "Addresses", defaultTarget: "crm:addresses[].stateorprovince", pageLabels: EVERY_ADDRESS("state") },
+  { id: "address.county", label: "County", section: "Addresses", defaultTarget: "crm:addresses[].county", pageLabels: EVERY_ADDRESS("county") },
+  { id: "address.postalCode", label: "ZIP code", section: "Addresses", defaultTarget: "crm:addresses[].postalcode", pageLabels: EVERY_ADDRESS("postal code") },
+  { id: "address.postalCodeSuffix", label: "ZIP suffix", section: "Addresses", defaultTarget: "", pageLabels: EVERY_ADDRESS("postal code suffix") },
+  { id: "address.yearsAtAddress", label: "Years at address", section: "Addresses", defaultTarget: "", pageLabels: EVERY_ADDRESS("years at address") },
+  { id: "address.monthsAtAddress", label: "Months at address", section: "Addresses", defaultTarget: "", pageLabels: EVERY_ADDRESS("months at address") }
 ];
+
+/** A data service's fields as page-peek items: each covers the on-screen
+ * fields its scoped labels name, badged with what it feeds. */
+export function dataServicePeekItems(saved: Record<string, string> | undefined, labelOf: (target: string) => string):
+  { key: string; label: string; kind: "mapped"; labels: string[]; target: string }[] {
+  const targets = effectiveTargets(saved);
+  return EZLYNX_FIELDS
+    .filter(f => targets[f.id] && f.pageLabels?.length)
+    .map(f => ({ key: `service:${f.id}`, label: labelOf(targets[f.id]!), kind: "mapped" as const, labels: f.pageLabels!, target: targets[f.id]! }));
+}
 
 export const DATA_SERVICE_STORAGE_KEY = "dataservice/fieldMap";
 export type DataServiceMaps = Record<string, Record<string, string>>;
@@ -173,7 +212,7 @@ function applicantValues(a: CapturedApplicant): Record<string, string> {
   return out;
 }
 
-/** The applicant (and co-applicants, as a table) as capture fields, each
+/** The applicant (and every contact, as a table) as capture fields, each
  * routed by its data-service mapping. */
 export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string> | undefined): CapturedAppField[] {
   const targets = effectiveTargets(saved);
@@ -195,10 +234,10 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
       "coApplicant.phone": c.phone ?? ""
     };
     for (const [k, v] of Object.entries(c.details ?? {})) if (!(`coApplicant.${k}` in row)) row[`coApplicant.${k}`] = v;
-    for (const f of EZLYNX_FIELDS.filter(x => x.section === "Co-applicants" && !x.secured)) {
+    for (const f of EZLYNX_FIELDS.filter(x => x.section === "Contacts" && !x.secured)) {
       const value = (row[f.id] ?? "").trim();
       if (!value) continue;
-      out.push({ label: f.label, value, section: "Co-applicants", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
+      out.push({ label: f.label, value, section: "Contacts", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
     }
   });
   // additional phones / emails: rows of their own list (never a CRM slot

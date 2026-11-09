@@ -205,10 +205,11 @@
 
   /* SECTIONS: a titled panel, fieldset or card holding fields ("Primary
    * Address" / "Other Address" on EZLynx share every label and input name).
-   * A field is keyed by its section when that titled box sits inside
-   * another one (a sub-section, like an address inside the applicant).
-   * Top-level boxes and numbered repeats ("Vehicle 2") stay unkeyed, so
-   * repeated cards keep mapping as one table. */
+   * A field is keyed by its section when that titled box is an expansion
+   * panel (EZLynx "Applicant Info" / "Co-Applicant" twins) or sits inside
+   * another titled box (an address inside the applicant). Other top-level
+   * boxes and numbered repeats ("Vehicle 2") stay unkeyed, so repeated
+   * cards keep mapping as one table. */
   const SECTION_BOX = "mat-expansion-panel, fieldset, mat-card, .mat-mdc-card, .card, .k-panelbar-item";
   const NOT_TITLE = "mat-icon, .mat-icon, .material-icons, .material-symbols-outlined, svg, button, [aria-hidden='true']";
   function sectionKey(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
@@ -230,14 +231,33 @@
     const s = t ? titleText(t) : "";
     return s && s.length <= 40 ? s : "";
   }
-  function sectionOf(el) {
+  /* titled boxes around an element, nearest first */
+  function sectionChain(el) {
     const chain = [];
     for (let n = el && el.closest ? el.closest(SECTION_BOX) : null; n; n = n.parentElement ? n.parentElement.closest(SECTION_BOX) : null) {
       const text = boxTitle(n);
-      if (text) chain.push({ key: sectionKey(text), text: text });
+      if (text) chain.push({ key: sectionKey(text), text: text, panel: n.matches("mat-expansion-panel") });
     }
-    if (chain.length < 2 || !chain[0].key || /\d$/.test(chain[0].key)) return { key: "", text: "" };
-    return chain[0];
+    return chain;
+  }
+  function sectionOf(el) {
+    const chain = sectionChain(el);
+    const near = chain[0];
+    if (!near || !near.key || /\d$/.test(near.key) || (chain.length < 2 && !near.panel)) return { key: "", text: "" };
+    return { key: near.key, text: near.text };
+  }
+  /* the page's own heading ("Contact" on EZLynx's new-contact form) */
+  function pageHeading() {
+    const h = typeof document !== "undefined" ? document.querySelector("ez-page-header h1, header h1, h1") : null;
+    return h ? sectionKey(h.textContent).slice(0, 40) : "";
+  }
+  /* everything a scoped label can name for an element: every titled box
+   * around it and "#<page heading>" */
+  function scopesOf(el) {
+    const out = sectionChain(el).map(function (c) { return c.key; });
+    const h = pageHeading();
+    if (h) out.push("#" + h);
+    return out;
   }
   /* "primary address>city" -> {section, label}; plain labels have no section */
   function splitSection(s) {
@@ -246,14 +266,22 @@
     return at < 0 ? { section: "", label: str } : { section: str.slice(0, at), label: str.slice(at + 1) };
   }
 
-  /* a wanted section against a field's: "*address" = any section of that
-   * kind (Primary / Other / Mailing Address), "" = anywhere */
-  function sectionMatches(want, actual) {
+  /* a scoped label's scope against an element's scopes: "" = anywhere,
+   * "applicant info" = inside that box (at any depth), "*address" = inside
+   * any box of that kind (Primary / Other / Mailing Address), "#contact" =
+   * on the page headed "Contact" */
+  function scopeMatches(want, scopes) {
     if (!want) return true;
-    if (want.charAt(0) !== "*") return want === actual;
-    const words = String(actual || "").split(" ");
-    return Boolean(actual) && words[words.length - 1] === want.slice(1);
+    const list = scopes || [];
+    return want.split("/").every(function (part) {
+      if (part.charAt(0) === "#") return list.indexOf(part) >= 0;
+      if (part.charAt(0) === "*") {
+        const kind = part.slice(1);
+        return list.some(function (s) { if (s.charAt(0) === "#") return false; const w = s.split(" "); return w[w.length - 1] === kind; });
+      }
+      return list.indexOf(part) >= 0;
+    });
   }
 
-  return { buildCandidates, canonical, matchField, valueVariants, validForField, sectionOf, sectionKey, splitSection, sectionMatches };
+  return { buildCandidates, canonical, matchField, valueVariants, validForField, sectionOf, sectionKey, splitSection, scopesOf, scopeMatches };
 });

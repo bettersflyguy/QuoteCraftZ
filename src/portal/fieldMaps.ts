@@ -336,6 +336,20 @@ export function familyKeyOf(r: { fieldLabel?: string; section?: string }): { key
   return { key: `field:${section}>${field}`, label: `${r.fieldLabel!.replace(/^[*\s]+|[:*\s]+$/g, "")} (every ${kind})` };
 }
 
+/** A scoped label's scope against an element's scopes (every titled box
+ * around it, nearest first, and "#<page heading>"): "" = anywhere,
+ * "applicant info" = inside that box, "*address" = inside a box of that
+ * kind, "#contact" = on the page headed "Contact", "a/b" = all of them.
+ * Same rule as the page scripts' scopeMatches. */
+export function scopeMatches(want: string, scopes: string[]): boolean {
+  if (!want) return true;
+  return want.split("/").every(part => {
+    if (part.startsWith("#")) return scopes.includes(part);
+    if (part.startsWith("*")) return scopes.some(s => !s.startsWith("#") && s.split(" ").pop() === part.slice(1));
+    return scopes.includes(part);
+  });
+}
+
 /** Parses a labelled-field key: [page, "section>label" or "label"]. */
 export const FIELD_KEY_PARTS = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
 

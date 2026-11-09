@@ -98,6 +98,8 @@ export interface PortalScanRow {
   fieldLabel?: string;
   /** Picked fields: the sub-section key ("other address"), "" outside one. */
   section?: string;
+  /** Picked fields: every titled box around it and "#<page heading>". */
+  scopes?: string[];
 }
 
 export interface PortalScanResult { origin: string; rows: PortalScanRow[] }
@@ -112,6 +114,8 @@ export interface PeekItem {
   /** A section's field mapped to an array: every section of that kind
    * (Primary / Other / Mailing Address) is a row. */
   family?: boolean;
+  /** A data-service field: the scoped on-screen labels it covers. */
+  labels?: string[];
 }
 export interface PeekResult {
   shown: number;

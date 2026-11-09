@@ -6,7 +6,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const key = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-const fieldKey = (page, label) => `field:${key(page)}|${key(label)}`;
+// "Applicant Info>Prefix": the field inside that panel (contacts repeat it)
+const fieldKey = (page, label) => `field:${key(page)}|${label.split(">").map(key).join(">")}`;
 
 /** step (page title after " - ") -> [label, target] */
 const PAGES = {
@@ -27,9 +28,9 @@ const PAGES = {
   ].map(l => [l, "note"]),
   // Details screen fields the data service does not return
   Details: [
-    ["Prefix", "crm:primarycontact.salutation"],
-    ["Suffix", "crm:primarycontact.suffix"],
-    ["Preferred Language", "note:contact"]
+    ["Applicant Info>Prefix", "crm:primarycontact.salutation"],
+    ["Applicant Info>Suffix", "crm:primarycontact.suffix"],
+    ["Applicant Info>Preferred Language", "note:contact"]
   ],
   "Policy Info": [
     ["Prior Carrier", "coverage.currentCarrier"],

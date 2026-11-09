@@ -7,7 +7,7 @@ import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { send } from "./api";
 import type { FieldCatalog } from "@/crm/fieldCatalog";
 import type { CapturedApplication, PortalScanRow } from "@/boldpenguin/types";
-import { MAP_PATH_GROUPS, NOTE_TARGETS } from "@/portal/fieldMaps";
+import { MAP_PATH_GROUPS, NOTE_TARGETS, scopeMatches } from "@/portal/fieldMaps";
 import { choiceColumnOf } from "@/portal/choiceRouting";
 import {
   OPTIONMAP_STORAGE_KEY, columnKeyOf, dataServiceScope, getOptionMaps, setOptionMaps, type ColumnOptionMap
@@ -52,7 +52,7 @@ export interface DataServicePageHooks {
 
 /** What a list section's rows are. */
 const SECTION_NOTE: Record<string, string> = {
-  "Co-applicants": " (one row per person)",
+  Contacts: " (one row per contact added with Add contact)",
   Phones: " (one row per phone after the primary)",
   Emails: " (one row per email after the primary)",
   Addresses: " (one row per address, primary first)"
@@ -140,15 +140,15 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
         if (!row) break;
         // a section-scoped service label ("primary address>city") matches
         // only that section's field: the Other Address City is a page field
+        // scoped service labels: the applicant's Gender is not a contact's,
+        // the Primary Address City is not the Other Address one
         const want = canonical(row.fieldLabel ?? row.label.replace(/:.*$/, ""));
-        const pickSection = row.section ?? "";
-        const covers = (f: DataServiceField) => labelsOf(f).some(l => {
+        const scopes = row.scopes ?? [];
+        const covers = (f: DataServiceField) => (f.pageLabels ?? []).some(l => {
           const at = l.indexOf(">");
-          const section = at < 0 ? "" : l.slice(0, at);
-          const kindOk = section.startsWith("*") ? pickSection.split(" ").pop() === section.slice(1) : section === pickSection;
-          return canonical(at < 0 ? l : l.slice(at + 1)) === want && (!section || !pickSection || kindOk);
+          return canonical(at < 0 ? l : l.slice(at + 1)) === want && scopeMatches(at < 0 ? "" : l.slice(0, at), scopes);
         });
-        const hit = EZLYNX_FIELDS.find(f => f.section === "Applicant" && covers(f)) ?? EZLYNX_FIELDS.find(covers);
+        const hit = EZLYNX_FIELDS.find(covers);
         if (hit) { setFocus(hit.id); setPickNote(null); }
         else if (page.onUnmatched) { page.onUnmatched(row); setPickNote(`${row.label} added to Page fields.`); }
         else setPickNote(`"${row.label}" is not a field the data service returns.`);
@@ -184,7 +184,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
-      {(["Applicant", "Co-applicants", "Phones", "Emails", "Addresses"] as const).map(section => {
+      {(["Applicant", "Contacts", "Phones", "Emails", "Addresses"] as const).map(section => {
         // a field picked on the page always shows, whatever the filter
         const listed = EZLYNX_FIELDS.filter(f => f.section === section &&
           (show === "all" || f.id === focus || (show === "mapped" ? Boolean(targets[f.id]) : !targets[f.id])));
