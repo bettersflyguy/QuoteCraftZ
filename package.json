@@ -1,6 +1,6 @@
 {
   "name": "d365-insurance-quote-connector",
-  "version": "0.1.44",
+  "version": "0.1.45",
   "description": "",
   "main": "index.js",
   "directories": {
