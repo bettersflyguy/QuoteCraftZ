@@ -409,6 +409,12 @@ const TABLE = '<table border="1" cellpadding="4" style="border-collapse:collapse
 
 export interface TimelineNote { subject: string; html: string; count: number }
 
+/** How a load result names a note write (notes are dated history: a new
+ * note, today's note corrected, or nothing changed). */
+export function noteOutcomeText(outcome: "created" | "updated" | "unchanged"): string {
+  return outcome === "created" ? "new timeline note" : outcome === "updated" ? "today's timeline note updated" : "unchanged, no new note";
+}
+
 /** Values the agent tagged for a record's timeline ("Notes: Insured",
  * "Notes: Policy", ...), gathered into ONE rich-text "Non Mapped Timeline
  * Entries" note per record and source site, organized like the panel:

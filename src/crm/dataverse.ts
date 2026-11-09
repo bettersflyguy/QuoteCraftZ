@@ -387,49 +387,69 @@ export const NOTE_RECORDS = {
   policy: { logical: "iacrm_policy", set: "iacrm_policies" }
 } as const;
 
-/** One evergreen note per subject per account: found by subject -> PATCH,
- * else POST bound to the account. Returns "created" | "updated". */
+/** What a note write did: a new dated note, today's note updated, or
+ * nothing because the captured data hasn't changed. */
+export type NoteOutcome = "created" | "updated" | "unchanged";
+
 export async function upsertAccountNote(
   env: CrmEnvironment, accountId: string, subject: string, text: string,
   legacyMatch?: { prefix: string; suffix: string }
-): Promise<"created" | "updated"> {
+): Promise<NoteOutcome> {
   return upsertRecordNote(env, "account", accountId, subject, text, legacyMatch);
 }
 
-/** One evergreen note per subject per record (account, contact,
- * opportunity, quote, policy): found by subject -> PATCH, else POST bound
- * to the record. */
+/** "MM-DD-YYYY" for a moment, local time. */
+function localDate(d: Date): string {
+  return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}-${d.getFullYear()}`;
+}
+
+/** A note body without its "Captured <when> from <where>" line, so two
+ * loads of the same data compare equal. */
+export function noteContent(text: string): string {
+  return String(text ?? "").replace(/<p><b>Captured [^<]*<\/b><\/p>/g, "").replace(/^Captured .*$/m, "").trim();
+}
+
+/** Notes are HISTORY, never silently rewritten (agent's rule): per record
+ * and subject, the latest note is left alone when the data is unchanged,
+ * updated when it was written TODAY (corrections during the same intake),
+ * and otherwise a NEW note dated today is added - what was captured a year
+ * ago stays as it was. Subjects carry the date ("... (EZLynx) 11-08-2026"). */
 export async function upsertRecordNote(
   env: CrmEnvironment, record: keyof typeof NOTE_RECORDS, id: string, subject: string, text: string,
-  legacyMatch?: { prefix: string; suffix: string }
-): Promise<"created" | "updated"> {
+  legacyMatch?: { prefix: string; suffix: string }, now: Date = new Date()
+): Promise<NoteOutcome> {
   const target = NOTE_RECORDS[record];
-  const recordId = id;
-  // a renamed subject still finds (and renames) the note an earlier version wrote
   const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
-  const subjects = `subject eq ${q(subject)}` + (legacyMatch
+  // the base subject finds undated notes from earlier versions and every dated one
+  const subjects = `startswith(subject,${q(subject)})` + (legacyMatch
     ? ` or (startswith(subject,${q(legacyMatch.prefix)}) and endswith(subject,${q(legacyMatch.suffix)}))`
     : "");
   const { value } = await dvJson<{ value: Record<string, string>[] }>(
     env,
-    `annotations?$select=annotationid&$filter=_objectid_value eq ${recordId} and (${subjects})&$top=1`
+    `annotations?$select=annotationid,notetext,createdon&$filter=_objectid_value eq ${id} and (${subjects})&$orderby=createdon desc&$top=1`
   );
-  if (value[0]) {
-    await dv(env, `annotations(${value[0]["annotationid"]})`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, notetext: text })
-    });
-    return "updated";
+  const dated = `${subject} ${localDate(now)}`;
+  const latest = value[0];
+  if (latest) {
+    if (noteContent(latest["notetext"] ?? "") === noteContent(text)) return "unchanged";
+    const created = latest["createdon"] ? new Date(latest["createdon"]) : null;
+    if (created && !Number.isNaN(created.getTime()) && localDate(created) === localDate(now)) {
+      const res = await dv(env, `annotations(${latest["annotationid"]})`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: dated, notetext: text })
+      });
+      if (!res.ok) throw new Error(`Dataverse ${res.status} updating note: ${(await res.text().catch(() => "")).slice(0, 300)}`);
+      return "updated";
+    }
   }
   await dvPost(env, "annotations?$select=annotationid", {
-    subject,
+    subject: dated,
     notetext: text,
-    [`objectid_${target.logical}@odata.bind`]: `/${target.set}(${recordId})`
+    [`objectid_${target.logical}@odata.bind`]: `/${target.set}(${id})`
   });
   return "created";
 }
-
 export interface ExistingMatch {
   kind: "account" | "lead";
   id: string;

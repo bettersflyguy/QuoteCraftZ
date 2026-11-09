@@ -6,7 +6,7 @@ import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages, UserRow } from "@/crm/dataverse";
 import type { CapturedApplicant } from "@/types";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { applicantFromIdentity, noteOutcomeText, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -385,8 +385,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         }
         for (const id of rn.ids) {
           try {
-            const outcome = await send<"created" | "updated">({ type: "panel/upsertNote", record: rn.record, id, subject: tl.subject, html: tl.html });
-            rows.push({ key: `Notes for ${rn.label}: timeline entry ${outcome} with ${tl.count} value${tl.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+            const outcome = await send<"created" | "updated" | "unchanged">({ type: "panel/upsertNote", record: rn.record, id, subject: tl.subject, html: tl.html });
+            rows.push({ key: `Notes for ${rn.label}: ${noteOutcomeText(outcome)} (${tl.count} value${tl.count === 1 ? "" : "s"})`, status: 204, error: null, entityId: null });
           } catch (e) {
             rows.push({ key: `Notes for ${rn.label}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
           }

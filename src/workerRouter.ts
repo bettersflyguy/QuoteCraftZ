@@ -36,7 +36,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { addressRows, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { addressRows, noteOutcomeText, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAccountAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -872,7 +872,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           const note = buildSupplementalNote(app);
           if (note) {
             const outcome = await deps.upsertAccountNote(env, msg.accountId, note.subject, note.body, note.legacyMatch);
-            results.push({ key: `Supplemental data: timeline note ${outcome} with ${note.count} unmapped field${note.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+            results.push({ key: `Supplemental data: ${noteOutcomeText(outcome)} (${note.count} unmapped field${note.count === 1 ? "" : "s"})`, status: 204, error: null, entityId: null });
           }
         } catch (e) {
           results.push({ key: "Supplemental data note", status: 0, error: String((e as Error).message ?? e), entityId: null });
@@ -893,7 +893,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           }
           try {
             const outcome = await deps.upsertRecordNote(env, t.record, t.id, tl.subject, tl.html);
-            results.push({ key: `Notes for ${t.label}: timeline entry ${outcome} with ${tl.count} value${tl.count === 1 ? "" : "s"}`, status: 204, error: null, entityId: null });
+            results.push({ key: `Notes for ${t.label}: ${noteOutcomeText(outcome)} (${tl.count} value${tl.count === 1 ? "" : "s"})`, status: 204, error: null, entityId: null });
           } catch (e) {
             results.push({ key: `Notes for ${t.label}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
           }
