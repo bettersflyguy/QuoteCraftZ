@@ -6,7 +6,7 @@ import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages, UserRow } from "@/crm/dataverse";
 import type { CapturedApplicant } from "@/types";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, noteOutcomeText, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { applicantFromIdentity, contactAddressOf, noteOutcomeText, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -70,6 +70,14 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   // of the related people (an existing primary only changes on a pick)
   const related = useMemo(() => coApplicantsFromCapture(app), [app]);
   const [primary, setPrimary] = useState<{ slot: number; explicit: boolean }>({ slot: 1, explicit: false });
+  // the account's address is the primary contact's: picking someone else
+  // puts THEIR address in the review (back to the applicant's on undo)
+  const [applicantAddress] = useState(() => { const i = identityFromCapture(app); return { street: i.street, city: i.city, state: i.state, postalCode: i.postalCode }; });
+  const choosePrimary = (slot: number) => {
+    setPrimary({ slot, explicit: true });
+    const addr = slot === 1 ? applicantAddress : contactAddressOf(app, slot);
+    if (addr) setIdentity(prev => ({ ...prev, ...addr }));
+  };
   const [opp, setOpp] = useState<OppState>({ create: false, lobId: null, name: "", nameEdited: false });
   // A captured policy number means the ingest happened on a SALE screen -
   // policy creation offers itself pre-checked with the captured terms.
@@ -553,7 +561,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             <Dropdown
               value={primary.slot === 1 ? personName || "Applicant" : (() => { const c = related.find(r => r.slot === primary.slot); return c ? `${c.firstName} ${c.lastName}`.trim() : ""; })()}
               selectedOptions={[String(primary.slot)]}
-              onOptionSelect={(_, d) => setPrimary({ slot: Number(d.optionValue ?? 1), explicit: true })}
+              onOptionSelect={(_, d) => choosePrimary(Number(d.optionValue ?? 1))}
             >
               <Option value="1">{personName || "Applicant"}</Option>
               {related.filter(c => c.slot).map(c => <Option key={c.slot} value={String(c.slot)}>{`${c.firstName} ${c.lastName}`.trim()}</Option>)}

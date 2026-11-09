@@ -6,7 +6,7 @@ import { ensureInsuredData, type AccountEnrichmentState, type EnrichApi } from "
 import { effectiveTargets, ezlynxFields, ezlynxSecure } from "@/sources/ezlynxSource";
 import { normalizeApplicant } from "@/ezlynx/normalize";
 import { normalize } from "@/boldpenguin/normalize";
-import { primarySlots } from "@/crm/appCommit";
+import { contactAddressOf, primarySlots } from "@/crm/appCommit";
 import { captureSheets } from "@/panel/captureSheets";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CapturedApplicant } from "@/types";
@@ -136,5 +136,17 @@ describe("the primary row is marked", () => {
     expect(sheet("Contacts").columns[0]).toBe("Primary");
     expect(sheet("Contacts").rows.map(r => [r[0], r[1]])).toEqual([["Yes", "Tracy"], ["", "Alex"]]);
     expect(sheet("Addresses").rows.map(r => r[0])).toEqual(["Yes", ""]);
+  });
+});
+describe("the account's address is the primary contact's", () => {
+  it("a picked contact's own address is what the review shows for the account", () => {
+    const fields = ezlynxFields(normalizeApplicant({
+      id: 1, firstName: "David", lastName: "Johnson",
+      primaryAddress: { address1: "1 Main St", city: "Champlin", state: "MN", postalCode: "55316" },
+      contacts: [{ firstName: "Karen", lastName: "Johnson", primaryAddress: { address1: "9 Lake Rd", city: "Duluth", state: "MN", postalCode: "55802" } }]
+    }), undefined);
+    const app = { fields, normalized: normalize(fields), capturedAt: 0, source: { system: "EZLynx", title: "" } } as unknown as CapturedApplication;
+    expect(contactAddressOf(app, 2)).toEqual({ street: "9 Lake Rd", city: "Duluth", state: "MN", postalCode: "55802" });
+    expect(contactAddressOf(app, 3)).toBeNull();
   });
 });

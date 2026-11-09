@@ -291,6 +291,21 @@ export function crmGroup(app: CapturedApplication, name: string): Record<string,
   return Object.keys(out).length ? out : null;
 }
 
+/** The account's address columns: whoever is the primary contact, the
+ * account's Address 1 is THEIR address. */
+export const ACCOUNT_ADDRESS_COLUMNS = [
+  "address1_line1", "address1_line2", "address1_line3", "address1_city",
+  "address1_stateorprovince", "address1_postalcode", "address1_county"
+] as const;
+
+/** A related contact's own captured address (their Contacts row), for the
+ * review when the agent makes them the primary contact; null if none. */
+export function contactAddressOf(app: CapturedApplication, slot: number): { street: string; city: string; state: string; postalCode: string } | null {
+  const g = crmGroup(app, `crm:contact${slot}`) ?? {};
+  const out = { street: g["address1_line1"] ?? "", city: g["address1_city"] ?? "", state: g["address1_stateorprovince"] ?? "", postalCode: g["address1_postalcode"] ?? "" };
+  return out.street || out.city || out.postalCode ? out : null;
+}
+
 /** Address row numbers the capture holds ("crm:address1".."crm:addressN"),
  * ascending: row N is address number N on the insured's account. */
 export function addressRows(app: { normalized: Record<string, unknown> }): number[] {

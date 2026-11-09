@@ -36,7 +36,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -378,6 +378,21 @@ async function writeHeldQuotes(
     }
   }
   return results;
+}
+
+/** The account's captured columns, its address taken from whoever is the
+ * primary contact: an explicitly picked related contact's own address
+ * replaces the applicant's (never a mix of the two). */
+function accountGroup(
+  account: Record<string, unknown> | undefined, primary: { slot: number; explicit: boolean } | undefined,
+  groupOf: (name: string) => Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (!primary?.explicit || primary.slot === 1) return account;
+  const person = groupOf(`crm:contact${primary.slot}`) ?? {};
+  if (!ACCOUNT_ADDRESS_COLUMNS.some(c => person[c])) return account;
+  const out: Record<string, unknown> = { ...(account ?? {}) };
+  for (const c of ACCOUNT_ADDRESS_COLUMNS) { if (person[c]) out[c] = person[c]; else delete out[c]; }
+  return out;
 }
 
 /** Raw captured column text for one record -> catalog-coerced values. Any
@@ -811,7 +826,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           // ones received their columns on create). Fill-if-empty: agent-
           // entered CRM data always wins.
           const columnWrites: { label: string; set: string; id: string | null; values: Record<string, unknown> }[] = [
-            { label: "Insured", set: "accounts", id: msg.accountId, values: coerceGroup(entityOf("account"), groupOf("crm:account")) },
+            { label: "Insured", set: "accounts", id: msg.accountId, values: coerceGroup(entityOf("account"), accountGroup(groupOf("crm:account"), msg.primary, groupOf)) },
             { label: "Primary contact", set: "contacts", id: (primaryContactId = en.applicantContactId), values: coerceGroup(entityOf("primarycontact"), groupOf("crm:primarycontact")) },
             ...en.matchedCoContacts.map(m => ({ label: "Related contact", set: "contacts", id: m.contactId, values: m.extra }))
           ];
