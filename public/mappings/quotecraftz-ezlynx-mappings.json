@@ -133,13 +133,6 @@
       "person.relationship": "crm:contacts[].iacrm_role",
       "person.isCoApplicant": "",
       "person.isDriver": "",
-      "person.street": "crm:contacts[].address1_line1",
-      "person.address2": "crm:contacts[].address1_line2",
-      "person.unit": "crm:contacts[].address1_line3",
-      "person.city": "crm:contacts[].address1_city",
-      "person.state": "crm:contacts[].address1_stateorprovince",
-      "person.county": "crm:contacts[].address1_county",
-      "person.postalCode": "crm:contacts[].address1_postalcode",
       "address.person": ""
     }
   },

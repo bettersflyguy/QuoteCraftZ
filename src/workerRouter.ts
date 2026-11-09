@@ -380,18 +380,13 @@ async function writeHeldQuotes(
   return results;
 }
 
-/** The account's captured columns, its address taken from whoever is the
- * primary contact: an explicitly picked related contact's own address
- * replaces the applicant's (never a mix of the two). */
-function accountGroup(
-  account: Record<string, unknown> | undefined, primary: { slot: number; explicit: boolean } | undefined,
-  groupOf: (name: string) => Record<string, unknown> | undefined
-): Record<string, unknown> | undefined {
-  if (!primary?.explicit || primary.slot === 1) return account;
-  const person = groupOf(`crm:contact${primary.slot}`) ?? {};
-  if (!ACCOUNT_ADDRESS_COLUMNS.some(c => person[c])) return account;
+/** The account's captured columns; when the agent picked the account's
+ * address on Load (any person's), that address replaces the captured one
+ * entirely (never a mix of the two). */
+function accountGroup(account: Record<string, unknown> | undefined, picked: Record<string, string> | undefined): Record<string, unknown> | undefined {
+  if (!picked) return account;
   const out: Record<string, unknown> = { ...(account ?? {}) };
-  for (const c of ACCOUNT_ADDRESS_COLUMNS) { if (person[c]) out[c] = person[c]; else delete out[c]; }
+  for (const c of ACCOUNT_ADDRESS_COLUMNS) { if (picked[c]) out[c] = picked[c]; else delete out[c]; }
   return out;
 }
 
@@ -826,7 +821,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           // ones received their columns on create). Fill-if-empty: agent-
           // entered CRM data always wins.
           const columnWrites: { label: string; set: string; id: string | null; values: Record<string, unknown> }[] = [
-            { label: "Insured", set: "accounts", id: msg.accountId, values: coerceGroup(entityOf("account"), accountGroup(groupOf("crm:account"), msg.primary, groupOf)) },
+            { label: "Insured", set: "accounts", id: msg.accountId, values: coerceGroup(entityOf("account"), accountGroup(groupOf("crm:account"), msg.accountAddress)) },
             { label: "Primary contact", set: "contacts", id: (primaryContactId = en.applicantContactId), values: coerceGroup(entityOf("primarycontact"), groupOf("crm:primarycontact")) },
             ...en.matchedCoContacts.map(m => ({ label: "Related contact", set: "contacts", id: m.contactId, values: m.extra }))
           ];

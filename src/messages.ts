@@ -86,7 +86,9 @@ export type PanelRequest =
    * capture; insuredType is iacrm_insuredtype (1 Personal, 2 Commercial). */
   | { type: "panel/appCommit"; accountId: string; applicant: CapturedApplicant; insuredType: 1 | 2 | null;
       /** Who becomes the account's primary contact (slot 1 = the applicant). */
-      primary?: { slot: number; explicit: boolean } }
+      primary?: { slot: number; explicit: boolean };
+      /** The address the agent picked for the account (Address 1 columns). */
+      accountAddress?: Record<string, string> }
   | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
   | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
   | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }

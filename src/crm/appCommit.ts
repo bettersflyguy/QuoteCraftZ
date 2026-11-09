@@ -306,6 +306,38 @@ export function contactAddressOf(app: CapturedApplication, slot: number): { stre
   return out.street || out.city || out.postalCode ? out : null;
 }
 
+/** One captured address the agent can make the account's address: whose
+ * it is and its parts (from the Addresses table). */
+export interface AddressChoice {
+  key: string; person: string; type: string; street: string; address2: string; unit: string;
+  city: string; state: string; county: string; postalCode: string;
+}
+const ADDRESS_LABEL: Record<string, keyof AddressChoice> = {
+  "Person": "person", "Address type": "type", "Street address": "street", "Address line 2": "address2", "Unit": "unit",
+  "City": "city", "State": "state", "County": "county", "ZIP code": "postalCode"
+};
+
+/** Every captured address (every person's), in table order. */
+export function addressChoices(app: CapturedApplication): AddressChoice[] {
+  const rows = new Map<string, AddressChoice>();
+  for (const f of app.fields) {
+    if (f.section !== "Addresses" || !isGridRow(f)) continue;
+    const key = ADDRESS_LABEL[f.label];
+    if (!key) continue;
+    const row = rows.get(f.group!) ?? rows.set(f.group!, { key: f.group!, person: "", type: "", street: "", address2: "", unit: "", city: "", state: "", county: "", postalCode: "" }).get(f.group!)!;
+    row[key] = clean(f.value);
+  }
+  return [...rows.values()].filter(r => r.street || r.city || r.postalCode);
+}
+
+/** An address as the account's Address 1 columns. */
+export function accountAddressColumns(c: AddressChoice): Record<string, string> {
+  return {
+    address1_line1: c.street, address1_line2: c.address2, address1_line3: c.unit, address1_city: c.city,
+    address1_stateorprovince: c.state, address1_postalcode: c.postalCode, address1_county: c.county
+  };
+}
+
 /** Address row numbers the capture holds ("crm:address1".."crm:addressN"),
  * ascending: row N is address number N on the insured's account. */
 export function addressRows(app: { normalized: Record<string, unknown> }): number[] {

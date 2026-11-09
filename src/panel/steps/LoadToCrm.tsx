@@ -6,7 +6,7 @@ import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages, UserRow } from "@/crm/dataverse";
 import type { CapturedApplicant } from "@/types";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { applicantFromIdentity, contactAddressOf, noteOutcomeText, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { accountAddressColumns, addressChoices, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 
 const useStyles = makeStyles({
   root: {
@@ -70,14 +70,26 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   // of the related people (an existing primary only changes on a pick)
   const related = useMemo(() => coApplicantsFromCapture(app), [app]);
   const [primary, setPrimary] = useState<{ slot: number; explicit: boolean }>({ slot: 1, explicit: false });
-  // the account's address is the primary contact's: picking someone else
-  // puts THEIR address in the review (back to the applicant's on undo)
-  const [applicantAddress] = useState(() => { const i = identityFromCapture(app); return { street: i.street, city: i.city, state: i.state, postalCode: i.postalCode }; });
+  // the account's address: any captured address (every person's); by
+  // default the primary contact's first, and it follows a primary pick
+  const addresses = useMemo(() => addressChoices(app), [app]);
+  const [accountAddress, setAccountAddress] = useState<{ key: string; explicit: boolean } | null>(null);
+  const applyAddress = (c: AddressChoice) => {
+    setAccountAddress({ key: c.key, explicit: true });
+    setIdentity(prev => ({ ...prev, street: c.street, city: c.city, state: c.state, postalCode: c.postalCode }));
+  };
+  const nameOfSlot = (slot: number) => {
+    if (slot === 1) return personName;
+    const c = related.find(r => r.slot === slot);
+    return c ? `${c.firstName} ${c.lastName}`.trim() : "";
+  };
   const choosePrimary = (slot: number) => {
     setPrimary({ slot, explicit: true });
-    const addr = slot === 1 ? applicantAddress : contactAddressOf(app, slot);
-    if (addr) setIdentity(prev => ({ ...prev, ...addr }));
+    const theirs = addresses.find(a => a.person.toLowerCase() === nameOfSlot(slot).toLowerCase());
+    if (theirs) applyAddress(theirs);
   };
+  const addressText = (c: AddressChoice) => [c.person, c.type, [c.street, c.city, c.state].filter(Boolean).join(", ")].filter(Boolean).join(" | ");
+  const pickedAddress = accountAddress ? addresses.find(a => a.key === accountAddress.key) ?? null : null;
   const [opp, setOpp] = useState<OppState>({ create: false, lobId: null, name: "", nameEdited: false });
   // A captured policy number means the ingest happened on a SALE screen -
   // policy creation offers itself pre-checked with the captured terms.
@@ -289,7 +301,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         // entity slots) ride along and are find-or-created AFTER the account
         applicant: withServiceLicenses({ ...applicantFromIdentity(identity, insuredType === 2), coApplicants: coApplicantsFromCapture(app) }),
         insuredType,
-        primary
+        primary,
+        ...(accountAddress?.explicit && pickedAddress ? { accountAddress: accountAddressColumns(pickedAddress) } : {})
       });
       let createdOppId: string | null = null;
       const oppLobId = opp.lobId;
@@ -565,6 +578,18 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             >
               <Option value="1">{personName || "Applicant"}</Option>
               {related.filter(c => c.slot).map(c => <Option key={c.slot} value={String(c.slot)}>{`${c.firstName} ${c.lastName}`.trim()}</Option>)}
+            </Dropdown>
+          </>
+        )}
+        {addresses.length > 1 && (
+          <>
+            <div className={styles.label}>Account address</div>
+            <Dropdown
+              value={pickedAddress ? addressText(pickedAddress) : addressText(addresses[0]!)}
+              selectedOptions={[pickedAddress?.key ?? addresses[0]!.key]}
+              onOptionSelect={(_, d) => { const c = addresses.find(a => a.key === d.optionValue); if (c) applyAddress(c); }}
+            >
+              {addresses.map(a => <Option key={a.key} value={a.key} text={addressText(a)}>{addressText(a)}</Option>)}
             </Dropdown>
           </>
         )}

@@ -47,6 +47,8 @@ const CONTACT = (...labels: string[]): string[] => labels.flatMap(l => [`co appl
  * the applicant and the contacts were mapped separately, so saved mappings
  * carry over. Defaults reproduce what the dedicated importer always wrote. */
 const PERSON = (...labels: string[]): string[] => [...APP(...labels), ...CONTACT(...labels)];
+/** An address field: in any of the applicant's address cards, or a contact's. */
+const ADDRESS = (...labels: string[]): string[] => [...EVERY_ADDRESS(...labels), ...CONTACT(...labels)];
 const both = (k: string): string[] => [`applicant.${k}`, `coApplicant.${k}`];
 export const EZLYNX_FIELDS: DataServiceField[] = [
   // the insured (account)
@@ -98,14 +100,6 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "person.email", label: "Primary email", section: "Contacts", defaultTarget: "contacts[].email", pageLabels: PERSON("email", "email address", "email type"), legacy: both("email") },
   { id: "person.phone", label: "Primary phone", section: "Contacts", defaultTarget: "contacts[].phone", pageLabels: PERSON("phone number", "phone", "phone type", "extension"), legacy: both("phone") },
   { id: "person.mobile", label: "Mobile phone", section: "Contacts", defaultTarget: "crm:contacts[].mobilephone", legacy: ["applicant.mobile"] },
-  // each person's own address (their CRM contact's Address 1)
-  { id: "person.street", label: "Street address", section: "Contacts", defaultTarget: "crm:contacts[].address1_line1", pageLabels: CONTACT("address"), legacy: ["coApplicant.street"] },
-  { id: "person.address2", label: "Address line 2", section: "Contacts", defaultTarget: "crm:contacts[].address1_line2", pageLabels: CONTACT("address line 2"), legacy: ["coApplicant.address2"] },
-  { id: "person.unit", label: "Unit", section: "Contacts", defaultTarget: "crm:contacts[].address1_line3", pageLabels: CONTACT("unit"), legacy: ["coApplicant.unit"] },
-  { id: "person.city", label: "City", section: "Contacts", defaultTarget: "crm:contacts[].address1_city", pageLabels: CONTACT("city"), legacy: ["coApplicant.city"] },
-  { id: "person.state", label: "State", section: "Contacts", defaultTarget: "crm:contacts[].address1_stateorprovince", pageLabels: CONTACT("state"), legacy: ["coApplicant.state"] },
-  { id: "person.county", label: "County", section: "Contacts", defaultTarget: "crm:contacts[].address1_county", pageLabels: CONTACT("county"), legacy: ["coApplicant.county"] },
-  { id: "person.postalCode", label: "ZIP code", section: "Contacts", defaultTarget: "crm:contacts[].address1_postalcode", pageLabels: CONTACT("postal code"), legacy: ["coApplicant.postalCode"] },
   // every phone / email after a person's primary (each person's), one row
   // each with whose it is, to the note the agent picks
   { id: "phone.person", label: "Person", section: "Phones", defaultTarget: "note" },
@@ -115,21 +109,21 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "email.person", label: "Person", section: "Emails", defaultTarget: "note" },
   { id: "email.type", label: "Email type", section: "Emails", defaultTarget: "note" },
   { id: "email.email", label: "Email address", section: "Emails", defaultTarget: "note" },
-  // every address of the applicant (EZLynx gives other contacts one each,
-  // on their Contacts row): row N = address N on the applicant's CRM
-  // contact (1 = their Address 1, the primary address)
+  // EVERY person's addresses, one row each with whose it is: the
+  // applicant's (many: row N of theirs = address N on their CRM contact)
+  // then each contact's one (their CRM contact's Address 1)
   { id: "address.person", label: "Person", section: "Addresses", defaultTarget: "" },
-  { id: "address.type", label: "Address type", section: "Addresses", defaultTarget: "crm:addresses[].name", pageLabels: EVERY_ADDRESS("address type") },
-  { id: "address.street", label: "Street address", section: "Addresses", defaultTarget: "crm:addresses[].line1", pageLabels: EVERY_ADDRESS("address") },
-  { id: "address.address2", label: "Address line 2", section: "Addresses", defaultTarget: "crm:addresses[].line2", pageLabels: EVERY_ADDRESS("address line 2") },
-  { id: "address.unit", label: "Unit", section: "Addresses", defaultTarget: "crm:addresses[].line3", pageLabels: EVERY_ADDRESS("unit") },
-  { id: "address.city", label: "City", section: "Addresses", defaultTarget: "crm:addresses[].city", pageLabels: EVERY_ADDRESS("city") },
-  { id: "address.state", label: "State", section: "Addresses", defaultTarget: "crm:addresses[].stateorprovince", pageLabels: EVERY_ADDRESS("state") },
-  { id: "address.county", label: "County", section: "Addresses", defaultTarget: "crm:addresses[].county", pageLabels: EVERY_ADDRESS("county") },
-  { id: "address.postalCode", label: "ZIP code", section: "Addresses", defaultTarget: "crm:addresses[].postalcode", pageLabels: EVERY_ADDRESS("postal code") },
-  { id: "address.postalCodeSuffix", label: "ZIP suffix", section: "Addresses", defaultTarget: "", pageLabels: EVERY_ADDRESS("postal code suffix") },
-  { id: "address.yearsAtAddress", label: "Years at address", section: "Addresses", defaultTarget: "", pageLabels: EVERY_ADDRESS("years at address") },
-  { id: "address.monthsAtAddress", label: "Months at address", section: "Addresses", defaultTarget: "", pageLabels: EVERY_ADDRESS("months at address") }
+  { id: "address.type", label: "Address type", section: "Addresses", defaultTarget: "crm:addresses[].name", pageLabels: ADDRESS("address type") },
+  { id: "address.street", label: "Street address", section: "Addresses", defaultTarget: "crm:addresses[].line1", pageLabels: ADDRESS("address") },
+  { id: "address.address2", label: "Address line 2", section: "Addresses", defaultTarget: "crm:addresses[].line2", pageLabels: ADDRESS("address line 2") },
+  { id: "address.unit", label: "Unit", section: "Addresses", defaultTarget: "crm:addresses[].line3", pageLabels: ADDRESS("unit") },
+  { id: "address.city", label: "City", section: "Addresses", defaultTarget: "crm:addresses[].city", pageLabels: ADDRESS("city") },
+  { id: "address.state", label: "State", section: "Addresses", defaultTarget: "crm:addresses[].stateorprovince", pageLabels: ADDRESS("state") },
+  { id: "address.county", label: "County", section: "Addresses", defaultTarget: "crm:addresses[].county", pageLabels: ADDRESS("county") },
+  { id: "address.postalCode", label: "ZIP code", section: "Addresses", defaultTarget: "crm:addresses[].postalcode", pageLabels: ADDRESS("postal code") },
+  { id: "address.postalCodeSuffix", label: "ZIP suffix", section: "Addresses", defaultTarget: "", pageLabels: ADDRESS("postal code suffix") },
+  { id: "address.yearsAtAddress", label: "Years at address", section: "Addresses", defaultTarget: "", pageLabels: ADDRESS("years at address") },
+  { id: "address.monthsAtAddress", label: "Months at address", section: "Addresses", defaultTarget: "", pageLabels: ADDRESS("months at address") }
 ];
 /** A data service's fields as page-peek items: each covers the on-screen
  * fields its scoped labels name, badged with what it feeds. */
@@ -202,6 +196,16 @@ function routeFor(target: string, row: number | null, personRow = false): string
   return isRoutablePath(target) ? target : undefined;
 }
 
+/** An address row's route: the applicant's Nth address is address N on
+ * their contact ("crm:addressN"); a contact's (EZLynx gives each one) is
+ * their contact's own Address 1 columns ("line1" -> "address1_line1"). */
+function routeAddress(target: string, person: number, nth: number): string | undefined {
+  const m = /^crm:addresses\[\]\.([a-z0-9_]+)$/.exec(target);
+  if (!m) return routeFor(target, null);
+  if (person === 0) return `crm:address${nth + 1}.${m[1]}`;
+  return nth === 0 ? `crm:contact${person + 1}.address1_${m[1]}` : undefined;
+}
+
 /** Every person as {field suffix: display value}: the applicant first, then
  * each contact. */
 function people(a: CapturedApplicant): Record<string, string>[] {
@@ -261,13 +265,21 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
   });
   list("Phones", "phone.", a.morePhones ?? []);
   list("Emails", "email.", a.moreEmails ?? []);
-  const owner = `${a.firstName} ${a.lastName}`.trim();
-  (a.addresses ?? []).slice(0, 40).forEach((ad, i) => {
-    const row: Record<string, string> = { ...ad, person: owner };
+  // every person's addresses as ONE table, each row on its owner's record
+  let addressRow = 0;
+  const addressOf = (row: Record<string, string>, person: number, nth: number) => {
+    addressRow += 1;
     for (const f of EZLYNX_FIELDS.filter(x => x.section === "Addresses")) {
       const value = (row[f.id.slice("address.".length)] ?? "").trim();
-      if (value) out.push({ label: f.label, value, section: "Addresses", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
+      if (value) out.push({ label: f.label, value, section: "Addresses", group: `Row ${addressRow}`, source: "dataservice", mapped: routeAddress(targets[f.id]!, person, nth) });
     }
+  };
+  const owner = `${a.firstName} ${a.lastName}`.trim();
+  (a.addresses ?? []).slice(0, 40).forEach((ad, i) => addressOf({ ...ad, person: owner }, 0, i));
+  a.coApplicants.forEach((c, j) => {
+    const d = c.details ?? {};
+    if (!d["street"] && !d["city"] && !d["postalCode"]) return;
+    addressOf({ ...d, type: d["addressType"] ?? "", person: `${c.firstName} ${c.lastName}`.trim() }, j + 1, 0);
   });
   return out;
 }

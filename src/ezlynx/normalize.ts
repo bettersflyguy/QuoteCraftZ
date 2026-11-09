@@ -212,6 +212,7 @@ function personDetails(r: Record<string, unknown>, address?: Record<string, unkn
     isDriver: text(r["isDriver"])
   };
   if (address) {
+    d["addressType"] = text(address["type"]);
     d["street"] = text(address["address1"]);
     d["city"] = text(address["city"]);
     d["state"] = text(address["state"]);
