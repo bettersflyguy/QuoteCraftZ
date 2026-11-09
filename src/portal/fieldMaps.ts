@@ -318,13 +318,20 @@ export interface FieldMapImport {
  * smuggle in a selector LIST or attribute/pseudo selector. */
 const PICK_SEG = String.raw`(?:#(?:[A-Za-z0-9_-]|[ -￿]|\\[0-9a-fA-F]{1,6} ?|\\[^0-9a-fA-F\s])+|[a-z][a-z0-9-]*(?::nth-of-type\(\d+\))?)`;
 const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
-/** "field:<page>|<label>" (or "field:<label>"): lowercase words only. */
-export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?[a-z0-9 ]{1,80}$/;
+/** "field:<page>|<section>><label>" with page and section optional
+ * ("field:details|other address>city"): lowercase words only. The section
+ * names a sub-section whose fields share labels with a twin section. */
+export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?(?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80}$/;
+/** Parses a labelled-field key: [page, "section>label" or "label"]. */
+export const FIELD_KEY_PARTS = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
 
-/** A labelled-field key for a page step and a field label. */
+/** A labelled-field key for a page step and a field label; the label may
+ * carry its section ("primary address>city"). */
 export function fieldKeyOf(page: string, label: string): string {
   const k = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  return `field:${page ? `${k(page)}|` : ""}${k(label)}`;
+  const at = label.indexOf(">");
+  const scoped = at < 0 ? k(label) : `${k(label.slice(0, at))}>${k(label.slice(at + 1))}`;
+  return `field:${page ? `${k(page)}|` : ""}${scoped}`;
 }
 
 /** Parses and validates a share file. Only https origins, known rule paths

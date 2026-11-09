@@ -392,7 +392,20 @@
     const t = clean(parts[parts.length - 1]);
     return parts.length > 1 && t && t.length <= 40 ? t : pageSection(activeModal());
   }
-  function fieldsByLabel(key) {
+  /* a field's sub-section ("other address"; "" outside one), shared with
+   * the filler so keys agree everywhere */
+  function sectionOf(el) {
+    const m = globalThis.BettersPortalMapper;
+    return m && m.sectionOf ? m.sectionOf(el) : { key: "", text: "" };
+  }
+  /* "other address>city": only that section's City; plain "city": every one */
+  function fieldsByLabel(full) {
+    const at = String(full || "").indexOf(">");
+    const section = at < 0 ? "" : full.slice(0, at);
+    const els = labelledBoxes(at < 0 ? full : full.slice(at + 1));
+    return section ? els.filter((el) => sectionOf(el).key === section) : els;
+  }
+  function labelledBoxes(key) {
     const out = [];
     document.querySelectorAll(FORM_FIELD).forEach((f) => {
       if (!isVisible(f) || (f.parentElement && f.parentElement.closest(FORM_FIELD))) return;
@@ -532,7 +545,7 @@
           if (value && secureOut) secureOut.push({ path, value });
           return;
         }
-        const field = { label, value, name: clean(control.name || control.id), section, group: "", source: "control" };
+        const field = { label, value, name: clean(control.name || control.id), section: sectionOf(control).text || section, group: "", source: "control" };
         if (path && (/^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ||
             /^note(:(contact|opportunity|quote|policy))?$/.test(path))) field.mapped = path;
         if (field.mapped && /^note/.test(field.mapped)) noteControls.push({ field, control, key: keyOf(control) });
@@ -843,8 +856,9 @@
       return v && shown(el) && taughtValueSafe(el, v) ? v : "";
     });
     const multi = els.length > 1;
+    const own = sectionOf(els[0]).text;
     if (/^note(:(contact|opportunity|quote|policy))?$/.test(path)) {
-      const section = multi ? pageTitle() : "Notes";
+      const section = multi ? pageTitle() : own || "Notes";
       values.forEach((value, i) => { if (value) out.push({ label, value, section, group: multi ? "Row " + (i + 1) : "", source: "taught", mapped: path }); });
       return;
     }

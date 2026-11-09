@@ -203,5 +203,48 @@
     return true;
   }
 
-  return { buildCandidates, canonical, matchField, valueVariants, validForField };
+  /* SECTIONS: a titled panel, fieldset or card holding fields ("Primary
+   * Address" / "Other Address" on EZLynx share every label and input name).
+   * A field is keyed by its section when that titled box sits inside
+   * another one (a sub-section, like an address inside the applicant).
+   * Top-level boxes and numbered repeats ("Vehicle 2") stay unkeyed, so
+   * repeated cards keep mapping as one table. */
+  const SECTION_BOX = "mat-expansion-panel, fieldset, mat-card, .mat-mdc-card, .card, .k-panelbar-item";
+  const NOT_TITLE = "mat-icon, .mat-icon, .material-icons, .material-symbols-outlined, svg, button, [aria-hidden='true']";
+  function sectionKey(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+  function titleText(node) {
+    let s = "";
+    node.childNodes.forEach(function (c) {
+      if (c.nodeType === 3) s += " " + c.textContent;
+      else if (c.nodeType === 1 && !c.matches(NOT_TITLE)) s += " " + titleText(c);
+    });
+    return s.replace(/\s+/g, " ").trim();
+  }
+  function boxTitle(box) {
+    let t = null;
+    if (box.matches("mat-expansion-panel")) t = box.querySelector(":scope > mat-expansion-panel-header mat-panel-title, :scope > mat-expansion-panel-header .mat-expansion-panel-header-title");
+    else if (box.matches("fieldset")) t = box.querySelector(":scope > legend");
+    else if (box.matches("mat-card, .mat-mdc-card")) t = box.querySelector("mat-card-title, .mat-mdc-card-title, .mat-card-title");
+    else if (box.matches(".card")) t = box.querySelector(":scope > .card-header, :scope > .card-title, :scope > .card-body > .card-title");
+    else if (box.matches(".k-panelbar-item")) t = box.querySelector(":scope > .k-link");
+    const s = t ? titleText(t) : "";
+    return s && s.length <= 40 ? s : "";
+  }
+  function sectionOf(el) {
+    const chain = [];
+    for (let n = el && el.closest ? el.closest(SECTION_BOX) : null; n; n = n.parentElement ? n.parentElement.closest(SECTION_BOX) : null) {
+      const text = boxTitle(n);
+      if (text) chain.push({ key: sectionKey(text), text: text });
+    }
+    if (chain.length < 2 || !chain[0].key || /\d$/.test(chain[0].key)) return { key: "", text: "" };
+    return chain[0];
+  }
+  /* "primary address>city" -> {section, label}; plain labels have no section */
+  function splitSection(s) {
+    const str = String(s || "");
+    const at = str.indexOf(">");
+    return at < 0 ? { section: "", label: str } : { section: str.slice(0, at), label: str.slice(at + 1) };
+  }
+
+  return { buildCandidates, canonical, matchField, valueVariants, validForField, sectionOf, sectionKey, splitSection };
 });

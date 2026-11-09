@@ -130,9 +130,16 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
         const row = await page.onPick();
         if (row === "timeout") { if (stopRequested.current) break; continue; }
         if (!row) break;
-        const want = canonical(row.label.replace(/:.*$/, ""));
-        const hit = EZLYNX_FIELDS.find(f => f.section === "Applicant" && labelsOf(f).some(l => canonical(l) === want)) ??
-          EZLYNX_FIELDS.find(f => labelsOf(f).some(l => canonical(l) === want));
+        // a section-scoped service label ("primary address>city") matches
+        // only that section's field: the Other Address City is a page field
+        const want = canonical(row.fieldLabel ?? row.label.replace(/:.*$/, ""));
+        const pickSection = row.section ?? "";
+        const covers = (f: DataServiceField) => labelsOf(f).some(l => {
+          const at = l.indexOf(">");
+          const section = at < 0 ? "" : l.slice(0, at);
+          return canonical(at < 0 ? l : l.slice(at + 1)) === want && (!section || !pickSection || section === pickSection);
+        });
+        const hit = EZLYNX_FIELDS.find(f => f.section === "Applicant" && covers(f)) ?? EZLYNX_FIELDS.find(covers);
         if (hit) { setFocus(hit.id); setPickNote(null); }
         else if (page.onUnmatched) { page.onUnmatched(row); setPickNote(`${row.label} added to Page fields.`); }
         else setPickNote(`"${row.label}" is not a field the data service returns.`);

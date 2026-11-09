@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, rowTargetOf } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, rowTargetOf } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -1386,7 +1386,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   const labelled = Object.entries(siteMap)
     .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v)))
     .map(([k, v]) => {
-      const m = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(k);
+      const m = FIELD_KEY_PARTS.exec(k);
       if (!m) return null;
       const table = arrayTableOf(v, catalog);
       return { byLabel: m[2]!, page: m[1] ?? "", label: "", path: v, ...(table ? { section: table.title } : {}) };
@@ -1422,7 +1422,7 @@ async function autoCapTabs(): Promise<number[]> {
 async function injectAutoCapture(tabId: number): Promise<void> {
   await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    files: ["portal/portal-ingest.js", "portal/portal-autocap.js"]
+    files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-autocap.js"]
   });
   await chrome.tabs.sendMessage(tabId, { type: "portal/autoCaptureStart" }).catch(() => {});
 }

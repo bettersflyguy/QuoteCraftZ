@@ -85,14 +85,26 @@
 
   /* stable identity for a control, shared by the mapping editor's scan and the
    * fill pass - agent-taught mappings are stored against these keys */
+  /* a sub-section's controls share names with their twins ("address1" in
+   * Primary and Other Address), so the section rides on the key */
+  function sectionSuffix(element) {
+    const s = mapper && mapper.sectionOf ? mapper.sectionOf(element).key : "";
+    return s ? "@" + s : "";
+  }
   function controlKey(element) {
     if ((element.type || "").toLowerCase() === "radio") {
-      return "radio:" + (clean(element.name) || mapper.canonical(primaryLabel(element)).slice(0, 60));
+      return "radio:" + (clean(element.name) || mapper.canonical(primaryLabel(element)).slice(0, 60)) + sectionSuffix(element);
     }
     const tag = element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase();
     const base = clean(element.name) || clean(element.id) || mapper.canonical(primaryLabel(element) || fieldName(element)).slice(0, 60);
-    return (tag + ":" + base).slice(0, 120);
+    return (tag + ":" + base).slice(0, 120) + sectionSuffix(element);
   }
+  /* "Other Address: City" for a sub-section's field, else the label */
+  function inSection(element, label) {
+    const s = mapper && mapper.sectionOf ? mapper.sectionOf(element) : null;
+    return s && s.text && label ? s.text + ": " + label : label;
+  }
+  const FIELD_KEY_RE = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
 
   /* banking, payment and card fields are NEVER auto-filled - an insurance
    * application holds nothing that belongs in them */
@@ -517,11 +529,18 @@
    * names the service's field, the page shows the same field by label) */
   const LABELLED_FIELDS = "input, select, textarea, [role='combobox'], mat-select, [aria-haspopup='listbox'], .k-dropdownlist, .k-picker";
   function fieldByLabels(labels) {
-    const wanted = new Set((labels || []).map((l) => mapper.canonical(l)).filter(Boolean));
-    if (!wanted.size) return null;
+    const wanted = (labels || []).map((l) => {
+      const p = mapper && mapper.splitSection ? mapper.splitSection(l) : { section: "", label: l };
+      return { section: p.section, label: mapper.canonical(p.label) };
+    }).filter((w) => w.label);
+    if (!wanted.length) return null;
     return Array.from(document.querySelectorAll(LABELLED_FIELDS))
       .filter((el) => visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0))
-      .find((el) => wanted.has(mapper.canonical(primaryLabel(el)))) || null;
+      .find((el) => {
+        const lab = mapper.canonical(primaryLabel(el));
+        const sec = mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "";
+        return wanted.some((w) => w.label === lab && (!w.section || w.section === sec));
+      }) || null;
   }
 
   async function readChoices(key, labels) {
@@ -596,7 +615,7 @@
       const autoPath = auto && typeof auto.path === "string" && auto.path.indexOf("fields.") !== 0 ? auto.path : null;
       rows.push({
         key,
-        label: primaryLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id) || key,
+        label: inSection(element, primaryLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key,
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
         autoPath,
@@ -625,13 +644,13 @@
     for (const key of Object.keys(ov)) {
       if (key.indexOf("field:") !== 0 || seen.has(key)) continue;
       seen.add(key);
-      const m = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(key);
+      const m = FIELD_KEY_RE.exec(key);
       if (!m) continue;
       const els = typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2]) : [];
       const name = els.length && typeof globalThis.__bettersFieldLabelText === "function" ? globalThis.__bettersFieldLabelText(els[0]) : "";
       const label = name
-        ? name + (els.length > 1 ? " (" + els.length + " on this page)" : "")
-        : m[2] + (m[1] ? " (" + m[1] + " page)" : "");
+        ? inSection(els[0], name) + (els.length > 1 ? " (" + els.length + " on this page)" : "")
+        : m[2].replace(">", ": ") + (m[1] ? " (" + m[1] + " page)" : "");
       rows.push({ key, label, type: "text", payment: false, autoPath: null, mapped: typeof ov[key] === "string" ? ov[key] : null });
     }
     return rows;
@@ -832,9 +851,12 @@
         if (t.control) {
           var el = t.control;
           var name = fieldName(el) || "";
+          var plain = primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id);
           finish({
             key: controlKey(el),
-            label: primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id) || controlKey(el),
+            label: inSection(el, plain) || controlKey(el),
+            fieldLabel: plain,
+            section: mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "",
             type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
             payment: PAYMENT_FIELD.test(name),
             autoPath: null,
@@ -856,9 +878,14 @@
            * card that repeats it; otherwise a re-locatable selector */
           var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
           var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80) : "";
+          /* a sub-section's field ("Other Address" City) is its own mapping,
+           * never its twin's in the other section */
+          var sec = mapper && mapper.sectionOf ? mapper.sectionOf(tx) : { key: "", text: "" };
           finish({
-            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + labelKey : "pick:" + cssPath(tx),
-            label: (labelKey && boxLabel) || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
+            label: (labelKey && inSection(tx, boxLabel)) || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            fieldLabel: boxLabel || hostLabel || inferred,
+            section: sec.key,
             type: "text",
             payment: PAYMENT_FIELD.test(inferred),
             autoPath: null,
@@ -1014,7 +1041,7 @@
     items.forEach(function (it) {
       if (!it || typeof it.key !== "string") return;
       var els = [];
-      var fk = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(it.key);
+      var fk = FIELD_KEY_RE.exec(it.key);
       if (fk) {
         els = (typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2]) : [])
           .filter(function (e) { return visible(e); });
@@ -1095,9 +1122,19 @@
       scanControls(arg && arg.payload ? arg.payload : null, keys).forEach(function (r) { if (r.autoPath) coveredKeys.add(r.key); });
     } catch (_e) { /* auto-matching is best-effort here */ }
     const canon = function (v) { return mapper && mapper.canonical ? mapper.canonical(v) : String(v || "").toLowerCase().trim(); };
-    const serviceLabels = new Set(((arg && arg.pageLabels) || []).map(canon));
+    /* a service label may name its section ("primary address>city"): the
+     * twin field in another section stays uncovered */
+    const serviceLabels = ((arg && arg.pageLabels) || []).map(function (l) {
+      const p = mapper && mapper.splitSection ? mapper.splitSection(l) : { section: "", label: l };
+      return { section: p.section, label: canon(p.label) };
+    });
+    const serviceCovers = function (el) {
+      const lab = canon(primaryLabel(el) || fieldName(el));
+      const sec = mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "";
+      return serviceLabels.some(function (s) { return s.label === lab && (!s.section || s.section === sec); });
+    };
     Object.keys(keys).forEach(function (k) {
-      const fk = /^field:(?:([a-z0-9 ]{1,40})\|)?([a-z0-9 ]{1,80})$/.exec(k);
+      const fk = FIELD_KEY_RE.exec(k);
       if (keys[k] && fk && typeof globalThis.__bettersFieldsByLabel === "function") {
         globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2]).forEach(function (el) { covered.push(el); });
         return;
@@ -1114,7 +1151,7 @@
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
       if (isControl && coveredKeys.has(controlKey(el))) return;
-      if (isControl && serviceLabels.size && serviceLabels.has(canon(primaryLabel(el) || fieldName(el)))) return;
+      if (isControl && serviceLabels.length && serviceCovers(el)) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
       markPeek(el, "unmapped", "");
       shown += 1;

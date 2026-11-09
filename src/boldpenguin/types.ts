@@ -94,6 +94,10 @@ export interface PortalScanRow {
   mapped: string | null;
   /** A selection control's choices in the page's wording. */
   options?: string[];
+  /** Picked fields: the field's own label (label may add its section). */
+  fieldLabel?: string;
+  /** Picked fields: the sub-section key ("other address"), "" outside one. */
+  section?: string;
 }
 
 export interface PortalScanResult { origin: string; rows: PortalScanRow[] }

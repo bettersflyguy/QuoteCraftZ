@@ -13,7 +13,9 @@ export interface DataServiceField {
   section: "Applicant" | "Co-applicants";
   defaultTarget: string;
   /** How the source's own screens label it (canonical), so the page peek
-   * knows which on-screen fields the data service already covers. */
+   * knows which on-screen fields the data service already covers.
+   * "primary address>city": only the City inside the Primary Address
+   * section (the Other Address twin is a separate page field). */
   pageLabels?: string[];
   /** Identifier (SSN, DL#): secured pass-through only - never a capture
    * field, a note or a share file; mapped only to a secured CRM column. */
@@ -56,16 +58,16 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "applicant.email", label: "Email", section: "Applicant", defaultTarget: "contact.email", pageLabels: ["email", "email address"] },
   { id: "applicant.phone", label: "Phone", section: "Applicant", defaultTarget: "contact.phone", pageLabels: ["phone number", "phone"] },
   { id: "applicant.mobile", label: "Mobile phone", section: "Applicant", defaultTarget: "crm:primarycontact.mobilephone" },
-  { id: "applicant.street", label: "Street address", section: "Applicant", defaultTarget: "address.street1", pageLabels: ["address"] },
-  { id: "applicant.unit", label: "Unit", section: "Applicant", defaultTarget: "", pageLabels: ["unit"] },
-  { id: "applicant.address2", label: "Address line 2", section: "Applicant", defaultTarget: "address.street2", pageLabels: ["address line 2"] },
-  { id: "applicant.city", label: "City", section: "Applicant", defaultTarget: "address.city", pageLabels: ["city"] },
-  { id: "applicant.state", label: "State", section: "Applicant", defaultTarget: "address.state", pageLabels: ["state", "address state"] },
-  { id: "applicant.county", label: "County", section: "Applicant", defaultTarget: "crm:account.address1_county", pageLabels: ["county"] },
-  { id: "applicant.postalCode", label: "ZIP code", section: "Applicant", defaultTarget: "address.postalCode", pageLabels: ["postal code", "zip code"] },
-  { id: "applicant.postalCodeSuffix", label: "ZIP suffix", section: "Applicant", defaultTarget: "", pageLabels: ["postal code suffix"] },
-  { id: "applicant.yearsAtAddress", label: "Years at address", section: "Applicant", defaultTarget: "", pageLabels: ["years at address"] },
-  { id: "applicant.monthsAtAddress", label: "Months at address", section: "Applicant", defaultTarget: "", pageLabels: ["months at address"] },
+  { id: "applicant.street", label: "Street address", section: "Applicant", defaultTarget: "address.street1", pageLabels: ["primary address>address"] },
+  { id: "applicant.unit", label: "Unit", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>unit"] },
+  { id: "applicant.address2", label: "Address line 2", section: "Applicant", defaultTarget: "address.street2", pageLabels: ["primary address>address line 2"] },
+  { id: "applicant.city", label: "City", section: "Applicant", defaultTarget: "address.city", pageLabels: ["primary address>city"] },
+  { id: "applicant.state", label: "State", section: "Applicant", defaultTarget: "address.state", pageLabels: ["primary address>state", "address state"] },
+  { id: "applicant.county", label: "County", section: "Applicant", defaultTarget: "crm:account.address1_county", pageLabels: ["primary address>county"] },
+  { id: "applicant.postalCode", label: "ZIP code", section: "Applicant", defaultTarget: "address.postalCode", pageLabels: ["primary address>postal code", "zip code"] },
+  { id: "applicant.postalCodeSuffix", label: "ZIP suffix", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>postal code suffix"] },
+  { id: "applicant.yearsAtAddress", label: "Years at address", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>years at address"] },
+  { id: "applicant.monthsAtAddress", label: "Months at address", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>months at address"] },
   { id: "coApplicant.firstName", label: "First name", section: "Co-applicants", defaultTarget: "contacts[].firstName" },
   { id: "coApplicant.middleInitial", label: "Middle initial", section: "Co-applicants", defaultTarget: "crm:contacts[].middlename" },
   { id: "coApplicant.lastName", label: "Last name", section: "Co-applicants", defaultTarget: "contacts[].lastName" },

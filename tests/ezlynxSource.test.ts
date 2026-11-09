@@ -122,7 +122,10 @@ describe("everything the data service returns is listed and captured", () => {
 
   it("reports which on-screen labels mapped service fields cover", () => {
     const labels = coveredPageLabels(undefined);
-    expect(labels).toEqual(expect.arrayContaining(["first name", "dob", "postal code", "gender"]));
+    expect(labels).toEqual(expect.arrayContaining(["first name", "dob", "primary address>postal code", "gender"]));
+    // the service returns the PRIMARY address: its Other Address twin is not covered
+    expect(labels).not.toContain("postal code");
+    expect(labels).not.toContain("city");
     expect(labels).toContain("occupation");
     expect(labels).not.toContain("lead source");
     expect(coveredPageLabels({ "applicant.leadSource": "note" })).toContain("lead source");
