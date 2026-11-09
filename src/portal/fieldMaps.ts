@@ -121,10 +121,26 @@ const CRM_TARGET = /^crm:(account|primarycontact|quote|opportunity|contacts\[\]|
 /** Concrete per-row forms array teachings fan out into. */
 const CRM_ROUTABLE = /^crm:(account|primarycontact|quote|opportunity|contact(?:[2-9]|[1-3]\d)|policy(?:[1-9]|[1-3]\d)|address(?:[1-9]|[1-3]\d))\.([a-z][a-z0-9_]{0,99})$/;
 
+/** Identifier-class CRM columns (SSN, government ID, driver's license
+ * NUMBERS - "iacrm_driverslicense" too): secured pass-through only, never a
+ * plain capture target. A license STATE / status / class is not one. */
+export function isIdentifierColumn(column: string): boolean {
+  return column === "governmentid" || isSensitiveLabel(column.replace(/_/g, " ")) ||
+    (/licen[cs]e(number|no|num)?$/.test(column) && !/state|status|class|expir|date|type/.test(column));
+}
+
+/** A mapping saved with an identifier column as a plain CRM target (before
+ * those were refused) as its secured pass-through form, so it keeps working
+ * without ever holding the value in the capture. */
+export function securedIfIdentifier(target: string): string {
+  const m = /^crm:(account|primarycontact|contacts\[\]|contact\d+)\.([a-z0-9_]+)$/.exec(target);
+  return m && isIdentifierColumn(m[2]!) ? `secure:${m[1]}.${m[2]}` : target;
+}
+
 export function isCrmTarget(path: string): boolean {
   const m = CRM_TARGET.exec(path);
   // AMS-owned columns and identifier-class columns are never targets
-  return Boolean(m && !AMS_OWNED.has(m[2]!) && m[2] !== "governmentid" && !isSensitiveLabel(m[2]!.replace(/_/g, " ")));
+  return Boolean(m && !AMS_OWNED.has(m[2]!) && !isIdentifierColumn(m[2]!));
 }
 
 /** Paths the normalizer may route an explicitly mapped field to: the editor
@@ -132,8 +148,7 @@ export function isCrmTarget(path: string): boolean {
  * plus the concrete per-row slots and CRM column targets. */
 export const isRoutablePath = (path: string): boolean =>
   (PATH_LABEL.has(path) && !isArrayPath(path)) || SLOT_PATH.test(path) ||
-  (CRM_ROUTABLE.test(path) && !AMS_OWNED.has(path.split(".")[1]!) && !path.endsWith(".governmentid") &&
-    !isSensitiveLabel(path.split(".")[1]!.replace(/_/g, " ")));
+  (CRM_ROUTABLE.test(path) && !AMS_OWNED.has(path.split(".")[1]!) && !isIdentifierColumn(path.split(".")[1]!));
 
 /** SECURED targets: identifier-class CRM columns (SSN, government ID,
  * driver's license number, any field-secured column). Pass-through only:

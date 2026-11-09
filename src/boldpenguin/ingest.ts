@@ -3,6 +3,8 @@
  * any eligible carrier site can contribute insured data, which then fills the
  * next portal. Existing data always wins - ingest only adds. */
 import { canonical, clean, normalize } from "./normalize";
+import { alignPeople } from "./people";
+import { isIdentifierColumn } from "@/portal/fieldMaps";
 import type { CapturedApplication, CapturedAppField, NormalizedApplication } from "./types";
 
 export interface IngestSite {
@@ -18,6 +20,22 @@ export interface IngestOutcome {
   /** The page belonged to a DIFFERENT person than the held capture, so a
    * fresh capture replaced it instead of merging (cross-lead contamination). */
   replaced: boolean;
+  /** Incoming person slot -> the held person's slot it was matched to. */
+  slotMap?: Map<number, number>;
+  /** Identifier values (license numbers...) taken OUT of the capture: they go
+   * to the secured pass-through channel only. */
+  secured?: { path: string; value: string }[];
+}
+
+/** Takes identifier-class values (a license number mapped to a CRM column)
+ * out of the fields: they travel only as secured pass-through values. */
+function withoutIdentifiers(fields: CapturedAppField[], secured: { path: string; value: string }[]): CapturedAppField[] {
+  return fields.filter(f => {
+    const m = /^crm:(account|primarycontact|contact\d+)\.([a-z0-9_]+)$/.exec(f.mapped ?? "");
+    if (!m || !isIdentifierColumn(m[2]!)) return true;
+    if (clean(f.value)) secured.push({ path: `secure:${m[1]}.${m[2]}`, value: clean(f.value) });
+    return false;
+  });
 }
 
 interface IdentitySignals { email: string; phone: string; lastName: string; business: string }
@@ -80,6 +98,8 @@ function mergeNormalized(existing: NormalizedApplication, allFields: CapturedApp
   const merged: NormalizedApplication = {};
   for (const group of new Set([...Object.keys(fresh), ...Object.keys(existing)])) {
     merged[group] = { ...fresh[group], ...existing[group] };
+    // identifier values never stay in the capture (secured channel only)
+    if (group.startsWith("crm:")) for (const col of Object.keys(merged[group]!)) if (isIdentifierColumn(col)) delete merged[group]![col];
   }
   return merged;
 }
@@ -89,7 +109,10 @@ export function mergeIngestedFields(
   harvested: CapturedAppField[],
   site: IngestSite
 ): IngestOutcome {
-  const incoming = sanitize(harvested);
+  const secured: { path: string; value: string }[] = [];
+  // people are matched by who they are, not by the row they sat in
+  const aligned = alignPeople(existing?.normalized ?? null, sanitize(harvested));
+  const incoming = withoutIdentifiers(aligned.fields, secured);
   const incomingNormalized = normalize(incoming);
 
   const fresh = (replaced: boolean): IngestOutcome => ({
@@ -106,16 +129,20 @@ export function mergeIngestedFields(
     },
     added: incoming.length,
     total: incoming.length,
-    replaced
+    replaced,
+    slotMap: aligned.slotMap,
+    secured
   });
 
   if (!existing) return fresh(false);
   // a different person's page must never merge into the held capture
   if (identityConflict(existing.normalized, incomingNormalized)) return fresh(true);
 
-  const known = new Set(existing.fields.map(fieldKey));
+  // a capture held from before identifiers were refused gives them up too
+  const kept = withoutIdentifiers(existing.fields, secured);
+  const known = new Set(kept.map(fieldKey));
   const added = incoming.filter(field => !known.has(fieldKey(field)));
-  const fields = [...existing.fields, ...added];
+  const fields = [...kept, ...added];
   const app: CapturedApplication = {
     ...existing,
     capturedAt: new Date().toISOString(),
@@ -123,5 +150,5 @@ export function mergeIngestedFields(
     normalized: mergeNormalized(existing.normalized, fields),
     fields
   };
-  return { app, added: added.length, total: fields.length, replaced: false };
+  return { app, added: added.length, total: fields.length, replaced: false, slotMap: aligned.slotMap, secured };
 }

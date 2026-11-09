@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, noteLabelOf, rowTargetOf } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, noteLabelOf, rowTargetOf, securedIfIdentifier } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -36,6 +36,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
+import { slotOf, withSlot } from "@/boldpenguin/people";
 import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
@@ -207,9 +208,23 @@ async function ingestEzlynx(deps: Deps, url: string, tabId?: number): Promise<Re
   }
   await deps.setCapturedApplication(outcome.app);
   if (outcome.replaced) { await chrome.storage.session.remove("bp/crmLink"); await clearPendingSecure(); }
-  // SSN / DL# from the data service: secured pass-through only
-  const securedHeld = await addPendingSecure([...ezlynxSecure(applicant, maps["ezlynx"]), ...pageSecure]);
+  // SSN / DL# from the data service: secured pass-through only (page values
+  // follow the people they belong to)
+  const securedHeld = await addPendingSecure([
+    ...remapSecure(ezlynxSecure(applicant, maps["ezlynx"]), outcome.slotMap), ...remapSecure(pageSecure, outcome.slotMap), ...(outcome.secured ?? [])
+  ]);
   return { ok: true, data: { ...outcome, securedHeld } };
+}
+
+/** Secured values follow the people they belong to: an incoming person
+ * matched to another held slot takes their secured values along. */
+function remapSecure(list: { path: string; value: string }[], slotMap: Map<number, number> | undefined): { path: string; value: string }[] {
+  if (!slotMap?.size) return list;
+  return list.map(s => {
+    const from = slotOf(s.path);
+    const to = from !== null ? slotMap.get(from) : undefined;
+    return to !== undefined && to !== from ? { ...s, path: withSlot(s.path, to) } : s;
+  });
 }
 
 /** A carrier portal page showing a quoted premium (no policy number) as a
@@ -754,8 +769,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           await chrome.storage.session.remove("bp/crmLink");
           await clearPendingSecure();
         }
-        // secured values bypass the capture entirely
-        const securedHeld = await addPendingSecure(harvested.secure ?? []);
+        // secured values bypass the capture entirely, and follow their people
+        const securedHeld = await addPendingSecure([...remapSecure(harvested.secure ?? [], outcome.slotMap), ...(outcome.secured ?? [])]);
         return { ok: true, data: { ...outcome, securedHeld } };
       }
 
@@ -1407,7 +1422,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   // entries resolve to the taught CRM field's display label, which the
   // normalizer recognizes - the page never chooses its own labels
   const origin = await tabOrigin(tabId);
-  const siteMap = origin ? await fieldMapFor(origin) : {};
+  const siteMap = Object.fromEntries(Object.entries(origin ? await fieldMapFor(origin) : {}).map(([k, v]) => [k, securedIfIdentifier(v)]));
   // CRM-column teachings label themselves from the cached catalog (falling
   // back to the column's logical name when the catalog isn't loaded yet)
   let catalog: FieldCatalog | null = null;
