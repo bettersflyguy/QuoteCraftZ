@@ -7,6 +7,7 @@ import { effectiveTargets, ezlynxFields, ezlynxSecure } from "@/sources/ezlynxSo
 import { normalizeApplicant } from "@/ezlynx/normalize";
 import { normalize } from "@/boldpenguin/normalize";
 import { primarySlots } from "@/crm/appCommit";
+import { captureSheets } from "@/panel/captureSheets";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CapturedApplicant } from "@/types";
 
@@ -118,5 +119,22 @@ describe("a page's contacts list that restates the primary insured", () => {
       ])
     } as unknown as CapturedApplication;
     expect(primarySlots(app)).toEqual([2]);
+  });
+});
+
+describe("the primary row is marked", () => {
+  it("Contacts and Addresses tables show which row is the primary", () => {
+    const a = normalizeApplicant({
+      id: 1, firstName: "Tracy", lastName: "Dittrich",
+      primaryAddress: { type: { name: "Home" }, address1: "7901 120TH AVE N", city: "CHAMPLIN", state: "MN", postalCode: "55316" },
+      addresses: [{ type: { name: "Other" }, address1: "18833 96th Avenue North", city: "Maple Grove", state: "MN", postalCode: "55369" }],
+      contacts: [{ firstName: "Alex", lastName: "Dittrich" }]
+    });
+    const fields = ezlynxFields(a, undefined);
+    const app = { fields, normalized: normalize(fields), capturedAt: 0, source: { system: "EZLynx", title: "" }, quotes: [] } as unknown as CapturedApplication;
+    const sheet = (name: string) => captureSheets(app).find(s => s.name === name)!;
+    expect(sheet("Contacts").columns[0]).toBe("Primary");
+    expect(sheet("Contacts").rows.map(r => [r[0], r[1]])).toEqual([["Yes", "Tracy"], ["", "Alex"]]);
+    expect(sheet("Addresses").rows.map(r => r[0])).toEqual(["Yes", ""]);
   });
 });

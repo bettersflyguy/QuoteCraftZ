@@ -4,22 +4,26 @@ import { usDate } from "@/util/usDate";
  * Entries" (with the record each lands on). */
 import type { CapturedApplication } from "@/boldpenguin/types";
 import { isGridRow } from "@/boldpenguin/normalize";
-import { isNoteTarget, noteLabelOf } from "@/portal/fieldMaps";
+import { isNoteTarget, isPrimaryTarget, noteLabelOf } from "@/portal/fieldMaps";
 import type { Sheet } from "./xlsx";
 
 type Field = CapturedApplication["fields"][number];
 
 /** Fields grouped "Row N" rebuilt as tables (page order, own headers). */
 function arrayTables(fields: Field[]): { title: string; columns: string[]; rows: Record<string, string>[] }[] {
-  const out = new Map<string, { columns: string[]; rows: Map<string, Record<string, string>> }>();
+  const out = new Map<string, { columns: string[]; rows: Map<string, Record<string, string>>; primary: Set<string> }>();
   for (const f of fields) {
     if (!isGridRow(f)) continue;
-    const t = out.get(f.section) ?? out.set(f.section, { columns: [], rows: new Map() }).get(f.section)!;
+    const t = out.get(f.section) ?? out.set(f.section, { columns: [], rows: new Map(), primary: new Set() }).get(f.section)!;
     if (!t.columns.includes(f.label)) t.columns.push(f.label);
     const row = t.rows.get(f.group) ?? t.rows.set(f.group, {}).get(f.group)!;
     row[f.label] = usDate(f.value);
+    if (isPrimaryTarget(f.mapped)) t.primary.add(f.group);
   }
-  return [...out.entries()].map(([title, t]) => ({ title, columns: t.columns, rows: [...t.rows.values()] }));
+  // the row that lands on the primary contact / the account's Address 1
+  return [...out.entries()].map(([title, t]) => t.primary.size
+    ? { title, columns: ["Primary", ...t.columns], rows: [...t.rows.entries()].map(([g, r]) => ({ Primary: t.primary.has(g) ? "Yes" : "", ...r })) }
+    : { title, columns: t.columns, rows: [...t.rows.values()] });
 }
 
 const recordLabel = (mapped: string | undefined) => noteLabelOf(mapped).replace(/^Notes: ?/, "");

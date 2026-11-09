@@ -173,6 +173,12 @@ export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[
   { value: "note:quote", record: "quote", label: "Notes: Quote" },
   { value: "note:policy", record: "policy", label: "Notes: Policy" }
 ];
+/** A row of a list whose values land on the PRIMARY record: the primary
+ * contact (the applicant's row of a Contacts list) or the account's
+ * Address 1 (the primary address row of an Addresses list). */
+export const isPrimaryTarget = (path: string | undefined): boolean =>
+  /^(contact|crm:primarycontact|secure:primarycontact|crm:address1)\.|^note:contact$/.test(path ?? "");
+
 /** One related contact's note, resolved from a row ("note:contact3" = the
  * second related contact; contact1 is the primary insured). */
 const RELATED_NOTE = /^note:contact([2-9]|[1-3]\d)$/;
