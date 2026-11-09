@@ -4,7 +4,7 @@ import { usDate } from "@/util/usDate";
  * Entries" (with the record each lands on). */
 import type { CapturedApplication } from "@/boldpenguin/types";
 import { isGridRow } from "@/boldpenguin/normalize";
-import { NOTE_TARGETS, isNoteTarget } from "@/portal/fieldMaps";
+import { isNoteTarget, noteLabelOf } from "@/portal/fieldMaps";
 import type { Sheet } from "./xlsx";
 
 type Field = CapturedApplication["fields"][number];
@@ -22,8 +22,7 @@ function arrayTables(fields: Field[]): { title: string; columns: string[]; rows:
   return [...out.entries()].map(([title, t]) => ({ title, columns: t.columns, rows: [...t.rows.values()] }));
 }
 
-const recordLabel = (mapped: string | undefined) =>
-  (NOTE_TARGETS.find(t => t.value === mapped)?.label ?? "").replace(/^Notes: /, "");
+const recordLabel = (mapped: string | undefined) => noteLabelOf(mapped).replace(/^Notes: ?/, "");
 
 export function captureSheets(app: CapturedApplication): Sheet[] {
   const notes = app.fields.filter(f => isNoteTarget(f.mapped));
@@ -60,9 +59,10 @@ export function captureSheets(app: CapturedApplication): Sheet[] {
   if (noteSingles.length) {
     sheets.push({ name: "Timeline Notes", columns: ["Record", "Section", "Field", "Value"], rows: noteSingles.map(f => [recordLabel(f.mapped), f.section, f.label, usDate(f.value)]) });
   }
-  for (const target of NOTE_TARGETS) {
-    for (const t of arrayTables(notes.filter(f => f.mapped === target.value))) {
-      sheets.push({ name: `Notes ${t.title}`, columns: ["Record", ...t.columns], rows: t.rows.map(r => [recordLabel(target.value), ...t.columns.map(c => r[c] ?? "")]) });
+  // one table per record each note lands on (related contacts each their own)
+  for (const target of [...new Set(notes.map(f => f.mapped!))]) {
+    for (const t of arrayTables(notes.filter(f => f.mapped === target))) {
+      sheets.push({ name: `Notes ${t.title}`, columns: ["Record", ...t.columns], rows: t.rows.map(r => [recordLabel(target), ...t.columns.map(c => r[c] ?? "")]) });
     }
   }
   return sheets;

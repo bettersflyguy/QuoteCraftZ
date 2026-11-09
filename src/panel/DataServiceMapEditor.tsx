@@ -121,9 +121,11 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
   const secured = useMemo(() => securedGroups(catalog), [catalog]);
   const targets = effectiveTargets(saved);
   const choose = (id: string, value: string) => void setDataServiceMap(source, { ...(saved ?? {}), [id]: value });
-  const specials = [
+  // a related contact's own timeline only exists for a contact row
+  const specialsFor = (section: string) => [
     { value: "", label: "Not mapped (kept in the capture)" },
-    ...NOTE_TARGETS.map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> }))
+    ...NOTE_TARGETS.filter(t => section === "Contacts" || t.record !== "relatedcontact")
+      .map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> }))
   ];
   const labelsOf = (f: DataServiceField) => [f.label, ...(f.pageLabels ?? [])];
 
@@ -211,7 +213,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
                     value={target}
                     onChange={v => choose(f.id, v)}
                     groups={f.secured ? secured : groups}
-                    specials={f.secured ? [{ value: "", label: "Not mapped (never captured)" }] : specials}
+                    specials={f.secured ? [{ value: "", label: "Not mapped (never captured)" }] : specialsFor(section)}
                     currentText={target || undefined}
                   />
                   {col && (

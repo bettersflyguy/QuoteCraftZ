@@ -556,7 +556,7 @@
         }
         const field = { label, value, name: clean(control.name || control.id), section: sectionOf(control).text || section, group: "", source: "control" };
         if (path && (/^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ||
-            /^note(:(contact|opportunity|quote|policy))?$/.test(path))) field.mapped = path;
+            NOTE_PATH.test(path))) field.mapped = path;
         if (field.mapped && /^note/.test(field.mapped)) noteControls.push({ field, control, key: keyOf(control) });
         fields.push(field);
       });
@@ -573,8 +573,11 @@
         g.field.group = "Row " + (i + 1);
         g.field.section = title;
         g.field.label = fieldLabelOf(control) || g.field.label;
+        g.field.mapped = noteRow(g.field.mapped, i);
       });
     });
+    /* a single control on the related-contact note: the first related contact */
+    noteControls.forEach((n) => { n.field.mapped = noteRow(n.field.mapped, 0); });
 
     Array.from(root.querySelectorAll("fieldset"))
       .filter(isVisible).filter((fieldset) => !fieldset.querySelector("fieldset"))
@@ -812,6 +815,10 @@
   /* Array relationships ("contacts[].email"): the plural names the CRM array,
    * slot/start name the per-row groups the capture fans out into (contact1 is
    * the primary insured, so related contacts start at 2). */
+  /* timeline-note targets; "note:contacts[]" = each row's related contact
+   * (row 1 -> note:contact2, like the related-contact slots) */
+  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]))?$/;
+  function noteRow(path, i) { return path === "note:contacts[]" ? "note:contact" + (i + 2) : path; }
   var ARRAY_SLOTS = {
     contacts: { slot: "contact", start: 2 }, vehicles: { slot: "vehicle", start: 1 },
     /* CRM-column arrays share the semantic numbering, so a table taught with
@@ -868,9 +875,9 @@
     });
     const multi = els.length > 1;
     const own = sectionOf(els[0]).text;
-    if (/^note(:(contact|opportunity|quote|policy))?$/.test(path)) {
+    if (NOTE_PATH.test(path)) {
       const section = multi ? pageTitle() : own || "Notes";
-      values.forEach((value, i) => { if (value) out.push({ label, value, section, group: multi ? "Row " + (i + 1) : "", source: "taught", mapped: path }); });
+      values.forEach((value, i) => { if (value) out.push({ label, value, section, group: multi ? "Row " + (i + 1) : "", source: "taught", mapped: noteRow(path, i) }); });
       return;
     }
     const arr = path.match(/^((?:crm:)?[a-z]+)\[\]\.([a-z][a-zA-Z0-9_]{0,99})$/);
@@ -930,7 +937,7 @@
         if (value && secureOut) secureOut.push({ path, value });
         return;
       }
-      if (/^note(:(contact|opportunity|quote|policy))?$/.test(path)) {
+      if (NOTE_PATH.test(path)) {
         /* identifier data can never become a timeline note */
         if (sensitiveLabel(t.label) || (anchor && sensitiveLabel(noteLabel(anchor)))) return;
         /* timeline-note teaching ("note" = insured account, "note:<record>"
@@ -945,7 +952,7 @@
           : multi ? (repeatTitle(rows.map((r) => r.el)) || pageTitle()) : "Notes";
         rows.forEach(function (r) {
           const value = row(r.el);
-          if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: path });
+          if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: noteRow(path, r.n - 1) });
         });
         return;
       }

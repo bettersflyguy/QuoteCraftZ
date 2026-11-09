@@ -39,6 +39,9 @@ export interface CapturedApplicant {
     /** Captured CRM-column values for this person (raw text from the panel;
      * the worker replaces them with catalog-coerced values before writing). */
     extra?: Record<string, unknown>;
+    /** The related-contact slot this person came from (contact2 = 2), so
+     * values tagged for their own timeline find their CRM contact. */
+    slot?: number;
   }[];
   isCommercial: boolean;
 }

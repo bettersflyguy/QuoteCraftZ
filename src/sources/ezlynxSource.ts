@@ -176,8 +176,10 @@ export function effectiveTargets(saved: Record<string, string> | undefined): Rec
 /** A target as the explicit route for ONE record's field: single paths as
  * they are; array targets fan to the person's slot (related contacts start
  * at contact2, contact1 being the primary insured). */
-function routeFor(target: string, row: number | null): string | undefined {
+function routeFor(target: string, row: number | null, contactRow = false): string | undefined {
   if (!target) return undefined;
+  // a related contact's own timeline: only a contact row has one
+  if (target === "note:contacts[]") return row !== null && contactRow ? `note:contact${row + 2}` : undefined;
   if (isNoteTarget(target)) return target;
   if (row !== null) {
     const semantic = /^contacts\[\]\.([a-zA-Z]+)$/.exec(target);
@@ -237,7 +239,7 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
     for (const f of EZLYNX_FIELDS.filter(x => x.section === "Contacts" && !x.secured)) {
       const value = (row[f.id] ?? "").trim();
       if (!value) continue;
-      out.push({ label: f.label, value, section: "Contacts", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
+      out.push({ label: f.label, value, section: "Contacts", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i, true) });
     }
   });
   // additional phones / emails: rows of their own list (never a CRM slot

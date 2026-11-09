@@ -162,18 +162,35 @@ export const NOTE_TARGET = "note";
 
 /** Which record's timeline a note teaching lands on ("note" = the insured
  * account, kept for mappings saved before the record choice existed). */
-export type NoteRecord = "account" | "contact" | "opportunity" | "quote" | "policy";
+export type NoteRecord = "account" | "contact" | "relatedcontact" | "opportunity" | "quote" | "policy";
 export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[] = [
   { value: "note", record: "account", label: "Notes: Insured (account)" },
   { value: "note:contact", record: "contact", label: "Notes: Primary contact" },
+  // each row's values on THAT related contact's own timeline (resolved per
+  // row to note:contact2, note:contact3 ... like the related-contact slots)
+  { value: "note:contacts[]", record: "relatedcontact", label: "Notes: Related contact (each row)" },
   { value: "note:opportunity", record: "opportunity", label: "Notes: Opportunity" },
   { value: "note:quote", record: "quote", label: "Notes: Quote" },
   { value: "note:policy", record: "policy", label: "Notes: Policy" }
 ];
-export const isNoteTarget = (path: string | undefined): boolean => NOTE_TARGETS.some(t => t.value === path);
+/** One related contact's note, resolved from a row ("note:contact3" = the
+ * second related contact; contact1 is the primary insured). */
+const RELATED_NOTE = /^note:contact([2-9]|[1-3]\d)$/;
+export const isNoteTarget = (path: string | undefined): boolean =>
+  NOTE_TARGETS.some(t => t.value === path) || RELATED_NOTE.test(path ?? "");
 export const noteRecordOf = (path: string | undefined): NoteRecord | null =>
-  NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
-
+  RELATED_NOTE.test(path ?? "") ? "relatedcontact" : NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
+/** The related-contact slot a resolved note names (note:contact3 -> 3). */
+export const noteSlotOf = (path: string | undefined): number | null => {
+  const m = RELATED_NOTE.exec(path ?? "");
+  return m ? Number(m[1]) : null;
+};
+/** Display label for any note target, resolved rows included. */
+export const noteLabelOf = (path: string | undefined): string => {
+  const slot = noteSlotOf(path);
+  if (slot) return `Notes: Related contact ${slot - 1}`;
+  return NOTE_TARGETS.find(t => t.value === path)?.label ?? "Notes";
+};
 /** Valid capture (pick-key) target: a known semantic path, a CRM column,
  * or a timeline note. */
 export const isCaptureTarget = (path: string): boolean =>

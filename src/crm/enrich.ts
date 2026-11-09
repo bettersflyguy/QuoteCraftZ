@@ -74,6 +74,9 @@ export interface EnrichResult {
   /** Related people that matched EXISTING contacts - their captured column
    * values still need a fill-if-empty pass (created ones got them on create). */
   matchedCoContacts: { contactId: string; extra: Record<string, unknown> }[];
+  /** Every related person's CRM contact (matched or created), by the slot
+   * they came from - their own timeline note goes there. */
+  coContactIds: { slot: number | null; contactId: string }[];
 }
 
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
@@ -153,14 +156,16 @@ export async function ensureInsuredData(
     contactsCreated.push(`${applicant.firstName} ${applicant.lastName}`);
   }
   const matchedCoContacts: EnrichResult["matchedCoContacts"] = [];
+  const coContactIds: EnrichResult["coContactIds"] = [];
   for (const co of applicant.coApplicants) {
     const cand: Candidate = { firstName: co.firstName, lastName: co.lastName, phone: co.phone, email: co.email };
     const hit = existing.find(c => contactMatches(c, cand));
     if (hit) {
       if (co.extra && Object.keys(co.extra).length) matchedCoContacts.push({ contactId: hit.contactId, extra: co.extra });
+      coContactIds.push({ slot: co.slot ?? null, contactId: hit.contactId });
       continue;
     }
-    await createContactSafe(env, api, {
+    const createdId = await createContactSafe(env, api, {
       accountId,
       firstName: co.firstName,
       lastName: co.lastName,
@@ -172,6 +177,7 @@ export async function ensureInsuredData(
       extra: co.extra
     });
     contactsCreated.push(`${co.firstName} ${co.lastName}`);
+    if (createdId) coContactIds.push({ slot: co.slot ?? null, contactId: createdId });
   }
 
   let primaryContactSet = false;
@@ -187,7 +193,8 @@ export async function ensureInsuredData(
     contactsCreated,
     primaryContactSet,
     applicantContactId,
-    matchedCoContacts
+    matchedCoContacts,
+    coContactIds
   };
 }
 

@@ -12,7 +12,7 @@ import { QuotesView } from "../QuotesView";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { isGridRow } from "@/boldpenguin/normalize";
-import { NOTE_TARGETS, isNoteTarget } from "@/portal/fieldMaps";
+import { isNoteTarget, noteLabelOf } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -480,13 +480,13 @@ export function PortalFill({ onChanged, onFlowActive }: {
       {app && view === "data" && noteFields.length > 0 && (
         <div className={styles.notesBlock}>
           <div className={styles.notesTitle}><NotepadRegular /> Non Mapped Timeline Entries</div>
-          {NOTE_TARGETS.filter(t => noteFields.some(f => f.mapped === t.value)).map(t => {
-            const forRecord = noteFields.filter(f => f.mapped === t.value);
+          {[...new Set(noteFields.map(f => f.mapped!))].map(target => {
+            const forRecord = noteFields.filter(f => f.mapped === target);
             const singles = forRecord.filter(f => !isGridRow(f));
             return (
-              <div key={t.value}>
-                <div className={styles.gridTitle}>On {t.label.replace(/^Notes: /, "")}</div>
-                {singles.length > 0 && renderGrid({ title: `${t.value}:singles`, label: "Notes", columns: ["Field", "Value"], rows: singles.map(f => ({ Field: f.label, Value: usDate(f.value) })) })}
+              <div key={target}>
+                <div className={styles.gridTitle}>On {noteLabelOf(target).replace(/^Notes: /, "")}</div>
+                {singles.length > 0 && renderGrid({ title: `${target}:singles`, label: "Notes", columns: ["Field", "Value"], rows: singles.map(f => ({ Field: f.label, Value: usDate(f.value) })) })}
                 {gridTables(forRecord).map(renderGrid)}
               </div>
             );

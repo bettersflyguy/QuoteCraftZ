@@ -4,7 +4,7 @@ import { usDate } from "@/util/usDate";
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
 import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
-import { noteRecordOf, type NoteRecord } from "@/portal/fieldMaps";
+import { noteRecordOf, noteSlotOf, type NoteRecord } from "@/portal/fieldMaps";
 import type { CapturedApplication } from "@/boldpenguin/types";
 
 /** Fields that describe the insured themselves; data-grid rows (Drivers,
@@ -253,7 +253,8 @@ export function coApplicantsFromCapture(app: CapturedApplication): CapturedAppli
       dateOfBirth: toIsoDate(get("dateOfBirth") || null),
       dlNumber: null,
       dlState: null,
-      ...(crmGroup(app, `crm:contact${n}`) ? { extra: crmGroup(app, `crm:contact${n}`)! } : {})
+      ...(crmGroup(app, `crm:contact${n}`) ? { extra: crmGroup(app, `crm:contact${n}`)! } : {}),
+      slot: n
     });
   }
   return out;
@@ -429,6 +430,26 @@ export function buildTimelineNote(app: CapturedApplication, record: NoteRecord =
     html: noteHtml("Non Mapped Timeline Entries", app, tagged).slice(0, 100000),
     count: tagged.length
   };
+}
+
+/** The note for ONE related contact (slot N = contactN): the values tagged
+ * "Notes: Related contact", on that person's own timeline. */
+export function buildRelatedContactNote(app: CapturedApplication, slot: number): TimelineNote | null {
+  const tagged = app.fields
+    .filter(f => noteSlotOf(f.mapped) === slot && clean(f.value))
+    // one person: their values read as Field / Value, not a one-row table
+    .map(f => ({ ...f, group: "" }));
+  if (!tagged.length) return null;
+  return {
+    subject: `QuoteCraftZ: Non Mapped Timeline Entries (${app.source.system})`,
+    html: noteHtml("Non Mapped Timeline Entries", app, tagged).slice(0, 100000),
+    count: tagged.length
+  };
+}
+
+/** Related-contact slots holding values for their own timeline. */
+export function relatedNoteSlots(app: CapturedApplication): number[] {
+  return [...new Set(app.fields.map(f => noteSlotOf(f.mapped)).filter((n): n is number => n !== null))].sort((a, b) => a - b);
 }
 
 /** One rich-text note body: a heading, when and where it was captured, then

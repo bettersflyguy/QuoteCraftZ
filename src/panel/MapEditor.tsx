@@ -7,7 +7,7 @@ import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import {
-  ARRAY_ROW_MAX, MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget,
+  ARRAY_ROW_MAX, MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget, noteLabelOf,
   familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
 } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -234,7 +234,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     const v = draft[r.key] ?? "";
     if (r.payment) return [];
     if (v === "skip") return [{ key: r.key, label: "Never fill", kind: "skip" }];
-    if (isNoteTarget(v)) return [{ key: r.key, label: NOTE_TARGETS.find(t => t.value === v)!.label, kind: "mapped", array: true }];
+    if (isNoteTarget(v)) return [{ key: r.key, label: noteLabelOf(v), kind: "mapped", array: true }];
     if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v), family: r.key.startsWith("field:") && isArrayPath(v) }];
     if (r.autoPath && !hideAuto) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
     return [];

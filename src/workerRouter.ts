@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, rowTargetOf } from "@/portal/fieldMaps";
+import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, noteLabelOf, rowTargetOf } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -36,7 +36,7 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { addressRows, noteOutcomeText, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { addressRows, buildRelatedContactNote, noteOutcomeText, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAccountAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -791,6 +791,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           }))
         };
         let primaryContactId: string | null = null;
+        let coContactIds: { slot: number | null; contactId: string }[] = [];
         try {
           const en = await ensureInsuredData(env, msg.accountId, applicant, {
             getAccountEnrichmentState: deps.getAccountEnrichmentState,
@@ -804,6 +805,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           if (en.contactsCreated.length) bits.push(`created contact${en.contactsCreated.length === 1 ? "" : "s"}: ${en.contactsCreated.join(", ")}`);
           if (en.primaryContactSet) bits.push("set primary contact");
           results.push({ key: `Insured profile: ${bits.length ? bits.join("; ") : "already complete"}`, status: 204, error: null, entityId: null });
+          coContactIds = en.coContactIds ?? [];
           // taught CRM columns, hierarchy order: account, primary contact,
           // then related contacts that matched existing records (created
           // ones received their columns on create). Fill-if-empty: agent-
@@ -896,6 +898,24 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             results.push({ key: `Notes for ${t.label}: ${noteOutcomeText(outcome)} (${tl.count} value${tl.count === 1 ? "" : "s"})`, status: 204, error: null, entityId: null });
           } catch (e) {
             results.push({ key: `Notes for ${t.label}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
+        }
+        // values tagged "Notes: Related contact": each on that person's own
+        // timeline (the CRM contact their row matched or created)
+        for (const slot of relatedNoteSlots(app)) {
+          const tl = buildRelatedContactNote(app, slot);
+          if (!tl) continue;
+          const id = coContactIds.find(c => c.slot === slot)?.contactId ?? null;
+          const who = `Related contact ${slot - 1}`;
+          if (!id) {
+            results.push({ key: `Notes for ${who}: no contact record to attach to`, status: 0, error: "skipped", entityId: null });
+            continue;
+          }
+          try {
+            const outcome = await deps.upsertRecordNote(env, "contact", id, tl.subject, tl.html);
+            results.push({ key: `Notes for ${who}: ${noteOutcomeText(outcome)} (${tl.count} value${tl.count === 1 ? "" : "s"})`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            results.push({ key: `Notes for ${who}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
           }
         }
         return { ok: true, data: results };
@@ -1154,8 +1174,7 @@ function arrayTableOf(path: string, catalog: FieldCatalog | null): { title: stri
 /** A saved target as the peek's badge text. */
 function peekLabel(target: string, catalog: FieldCatalog | null): string {
   if (target === "skip") return "Never fill";
-  const note = NOTE_TARGETS.find(t => t.value === target);
-  if (note) return note.label;
+  if (isNoteTarget(target)) return noteLabelOf(target);
   if (target.startsWith("label:")) return target.slice(6);
   const direct = PATH_LABEL.get(target) ?? catalogLabel(catalog, target);
   if (direct) return direct;

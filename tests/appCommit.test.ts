@@ -410,9 +410,9 @@ describe("coApplicantsFromCapture (related-contact entity slots)", () => {
       }
     });
     expect(coApplicantsFromCapture(app)).toEqual([
-      { firstName: "Jamie", lastName: "Dittrich", relationship: "", phone: "612-555-0101", email: "jamie@example.com", dateOfBirth: "1980-03-02", dlNumber: null, dlState: null },
+      { firstName: "Jamie", lastName: "Dittrich", relationship: "", phone: "612-555-0101", email: "jamie@example.com", dateOfBirth: "1980-03-02", dlNumber: null, dlState: null, slot: 2 },
       // non-email / non-phone values never land in contact columns
-      { firstName: "Kim", lastName: "Dittrich", relationship: "", phone: null, email: null, dateOfBirth: null, dlNumber: null, dlState: null }
+      { firstName: "Kim", lastName: "Dittrich", relationship: "", phone: null, email: null, dateOfBirth: null, dlNumber: null, dlState: null, slot: 3 }
     ]);
   });
 
