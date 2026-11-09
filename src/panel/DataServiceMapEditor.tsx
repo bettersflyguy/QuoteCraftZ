@@ -50,6 +50,18 @@ export interface DataServicePageHooks {
   onUnmatched?: (row: PortalScanRow) => void;
 }
 
+/** The data-service field a field clicked on the page is (scoped labels:
+ * the applicant's Gender is not a contact's, the Primary Address City is not
+ * the Other Address one), or null when the service doesn't return it. */
+export function dataServiceFieldOf(row: PortalScanRow): DataServiceField | null {
+  const want = canonical(row.fieldLabel ?? row.label.replace(/:.*$/, ""));
+  const scopes = row.scopes ?? [];
+  return EZLYNX_FIELDS.find(f => (f.pageLabels ?? []).some(l => {
+    const at = l.indexOf(">");
+    return canonical(at < 0 ? l : l.slice(at + 1)) === want && scopeMatches(at < 0 ? "" : l.slice(0, at), scopes);
+  })) ?? null;
+}
+
 /** What a list section's rows are. */
 const SECTION_NOTE: Record<string, string> = {
   Contacts: " (row 1 is the applicant, then each contact added with Add contact)",
@@ -60,7 +72,7 @@ const SECTION_NOTE: Record<string, string> = {
 
 /** Every field a data service returns, each routed to a CRM target, with
  * one-for-one choice mappings for CRM choice columns. Saves as you go. */
-export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: string; page?: DataServicePageHooks }) {
+export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { source?: string; page?: DataServicePageHooks; focusId?: { id: string } | null }) {
   const styles = useStyles();
   const scope = dataServiceScope(source);
   const [saved, setSaved] = useState<Record<string, string> | undefined>(undefined);
@@ -75,6 +87,8 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
   const [pickNote, setPickNote] = useState<string | null>(null);
   const stopRequested = useRef(false);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  // a field picked from the Page fields picker that the service covers
+  useEffect(() => { if (focusId) setFocus(focusId.id); }, [focusId]);
 
   useEffect(() => {
     const load = () => void getDataServiceMaps().then(m => setSaved(m[source] ?? {}));
@@ -143,15 +157,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
         if (!row) break;
         // a section-scoped service label ("primary address>city") matches
         // only that section's field: the Other Address City is a page field
-        // scoped service labels: the applicant's Gender is not a contact's,
-        // the Primary Address City is not the Other Address one
-        const want = canonical(row.fieldLabel ?? row.label.replace(/:.*$/, ""));
-        const scopes = row.scopes ?? [];
-        const covers = (f: DataServiceField) => (f.pageLabels ?? []).some(l => {
-          const at = l.indexOf(">");
-          return canonical(at < 0 ? l : l.slice(at + 1)) === want && scopeMatches(at < 0 ? "" : l.slice(0, at), scopes);
-        });
-        const hit = EZLYNX_FIELDS.find(covers);
+        const hit = dataServiceFieldOf(row);
         if (hit) { setFocus(hit.id); setPickNote(null); }
         else if (page.onUnmatched) { page.onUnmatched(row); setPickNote(`${row.label} added to Page fields.`); }
         else setPickNote(`"${row.label}" is not a field the data service returns.`);

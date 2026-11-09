@@ -88,7 +88,7 @@ export function capturedTargets(fields: { label: string }[] | undefined): Captur
   return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
 }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, extraPeek }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek }: {
   /** Header text (defaults to "Field mapping for <origin>"). */
   title?: string;
   /** List only mapped/picked rows, not auto-matches (data-service sites). */
@@ -97,6 +97,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   inject?: PortalScanRow | null;
   /** On-screen fields another mapping covers (a data service): outlined by
    * the peek with the CRM target they feed. */
+  /** A picked row the parent maps elsewhere: returns a note to show (and the
+   * row is not added here), or null to add it as usual. */
+  routePick?: (row: PortalScanRow) => string | null;
   extraPeek?: { key: string; target: string; family?: boolean; labels?: string[] }[];
   scan: PortalScanResult;
   /** This site's one-for-one choice mappings ({table.column: {text: value}}). */
@@ -190,6 +193,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           continue;
         }
         if (!row) break; // Esc on the page, or Stop landed mid-round
+        // a field mapped elsewhere (the data service) is shown there instead
+        const elsewhere = routePick?.(row);
+        if (elsewhere) { setPickNote(elsewhere); return; }
         const known = scan.rows.some(r => r.key === row.key) || extraRows.some(r => r.key === row.key);
         if (!known) setExtraRows(x => [...x, row]);
         reveal(row.key);

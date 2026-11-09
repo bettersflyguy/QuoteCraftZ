@@ -7,7 +7,7 @@ import { FIELDMAP_STORAGE_KEY, fieldKeyOf, getAllFieldMaps, setAllFieldMaps, typ
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
 import type { ChoicesRead } from "./OptionMapEditor";
-import { DATA_SERVICE_ORIGINS, DataServiceMapEditor } from "./DataServiceMapEditor";
+import { DATA_SERVICE_ORIGINS, DataServiceMapEditor, dataServiceFieldOf } from "./DataServiceMapEditor";
 import { send } from "./api";
 import { getOptionMaps, type ColumnOptionMap } from "@/portal/optionMaps";
 
@@ -106,6 +106,8 @@ export function MappingsManager() {
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
+  // a page-fields pick of a data-service field focuses that service row
+  const [dsFocus, setDsFocus] = useState<{ id: string } | null>(null);
   const dsPeek = useMemo(() => dataServicePeekItems(dsMaps, t => t).map(({ key, target, labels }) => ({ key, target, labels })), [dsMaps]);
   const rowOrigins = [
     ...(currentOrigin ? [currentOrigin] : []),
@@ -231,6 +233,7 @@ export function MappingsManager() {
             onRead: labels => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: dsTabId, labels }),
             onUnmatched: row => setInjected({ ...row })
           }}
+          focusId={dsFocus}
         />
       )}
       {scan && (
@@ -252,9 +255,16 @@ export function MappingsManager() {
           hideAuto={dsMode}
           inject={dsMode ? injected : null}
           extraPeek={dsMode ? dsPeek : undefined}
-          onPick={scanTabId === null || dsMode
+          onPick={scanTabId === null
             ? undefined
             : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: scanTabId })}
+          // a field the data service returns jumps to its data-service row
+          routePick={dsMode ? row => {
+            const hit = dataServiceFieldOf(row);
+            if (!hit) return null;
+            setDsFocus({ id: hit.id });
+            return `${row.fieldLabel || row.label} comes from the data service: ${hit.section === "Insured" ? "Insured (account)" : hit.section} > ${hit.label}.`;
+          } : undefined}
           onPickCancel={scanTabId === null
             ? undefined
             : () => send<null>({ type: "panel/portalPickCancel", tabId: scanTabId })}
