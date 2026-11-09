@@ -302,10 +302,12 @@ describe("buildSupplementalNote", () => {
     expect(note.body).not.toContain("203 Wall St");
     // supplemental facts are in, grouped
     expect(note.count).toBe(3);
-    expect(note.body).toContain("Payment");
-    expect(note.body).toContain("  Payment Plan: 6 Pay TMPP");
-    expect(note.body).toContain("  Employment Status: Employed");
-    expect(note.body).toContain("  Bodily Injury Liability (BI): $30,000/$60,000");
+    // ONE rich-text note: a table per section, every field in it
+    expect(note.body).toContain("<h3>Payment</h3>");
+    expect(note.body).toContain("<tr><td>Payment Plan</td><td>6 Pay TMPP</td></tr>");
+    expect(note.body).toContain("<tr><td>Employment Status</td><td>Employed</td></tr>");
+    expect(note.body).toContain("<tr><td>Bodily Injury Liability (BI)</td><td>$30,000/$60,000</td></tr>");
+    expect(note.body.match(/<h2>/g)).toHaveLength(1);
     expect(note.subject).toBe("QuoteCraftZ: captured application data (sales.geico.com)");
     // notes written by earlier versions are still found (and renamed) on re-load
     expect(note.legacyMatch).toEqual({ prefix: "Quote Connector", suffix: " captured application data (sales.geico.com)" });

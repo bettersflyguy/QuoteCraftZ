@@ -392,17 +392,9 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
   // "Related contacts" rows are CRM-sourced display context - never written back
   const extra = app.fields.filter((f, i) => !claimed.has(i) && f.section !== "Related contacts");
   if (!extra.length) return null;
-  const bySection = new Map<string, string[]>();
-  for (const f of extra) {
-    const section = f.section || "Details";
-    const line = `  ${f.group ? `${f.group}: ` : ""}${f.label}: ${usDate(f.value)}`;
-    (bySection.get(section) ?? bySection.set(section, []).get(section)!).push(line);
-  }
-  const body = [
-    `Captured ${new Date(app.capturedAt).toLocaleString()} from ${app.source.system}`,
-    "",
-    ...[...bySection.entries()].flatMap(([section, lines]) => [section, ...lines, ""])
-  ].join("\n").slice(0, 90000);
+  // ONE rich-text note, laid out like the timeline note: a Field/Value
+  // table per section, list rows as a table with their real columns
+  const body = noteHtml("Captured Application Data", app, extra.map(f => ({ ...f, section: f.section || "Details" }))).slice(0, 90000);
   return {
     subject: `QuoteCraftZ: captured application data (${app.source.system})`,
     // earlier versions wrote "Quote Connector: ..." and "Quote Connector <dash> ..."
@@ -426,12 +418,23 @@ export interface TimelineNote { subject: string; html: string; count: number }
 export function buildTimelineNote(app: CapturedApplication, record: NoteRecord = "account"): TimelineNote | null {
   const tagged = app.fields.filter(f => noteRecordOf(f.mapped) === record && clean(f.value));
   if (!tagged.length) return null;
+  return {
+    subject: `QuoteCraftZ: Non Mapped Timeline Entries (${app.source.system})`,
+    html: noteHtml("Non Mapped Timeline Entries", app, tagged).slice(0, 100000),
+    count: tagged.length
+  };
+}
+
+/** One rich-text note body: a heading, when and where it was captured, then
+ * per section a Field/Value table for single values and a table with the
+ * list's real columns for its rows. Every field in ONE note. */
+function noteHtml(title: string, app: CapturedApplication, fields: CapturedApplication["fields"]): string {
   const parts: string[] = [
-    "<h2>Non Mapped Timeline Entries</h2>",
+    `<h2>${html(title)}</h2>`,
     `<p><b>Captured ${html(new Date(app.capturedAt).toLocaleString())} from ${html(app.source.system)}</b></p>`
   ];
-  for (const section of [...new Set(tagged.map(f => f.section))]) {
-    const inSection = tagged.filter(f => f.section === section);
+  for (const section of [...new Set(fields.map(f => f.section))]) {
+    const inSection = fields.filter(f => f.section === section);
     parts.push(`<h3>${html(section || "Notes")}</h3>`);
     const singles = inSection.filter(f => !isGridRow(f));
     if (singles.length) {
@@ -442,17 +445,13 @@ export function buildTimelineNote(app: CapturedApplication, record: NoteRecord =
     if (rows.length) {
       const columns = [...new Set(rows.map(f => f.label))];
       const byRow = new Map<string, Record<string, string>>();
-      for (const f of rows) byRow.set(f.group, { ...(byRow.get(f.group) ?? {}), [f.label]: usDate(f.value) });
+      for (const f of rows) byRow.set(f.group ?? "", { ...(byRow.get(f.group ?? "") ?? {}), [f.label]: usDate(f.value) });
       parts.push(TABLE + "<tr>" + columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
         [...byRow.values()].map(r => "<tr>" + columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
         "</table>");
     }
   }
-  return {
-    subject: `QuoteCraftZ: Non Mapped Timeline Entries (${app.source.system})`,
-    html: parts.join("").slice(0, 100000),
-    count: tagged.length
-  };
+  return parts.join("");
 }
 
 /** Default for the Insured type radio. Commercial only when the capture
