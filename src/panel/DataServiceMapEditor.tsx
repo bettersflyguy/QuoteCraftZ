@@ -50,6 +50,14 @@ export interface DataServicePageHooks {
   onUnmatched?: (row: PortalScanRow) => void;
 }
 
+/** What a list section's rows are. */
+const SECTION_NOTE: Record<string, string> = {
+  "Co-applicants": " (one row per person)",
+  Phones: " (one row per phone after the primary)",
+  Emails: " (one row per email after the primary)",
+  Addresses: " (one row per address, primary first)"
+};
+
 /** Every field a data service returns, each routed to a CRM target, with
  * one-for-one choice mappings for CRM choice columns. Saves as you go. */
 export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: string; page?: DataServicePageHooks }) {
@@ -176,14 +184,14 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
-      {(["Applicant", "Co-applicants", "Addresses"] as const).map(section => {
+      {(["Applicant", "Co-applicants", "Phones", "Emails", "Addresses"] as const).map(section => {
         // a field picked on the page always shows, whatever the filter
         const listed = EZLYNX_FIELDS.filter(f => f.section === section &&
           (show === "all" || f.id === focus || (show === "mapped" ? Boolean(targets[f.id]) : !targets[f.id])));
         if (!listed.length) return null;
         return (
         <div key={section}>
-          <Text size={200} className={styles.section} block>{section}{section === "Co-applicants" ? " (one row per person)" : section === "Addresses" ? " (one row per address, primary first)" : ""}</Text>
+          <Text size={200} className={styles.section} block>{section}{SECTION_NOTE[section]}</Text>
           {listed.map(f => {
             const target = targets[f.id] ?? "";
             // co-applicant list targets resolve per row; the CRM column is the same

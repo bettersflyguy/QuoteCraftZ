@@ -57,7 +57,7 @@ describe("EZLynx data-service source", () => {
       "coApplicant.relationship": "note",
       "applicant.city": ""
     });
-    expect(fields.find(f => f.label === "Phone")?.mapped).toBe("crm:account.telephone2");
+    expect(fields.find(f => f.label === "Primary phone")?.mapped).toBe("crm:account.telephone2");
     expect(fields.find(f => f.label === "Relationship" && f.group === "Row 1")?.mapped).toBe("note");
     expect(fields.find(f => f.label === "City")?.mapped).toBeUndefined();
     expect(effectiveTargets({ "applicant.city": "" })["applicant.city"]).toBe("");

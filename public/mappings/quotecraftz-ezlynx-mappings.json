@@ -137,21 +137,13 @@
       "address.postalCodeSuffix": "",
       "address.yearsAtAddress": "",
       "address.monthsAtAddress": "",
-      "applicant.homePhone": "crm:primarycontact.telephone2",
-      "applicant.workPhone": "crm:primarycontact.telephone1",
-      "applicant.fax": "crm:primarycontact.fax",
-      "applicant.morePhones": "note:contact",
-      "applicant.email2": "crm:primarycontact.emailaddress2",
-      "applicant.email3": "crm:primarycontact.emailaddress3",
-      "applicant.moreEmails": "note:contact",
-      "coApplicant.homePhone": "crm:contacts[].telephone2",
-      "coApplicant.workPhone": "crm:contacts[].telephone1",
-      "coApplicant.mobile": "crm:contacts[].mobilephone",
-      "coApplicant.fax": "crm:contacts[].fax",
       "coApplicant.morePhones": "",
-      "coApplicant.email2": "crm:contacts[].emailaddress2",
-      "coApplicant.email3": "crm:contacts[].emailaddress3",
-      "coApplicant.moreEmails": ""
+      "coApplicant.moreEmails": "",
+      "phone.type": "note",
+      "phone.number": "note",
+      "phone.extension": "note",
+      "email.type": "note",
+      "email.email": "note"
     }
   },
   "options": {

@@ -3,6 +3,9 @@ export interface CapturedAddress {
   county: string; postalCode: string; postalCodeSuffix: string; yearsAtAddress: string; monthsAtAddress: string;
 }
 
+export interface CapturedPhone { type: string; number: string; extension: string }
+export interface CapturedEmail { type: string; email: string }
+
 export interface CapturedApplicant {
   ezlynxApplicantId: number;
   firstName: string;
@@ -23,6 +26,10 @@ export interface CapturedApplicant {
   /** Every address the source holds, the primary first (one CRM address row
    * each: row 1 = Address 1). */
   addresses?: CapturedAddress[];
+  /** Phones / emails after the primary (phones[0], emails[0]), in source
+   * order: one row each, routed as the agent chooses. */
+  morePhones?: CapturedPhone[];
+  moreEmails?: CapturedEmail[];
   coApplicants: {
     firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null;
     dateOfBirth: string | null; dlNumber: string | null; dlState: string | null;

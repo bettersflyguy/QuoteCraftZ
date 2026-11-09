@@ -11,7 +11,7 @@ export interface DataServiceField {
   label: string;
   /** "Applicant" fields are one record; "Co-applicants" repeat per person;
    * "Addresses" repeat per address (primary first). */
-  section: "Applicant" | "Co-applicants" | "Addresses";
+  section: "Applicant" | "Co-applicants" | "Phones" | "Emails" | "Addresses";
   defaultTarget: string;
   /** How the source's own screens label it (canonical), so the page peek
    * knows which on-screen fields the data service already covers.
@@ -57,18 +57,11 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "applicant.isDeceased", label: "Deceased", section: "Applicant", defaultTarget: "", pageLabels: ["deceased"] },
   { id: "applicant.ratingState", label: "Rating state", section: "Applicant", defaultTarget: "", pageLabels: ["rating state"] },
   { id: "applicant.isCommercial", label: "Commercial applicant", section: "Applicant", defaultTarget: "" },
-  { id: "applicant.email", label: "Email", section: "Applicant", defaultTarget: "contact.email", pageLabels: ["email", "email address"] },
-  { id: "applicant.phone", label: "Phone", section: "Applicant", defaultTarget: "contact.phone", pageLabels: ["phone number", "phone"] },
+  // the PRIMARY (first) email and phone feed the insured; every other one
+  // is a row of the Phones / Emails lists below
+  { id: "applicant.email", label: "Primary email", section: "Applicant", defaultTarget: "contact.email", pageLabels: ["email", "email address", "email type"] },
+  { id: "applicant.phone", label: "Primary phone", section: "Applicant", defaultTarget: "contact.phone", pageLabels: ["phone number", "phone", "phone type", "extension"] },
   { id: "applicant.mobile", label: "Mobile phone", section: "Applicant", defaultTarget: "crm:primarycontact.mobilephone" },
-  // every phone and email: CRM holds one per type (and three emails), so
-  // each type has its own column and the rest go to the contact's timeline
-  { id: "applicant.homePhone", label: "Home phone", section: "Applicant", defaultTarget: "crm:primarycontact.telephone2", pageLabels: ["phone type"] },
-  { id: "applicant.workPhone", label: "Work phone", section: "Applicant", defaultTarget: "crm:primarycontact.telephone1" },
-  { id: "applicant.fax", label: "Fax", section: "Applicant", defaultTarget: "crm:primarycontact.fax" },
-  { id: "applicant.morePhones", label: "More phones", section: "Applicant", defaultTarget: "note:contact" },
-  { id: "applicant.email2", label: "Email 2", section: "Applicant", defaultTarget: "crm:primarycontact.emailaddress2", pageLabels: ["email type"] },
-  { id: "applicant.email3", label: "Email 3", section: "Applicant", defaultTarget: "crm:primarycontact.emailaddress3" },
-  { id: "applicant.moreEmails", label: "More emails", section: "Applicant", defaultTarget: "note:contact" },
   { id: "applicant.street", label: "Street address", section: "Applicant", defaultTarget: "address.street1", pageLabels: ["primary address>address"] },
   { id: "applicant.unit", label: "Unit", section: "Applicant", defaultTarget: "", pageLabels: ["primary address>unit"] },
   { id: "applicant.address2", label: "Address line 2", section: "Applicant", defaultTarget: "address.street2", pageLabels: ["primary address>address line 2"] },
@@ -95,14 +88,16 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "coApplicant.driversLicenseState", label: "License state", section: "Co-applicants", defaultTarget: "crm:contacts[].iacrm_dlstate" },
   { id: "coApplicant.email", label: "Email", section: "Co-applicants", defaultTarget: "contacts[].email" },
   { id: "coApplicant.phone", label: "Phone", section: "Co-applicants", defaultTarget: "contacts[].phone" },
-  { id: "coApplicant.homePhone", label: "Home phone", section: "Co-applicants", defaultTarget: "crm:contacts[].telephone2" },
-  { id: "coApplicant.workPhone", label: "Work phone", section: "Co-applicants", defaultTarget: "crm:contacts[].telephone1" },
-  { id: "coApplicant.mobile", label: "Mobile phone", section: "Co-applicants", defaultTarget: "crm:contacts[].mobilephone" },
-  { id: "coApplicant.fax", label: "Fax", section: "Co-applicants", defaultTarget: "crm:contacts[].fax" },
-  { id: "coApplicant.morePhones", label: "More phones", section: "Co-applicants", defaultTarget: "" },
-  { id: "coApplicant.email2", label: "Email 2", section: "Co-applicants", defaultTarget: "crm:contacts[].emailaddress2" },
-  { id: "coApplicant.email3", label: "Email 3", section: "Co-applicants", defaultTarget: "crm:contacts[].emailaddress3" },
-  { id: "coApplicant.moreEmails", label: "More emails", section: "Co-applicants", defaultTarget: "" },
+  // a co-applicant's phones / emails after the first, as one line each
+  { id: "coApplicant.morePhones", label: "Additional phones", section: "Co-applicants", defaultTarget: "" },
+  { id: "coApplicant.moreEmails", label: "Additional emails", section: "Co-applicants", defaultTarget: "" },
+  // every phone / email after the primary: one row each, to the note the
+  // agent picks (the primary already fills the insured's phone and email)
+  { id: "phone.type", label: "Phone type", section: "Phones", defaultTarget: "note" },
+  { id: "phone.number", label: "Phone number", section: "Phones", defaultTarget: "note" },
+  { id: "phone.extension", label: "Extension", section: "Phones", defaultTarget: "note" },
+  { id: "email.type", label: "Email type", section: "Emails", defaultTarget: "note" },
+  { id: "email.email", label: "Email address", section: "Emails", defaultTarget: "note" },
   // every address the insured has: row N = CRM address N (1 = Address 1)
   { id: "address.type", label: "Address type", section: "Addresses", defaultTarget: "crm:addresses[].name", pageLabels: ["*address>address type"] },
   { id: "address.street", label: "Street address", section: "Addresses", defaultTarget: "crm:addresses[].line1", pageLabels: ["*address>address"] },
@@ -206,6 +201,16 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
       out.push({ label: f.label, value, section: "Co-applicants", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
     }
   });
+  // additional phones / emails: rows of their own list (never a CRM slot
+  // by default - the primary already fills the insured)
+  const list = <T extends object>(section: "Phones" | "Emails", prefix: string, rows: T[]) => rows.slice(0, 40).forEach((r, i) => {
+    for (const f of EZLYNX_FIELDS.filter(x => x.section === section)) {
+      const value = String((r as Record<string, unknown>)[f.id.slice(prefix.length)] ?? "").trim();
+      if (value) out.push({ label: f.label, value, section, group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, null) });
+    }
+  });
+  list("Phones", "phone.", a.morePhones ?? []);
+  list("Emails", "email.", a.moreEmails ?? []);
   (a.addresses ?? []).slice(0, 40).forEach((ad, i) => {
     for (const f of EZLYNX_FIELDS.filter(x => x.section === "Addresses")) {
       const value = (ad[f.id.slice("address.".length) as keyof typeof ad] ?? "").trim();
