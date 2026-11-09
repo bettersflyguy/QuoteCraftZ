@@ -410,6 +410,25 @@
     if (!h || !title) return title || h;
     return labelKey(title).indexOf(labelKey(h)) === 0 ? title : h + ": " + title;
   }
+  /* the line of business a page is headed by ("Auto", "Home", "Dwelling
+   * Fire"...), "" when the heading isn't one */
+  var LINE = /\b(auto|home|homeowners?|dwelling|fire|renters?|condo|umbrella|motorcycle|boat|watercraft|yacht|rv|motorhome|flood|earthquake|landlord|mobile home|manufactured|farm|ranch|commercial|business|bop|liability|workers|inland marine|life|health)\b/i;
+  function lineOfPage() {
+    const h = lobHeading();
+    return h && LINE.test(h) && h.length <= 30 ? h : "";
+  }
+  /* WHAT a single value on a line's page describes: the prior policy, the
+   * new policy being quoted, or just the step - "Prior Auto Policy" /
+   * "New Auto Policy" are the entities the values will one day map to */
+  function policyTable(label) {
+    const line = lineOfPage();
+    if (!line) return "";
+    const l = String(label || "");
+    if (/\bprior\b|continuous coverage|current (carrier|insurer|policy)/i.test(l)) return "Prior " + line + " Policy";
+    if (/\bnew policy\b|quote as package|underwriting reports|effective date|policy term/i.test(l)) return "New " + line + " Policy";
+    return "";
+  }
+  function sectionFor(label) { return policyTable(label) || stepTitle(); }
   /* "Auto: Policy Info" - only when the page names its step in the tab
    * title ("Name - Step") or has a heading; "" otherwise */
   function stepTitle() {
@@ -599,7 +618,7 @@
     /* a single control on the related-contact note: the first related contact */
     noteControls.forEach((n) => {
       n.field.mapped = noteRow(n.field.mapped, 0);
-      if (!n.field.group && !sectionOf(n.control).text) n.field.section = stepTitle() || n.field.section;
+      if (!n.field.group && !sectionOf(n.control).text) n.field.section = sectionFor(n.field.label) || n.field.section;
     });
 
     Array.from(root.querySelectorAll("fieldset"))
@@ -899,7 +918,7 @@
     const multi = els.length > 1;
     const own = sectionOf(els[0]).text;
     if (NOTE_PATH.test(path)) {
-      const section = multi ? stepTitle() : own || stepTitle() || "Notes";
+      const section = multi ? stepTitle() : own || sectionFor(label) || "Notes";
       values.forEach((value, i) => { if (value) out.push({ label, value, section, group: multi ? "Row " + (i + 1) : "", source: "taught", mapped: noteRow(path, i) }); });
       return;
     }
@@ -913,7 +932,7 @@
       return;
     }
     if (values[0] && /^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path)) {
-      out.push({ label, value: values[0], section: own || stepTitle(), group: "", source: "taught", mapped: path });
+      out.push({ label, value: values[0], section: own || sectionFor(label), group: "", source: "taught", mapped: path });
     }
   }
 
@@ -972,7 +991,7 @@
         const label = clean(t.label) || fieldLabelOf(first) || noteLabel(first) || "Note";
         const table = multi && first ? first.closest("table") : null;
         const section = table ? gridTitle(table, 0)
-          : multi ? withHeading(repeatTitle(rows.map((r) => r.el)) || pageTitle()) : stepTitle() || "Notes";
+          : multi ? withHeading(repeatTitle(rows.map((r) => r.el)) || pageTitle()) : sectionFor(label) || "Notes";
         rows.forEach(function (r) {
           const value = row(r.el);
           if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: noteRow(path, r.n - 1) });

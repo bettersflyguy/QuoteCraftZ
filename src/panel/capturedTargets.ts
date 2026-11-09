@@ -11,7 +11,7 @@ export function capturedTargets(fields: { label: string; section?: string }[] | 
     if (canon && canon.length <= 100 && !seen.has(canon)) seen.set(canon, f.label);
     // a page step's value by its policy type and step ("Auto: Policy Info >
     // Prior Carrier"), so a form takes Auto's, never Home's
-    if (f.section && f.section.includes(":")) {
+    if (f.section && (f.section.includes(":") || /^(prior|new) .+ policy$/i.test(f.section))) {
       const scoped = canonOf(`${f.section} ${f.label}`);
       if (scoped.length <= 100 && !seen.has(scoped)) seen.set(scoped, `${f.section} > ${f.label}`);
     }

@@ -154,26 +154,27 @@ describe("a form takes a step's value by its policy type", () => {
   it("offers Auto's and Home's prior carrier as separate captured values", async () => {
     const { capturedTargets } = await import("@/panel/capturedTargets");
     const targets = capturedTargets([
-      { label: "Prior Carrier", section: "Auto: Policy Info" },
-      { label: "Prior Carrier", section: "Home: Policy Info" }
+      { label: "Prior Carrier", section: "Prior Auto Policy" },
+      { label: "Prior Carrier", section: "Prior Home Policy" }
     ]);
-    expect(targets.map(t => t.value)).toEqual(["label:prior carrier", "label:auto policy info prior carrier", "label:home policy info prior carrier"]);
-    expect(targets[1]!.label).toBe("Auto: Policy Info > Prior Carrier");
+    expect(targets.map(t => t.value)).toEqual(["label:prior carrier", "label:prior auto policy prior carrier", "label:prior home policy prior carrier"]);
+    expect(targets[1]!.label).toBe("Prior Auto Policy > Prior Carrier");
   });
 });
 describe("each line's opportunity gets its own tables", () => {
   it("Auto's prior policy never lands on the Home opportunity", () => {
     const f = (section: string, label: string, value: string) => ({ label, value, section, group: "", source: "taught" as const, mapped: "note:opportunity" });
     const app = { capturedAt: 0, source: { system: "EZLynx", title: "" }, normalized: {}, fields: [
-      f("Auto: Policy Info", "Prior Policy Expiration Date", "12/01/2019"),
-      f("Home: Policy Info", "Prior Policy Expiration Date", "05/18/2026"),
+      f("Prior Auto Policy", "Prior Policy Expiration Date", "12/01/2019"),
+      f("Prior Home Policy", "Prior Policy Expiration Date", "05/18/2026"),
       f("Coverage", "Notes", "general")
     ] } as unknown as CapturedApplication;
     const auto = buildTimelineNote(app, "opportunity", "Auto")!.html;
-    expect(auto).toContain("Auto: Policy Info");
+    expect(auto).toContain("Prior Auto Policy");
     expect(auto).not.toContain("05/18/2026");
     expect(auto).toContain("general");
     expect(buildTimelineNote(app, "opportunity", "Home")!.html).not.toContain("12-01-2019");
-    expect(otherLine("Home: Policy Info", "Homeowners")).toBe(false);
+    expect(otherLine("Prior Home Policy", "Homeowners")).toBe(false);
+    expect(otherLine("Auto: Vehicles", "Home")).toBe(true);
   });
 });

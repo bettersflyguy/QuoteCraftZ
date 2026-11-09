@@ -490,13 +490,23 @@ export function noteOutcomeText(outcome: "created" | "updated" | "unchanged"): s
  * single values as a Field/Value table, grid columns as a table under the
  * grid's title with its real headers. Stable subject, so a re-load updates
  * the same note. */
-/** A section that belongs to ANOTHER line of business ("Home: Policy Info"
- * when the record is the Auto opportunity). Sections without a line prefix
- * belong to every record. */
+/** The line of business a section names: "Prior Home Policy", "New Auto
+ * Policy", "Auto: Vehicles"; "" when it names none. */
+export function lineOfSection(section: string | undefined): string {
+  const s = section ?? "";
+  const policy = /^(?:prior|new) (.{1,30}) policy$/i.exec(s);
+  if (policy) return policy[1]!;
+  const step = /^([^:]{1,40}):\s/.exec(s);
+  return step ? step[1]! : "";
+}
+
+/** A section that belongs to ANOTHER line of business ("Prior Home Policy"
+ * when the record is the Auto opportunity). Sections without a line belong
+ * to every record. */
 export function otherLine(section: string | undefined, lob: string): boolean {
-  const m = /^([^:]{1,40}):\s/.exec(section ?? "");
-  if (!m || !lob) return false;
-  const a = canonical(m[1]), b = canonical(lob);
+  const line = lineOfSection(section);
+  if (!line || !lob) return false;
+  const a = canonical(line), b = canonical(lob);
   return !(a && b && (a === b || a.includes(b) || b.includes(a)));
 }
 

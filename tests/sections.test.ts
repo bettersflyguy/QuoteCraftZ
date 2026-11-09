@@ -113,18 +113,32 @@ describe("section-scoped field keys", () => {
     expect(row!.label).toBe("Applicant Info: Address State");
   });
 
-  it("a rating step's values are their own table per policy type", () => {
+  it("a rating step's values are the prior / new policy of that line", () => {
     document.title = "Tracy Dittrich - Policy Info";
-    document.body.innerHTML = `<header><h1>Auto</h1></header><main>${field("Prior Carrier", "pc", "priorCarrier", "Travelers")}${field("Prior Policy Expiration Date", "px", "priorExp", "12/01/2019")}</main>`;
+    document.body.innerHTML = `<header><h1>Auto</h1></header><main>${field("Prior Carrier", "pc", "priorCarrier", "Travelers")}${field("Prior Policy Expiration Date", "px", "priorExp", "12/01/2019")}${field("Years with Continuous Coverage", "yc", "years", "More than 15")}${field("New Policy Term", "nt", "term", "12 Month")}${field("Paperless", "pl", "paperless", "Yes")}</main>`;
     const r = g.__bettersPortalIngest!([
       { byLabel: "prior carrier", page: "policy info", label: "", path: "coverage.currentCarrier" },
-      { byLabel: "prior policy expiration date", page: "policy info", label: "", path: "note:opportunity" }
+      { byLabel: "prior policy expiration date", page: "policy info", label: "", path: "note:opportunity" },
+      { byLabel: "years with continuous coverage", page: "policy info", label: "", path: "note:opportunity" },
+      { byLabel: "new policy term", page: "policy info", label: "", path: "note:opportunity" },
+      { byLabel: "paperless", page: "policy info", label: "", path: "note:opportunity" }
     ], {}) as { fields: { label: string; value: string; section: string; mapped?: string }[] };
-    const taught = r.fields.filter(f => f.mapped).map(f => [f.section, f.label, f.value]);
+    const taught = r.fields.filter(f => f.mapped).map(f => [f.section, f.label]);
     expect(taught).toEqual([
-      ["Auto: Policy Info", "Prior Carrier", "Travelers"],
-      ["Auto: Policy Info", "Prior Policy Expiration Date", "12/01/2019"]
+      ["Prior Auto Policy", "Prior Carrier"],
+      ["Prior Auto Policy", "Prior Policy Expiration Date"],
+      ["Prior Auto Policy", "Years with Continuous Coverage"],
+      ["New Auto Policy", "New Policy Term"],
+      ["Auto: Policy Info", "Paperless"]
     ]);
+    document.title = "";
+  });
+
+  it("a heading that is not a line of business never names a policy", () => {
+    document.title = "Quote - Applicant";
+    document.body.innerHTML = `<header><h1>Get a Quote</h1></header><main>${field("Prior Carrier", "pc2", "pc", "Travelers")}</main>`;
+    const r = g.__bettersPortalIngest!([{ byLabel: "prior carrier", page: "", label: "", path: "note:opportunity" }], {}) as { fields: { section: string; mapped?: string }[] };
+    expect(r.fields.find(f => f.mapped)!.section).toBe("Get a Quote: Applicant");
     document.title = "";
   });
 
