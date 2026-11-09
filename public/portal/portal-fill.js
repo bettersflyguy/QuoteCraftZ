@@ -787,6 +787,7 @@
    * (Kendo dropdowns, styled date pickers) the user clicks a wrapper span
    * while the real control sits CSS-hidden inside it, so the smallest
    * wrapper on the click path holding a couple of controls resolves too. */
+  var FIELD_BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container";
   function pickTarget(event) {
     var path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
     var i;
@@ -806,6 +807,11 @@
         function (c) { return pickable(c) && visible(c); }
       );
       if (inner.length >= 1 && inner.length <= 3) return { control: inner[0], box: node };
+      /* never climb out of the labelled field box that was clicked: a styled
+       * dropdown (mat-select) has no input of its own, and the next one up
+       * belongs to a NEIGHBOURING field (EZLynx "Address State" sits beside
+       * the ZIP code). It is picked by its own label below instead. */
+      if (node.matches && node.matches(FIELD_BOX)) break;
     }
     /* no control anywhere near - read-only text (AMS details pages):
      * teachable as a capture source */

@@ -99,6 +99,20 @@ describe("section-scoped field keys", () => {
     g.__bettersPortalPeekAll!(null);
   });
 
+  it("clicking a styled dropdown picks that dropdown, never the input in the next box", async () => {
+    // EZLynx: "Address State" (mat-select, no input) beside "Postal Code"
+    document.body.innerHTML = `<main>${panel("app", "Applicant Info", `<div class="row">
+      <div class="wrap"><mat-form-field class="mat-mdc-form-field"><label>*Address State</label>
+        <mat-select role="combobox" name="ratingState"><div class="trigger"><span id="st">MN</span></div></mat-select></mat-form-field></div>
+      <div class="wrap">${field("Postal Code", "zip", "postalCode", "55316")}</div></div>`)}</main>`;
+    await new Promise(r => setTimeout(r, 60));
+    const pending = g.__bettersPortalPick!(5000) as Promise<{ key: string; label: string } | null>;
+    document.getElementById("st")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
+    const row = await pending;
+    expect(row!.key).toBe("field:applicant info>address state");
+    expect(row!.label).toBe("Applicant Info: Address State");
+  });
+
   it("numbered repeats are not sections", () => {
     document.body.innerHTML = `<main>${panel("v", "Vehicles",
       panel("v1", "Vehicle 1", field("VIN", "a", "vin", "X1")) + panel("v2", "Vehicle 2", field("VIN", "b", "vin", "X2")))}</main>`;

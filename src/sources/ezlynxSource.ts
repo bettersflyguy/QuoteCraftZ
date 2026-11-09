@@ -66,7 +66,7 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "applicant.preferredContactMethod", label: "Preferred contact method", section: "Applicant", defaultTarget: "crm:primarycontact.preferredcontactmethodcode", pageLabels: APP("preferred contact method", "contact method") },
   { id: "applicant.isVip", label: "VIP", section: "Applicant", defaultTarget: "", pageLabels: APP("vip") },
   { id: "applicant.isDeceased", label: "Deceased", section: "Applicant", defaultTarget: "", pageLabels: APP("deceased") },
-  { id: "applicant.ratingState", label: "Rating state", section: "Applicant", defaultTarget: "", pageLabels: APP("rating state") },
+  { id: "applicant.ratingState", label: "Rating state", section: "Applicant", defaultTarget: "", pageLabels: APP("rating state", "address state") },
   { id: "applicant.isCommercial", label: "Commercial applicant", section: "Applicant", defaultTarget: "" },
   // the PRIMARY (first) email and phone feed the insured; every other one
   // is a row of the Phones / Emails lists below
