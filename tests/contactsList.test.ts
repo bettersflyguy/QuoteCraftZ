@@ -6,7 +6,7 @@ import { ensureInsuredData, type AccountEnrichmentState, type EnrichApi } from "
 import { effectiveTargets, ezlynxFields, ezlynxSecure } from "@/sources/ezlynxSource";
 import { normalizeApplicant } from "@/ezlynx/normalize";
 import { normalize } from "@/boldpenguin/normalize";
-import { contactAddressOf, primarySlots } from "@/crm/appCommit";
+import { buildTimelineNote, contactAddressOf, otherLine, primarySlots } from "@/crm/appCommit";
 import { captureSheets } from "@/panel/captureSheets";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import type { CapturedApplicant } from "@/types";
@@ -148,5 +148,32 @@ describe("the account's address is the primary contact's", () => {
     const app = { fields, normalized: normalize(fields), capturedAt: 0, source: { system: "EZLynx", title: "" } } as unknown as CapturedApplication;
     expect(contactAddressOf(app, 2)).toEqual({ street: "9 Lake Rd", city: "Duluth", state: "MN", postalCode: "55802" });
     expect(contactAddressOf(app, 3)).toBeNull();
+  });
+});
+describe("a form takes a step's value by its policy type", () => {
+  it("offers Auto's and Home's prior carrier as separate captured values", async () => {
+    const { capturedTargets } = await import("@/panel/capturedTargets");
+    const targets = capturedTargets([
+      { label: "Prior Carrier", section: "Auto: Policy Info" },
+      { label: "Prior Carrier", section: "Home: Policy Info" }
+    ]);
+    expect(targets.map(t => t.value)).toEqual(["label:prior carrier", "label:auto policy info prior carrier", "label:home policy info prior carrier"]);
+    expect(targets[1]!.label).toBe("Auto: Policy Info > Prior Carrier");
+  });
+});
+describe("each line's opportunity gets its own tables", () => {
+  it("Auto's prior policy never lands on the Home opportunity", () => {
+    const f = (section: string, label: string, value: string) => ({ label, value, section, group: "", source: "taught" as const, mapped: "note:opportunity" });
+    const app = { capturedAt: 0, source: { system: "EZLynx", title: "" }, normalized: {}, fields: [
+      f("Auto: Policy Info", "Prior Policy Expiration Date", "12/01/2019"),
+      f("Home: Policy Info", "Prior Policy Expiration Date", "05/18/2026"),
+      f("Coverage", "Notes", "general")
+    ] } as unknown as CapturedApplication;
+    const auto = buildTimelineNote(app, "opportunity", "Auto")!.html;
+    expect(auto).toContain("Auto: Policy Info");
+    expect(auto).not.toContain("05/18/2026");
+    expect(auto).toContain("general");
+    expect(buildTimelineNote(app, "opportunity", "Home")!.html).not.toContain("12-01-2019");
+    expect(otherLine("Home: Policy Info", "Homeowners")).toBe(false);
   });
 });

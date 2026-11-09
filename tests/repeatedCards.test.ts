@@ -119,7 +119,8 @@ describe("repeated form cards", () => {
     const notes = res.fields.filter(f => f.mapped === "note");
     const table = new Map<string, Record<string, string>>();
     for (const f of notes) {
-      expect(f.section).toBe("Vehicles");
+      // the page is headed by its line of business: Auto's vehicles, not Home's
+      expect(f.section).toBe("Auto: Vehicles");
       table.set(f.group, { ...(table.get(f.group) ?? {}), [f.label]: f.value });
     }
     expect(Object.fromEntries(table)).toEqual({

@@ -113,6 +113,21 @@ describe("section-scoped field keys", () => {
     expect(row!.label).toBe("Applicant Info: Address State");
   });
 
+  it("a rating step's values are their own table per policy type", () => {
+    document.title = "Tracy Dittrich - Policy Info";
+    document.body.innerHTML = `<header><h1>Auto</h1></header><main>${field("Prior Carrier", "pc", "priorCarrier", "Travelers")}${field("Prior Policy Expiration Date", "px", "priorExp", "12/01/2019")}</main>`;
+    const r = g.__bettersPortalIngest!([
+      { byLabel: "prior carrier", page: "policy info", label: "", path: "coverage.currentCarrier" },
+      { byLabel: "prior policy expiration date", page: "policy info", label: "", path: "note:opportunity" }
+    ], {}) as { fields: { label: string; value: string; section: string; mapped?: string }[] };
+    const taught = r.fields.filter(f => f.mapped).map(f => [f.section, f.label, f.value]);
+    expect(taught).toEqual([
+      ["Auto: Policy Info", "Prior Carrier", "Travelers"],
+      ["Auto: Policy Info", "Prior Policy Expiration Date", "12/01/2019"]
+    ]);
+    document.title = "";
+  });
+
   it("numbered repeats are not sections", () => {
     document.body.innerHTML = `<main>${panel("v", "Vehicles",
       panel("v1", "Vehicle 1", field("VIN", "a", "vin", "X1")) + panel("v2", "Vehicle 2", field("VIN", "b", "vin", "X2")))}</main>`;

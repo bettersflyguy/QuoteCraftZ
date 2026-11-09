@@ -246,11 +246,14 @@
     if (!near || !near.key || /\d$/.test(near.key) || (chain.length < 2 && !near.panel)) return { key: "", text: "" };
     return { key: near.key, text: near.text };
   }
-  /* the page's own heading ("Contact" on EZLynx's new-contact form) */
-  function pageHeading() {
+  /* the page's own heading ("Contact" on EZLynx's new-contact form, "Auto"
+   * / "Home" on its rating steps) */
+  function pageHeadingText() {
     const h = typeof document !== "undefined" ? document.querySelector("ez-page-header h1, header h1, h1") : null;
-    return h ? sectionKey(h.textContent).slice(0, 40) : "";
+    const t = h ? String(h.textContent || "").replace(/\s+/g, " ").trim() : "";
+    return t.length <= 40 ? t : "";
   }
+  function pageHeading() { return sectionKey(pageHeadingText()).slice(0, 40); }
   /* everything a scoped label can name for an element: every titled box
    * around it and "#<page heading>" */
   function scopesOf(el) {
@@ -283,5 +286,5 @@
     });
   }
 
-  return { buildCandidates, canonical, matchField, valueVariants, validForField, sectionOf, sectionKey, splitSection, scopesOf, scopeMatches };
+  return { buildCandidates, canonical, matchField, valueVariants, validForField, sectionOf, sectionKey, splitSection, scopesOf, scopeMatches, pageHeadingText };
 });

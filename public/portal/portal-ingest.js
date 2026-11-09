@@ -398,6 +398,26 @@
     const m = globalThis.BettersPortalMapper;
     return m && m.sectionOf ? m.sectionOf(el) : { key: "", text: "" };
   }
+  /* the policy type a step belongs to: EZLynx rating steps are headed by
+   * their line ("Auto", "Home") and titled by the step ("Policy Info"), so
+   * Auto's prior carrier and Home's are separate tables, never one */
+  function lobHeading() {
+    const m = globalThis.BettersPortalMapper;
+    return m && m.pageHeadingText ? m.pageHeadingText() : "";
+  }
+  function withHeading(title) {
+    const h = lobHeading();
+    if (!h || !title) return title || h;
+    return labelKey(title).indexOf(labelKey(h)) === 0 ? title : h + ": " + title;
+  }
+  /* "Auto: Policy Info" - only when the page names its step in the tab
+   * title ("Name - Step") or has a heading; "" otherwise */
+  function stepTitle() {
+    const parts = String(document.title || "").split(" - ");
+    const step = parts.length > 1 ? clean(parts[parts.length - 1]) : "";
+    return step && step.length <= 40 ? withHeading(step) : lobHeading();
+  }
+
   /* "other address>city": only that section's City; plain "city": every
    * one. family: every section of the same kind ("primary address",
    * "other address", "mailing address" all end in "address") - an ARRAY
@@ -567,7 +587,7 @@
     byKey.forEach((group) => {
       if (group.length < 2) return;
       const ordered = inPageOrder(group.map((g) => g.control));
-      const title = repeatTitle(ordered) || pageTitle();
+      const title = withHeading(repeatTitle(ordered) || pageTitle());
       ordered.forEach((control, i) => {
         const g = group.find((x) => x.control === control);
         g.field.group = "Row " + (i + 1);
@@ -577,7 +597,10 @@
       });
     });
     /* a single control on the related-contact note: the first related contact */
-    noteControls.forEach((n) => { n.field.mapped = noteRow(n.field.mapped, 0); });
+    noteControls.forEach((n) => {
+      n.field.mapped = noteRow(n.field.mapped, 0);
+      if (!n.field.group && !sectionOf(n.control).text) n.field.section = stepTitle() || n.field.section;
+    });
 
     Array.from(root.querySelectorAll("fieldset"))
       .filter(isVisible).filter((fieldset) => !fieldset.querySelector("fieldset"))
@@ -876,7 +899,7 @@
     const multi = els.length > 1;
     const own = sectionOf(els[0]).text;
     if (NOTE_PATH.test(path)) {
-      const section = multi ? pageTitle() : own || "Notes";
+      const section = multi ? stepTitle() : own || stepTitle() || "Notes";
       values.forEach((value, i) => { if (value) out.push({ label, value, section, group: multi ? "Row " + (i + 1) : "", source: "taught", mapped: noteRow(path, i) }); });
       return;
     }
@@ -890,7 +913,7 @@
       return;
     }
     if (values[0] && /^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path)) {
-      out.push({ label, value: values[0], section: "", group: "", source: "taught", mapped: path });
+      out.push({ label, value: values[0], section: own || stepTitle(), group: "", source: "taught", mapped: path });
     }
   }
 
@@ -949,7 +972,7 @@
         const label = clean(t.label) || fieldLabelOf(first) || noteLabel(first) || "Note";
         const table = multi && first ? first.closest("table") : null;
         const section = table ? gridTitle(table, 0)
-          : multi ? (repeatTitle(rows.map((r) => r.el)) || pageTitle()) : "Notes";
+          : multi ? withHeading(repeatTitle(rows.map((r) => r.el)) || pageTitle()) : stepTitle() || "Notes";
         rows.forEach(function (r) {
           const value = row(r.el);
           if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: noteRow(path, r.n - 1) });

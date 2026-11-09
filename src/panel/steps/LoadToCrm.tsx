@@ -328,6 +328,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       const policyIds: string[] = [];
       const quoteIds: string[] = [];
       const quoteOppIds: string[] = [];
+      // each line's opportunity, so its notes take only that line's tables
+      const oppLine = new Map<string, string>();
       if (policy.create) {
         for (const pr of policy.rows) {
           if (!pr.number.trim()) continue;
@@ -382,6 +384,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             groups.push({ lob, opportunityId: made.opportunityId, lobId, desiredEffectiveDate: null, created: true });
           }
           quoteOppIds.push(...groups.map(g => g.opportunityId));
+          for (const g of groups) oppLine.set(g.opportunityId, g.lob);
           const written = await send<BatchItemResult[]>({
             type: "panel/writeQuotes",
             accountId, recordName,
@@ -403,13 +406,14 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         { record: "policy", label: "Policy", ids: policyIds }
       ];
       for (const rn of recordNotes) {
-        const tl = buildTimelineNote(app, rn.record);
-        if (!tl) continue;
+        if (!buildTimelineNote(app, rn.record)) continue;
         if (!rn.ids.length) {
           rows.push({ key: `Notes for ${rn.label}: no ${rn.label.toLowerCase()} in this load`, status: 0, error: "skipped", entityId: null });
           continue;
         }
         for (const id of rn.ids) {
+          const tl = buildTimelineNote(app, rn.record, rn.record === "opportunity" ? oppLine.get(id) ?? "" : "");
+          if (!tl) continue;
           try {
             const outcome = await send<"created" | "updated" | "unchanged">({ type: "panel/upsertNote", record: rn.record, id, subject: tl.subject, html: tl.html });
             rows.push({ key: `Notes for ${rn.label}: ${noteOutcomeText(outcome)} (${tl.count} value${tl.count === 1 ? "" : "s"})`, status: 204, error: null, entityId: null });

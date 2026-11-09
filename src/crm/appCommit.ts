@@ -490,8 +490,20 @@ export function noteOutcomeText(outcome: "created" | "updated" | "unchanged"): s
  * single values as a Field/Value table, grid columns as a table under the
  * grid's title with its real headers. Stable subject, so a re-load updates
  * the same note. */
-export function buildTimelineNote(app: CapturedApplication, record: NoteRecord = "account"): TimelineNote | null {
-  const tagged = app.fields.filter(f => noteRecordOf(f.mapped) === record && clean(f.value));
+/** A section that belongs to ANOTHER line of business ("Home: Policy Info"
+ * when the record is the Auto opportunity). Sections without a line prefix
+ * belong to every record. */
+export function otherLine(section: string | undefined, lob: string): boolean {
+  const m = /^([^:]{1,40}):\s/.exec(section ?? "");
+  if (!m || !lob) return false;
+  const a = canonical(m[1]), b = canonical(lob);
+  return !(a && b && (a === b || a.includes(b) || b.includes(a)));
+}
+
+export function buildTimelineNote(app: CapturedApplication, record: NoteRecord = "account", lob = ""): TimelineNote | null {
+  // a line's opportunity takes only its own line's tables (Auto's prior
+  // policy never lands on the Home opportunity)
+  const tagged = app.fields.filter(f => noteRecordOf(f.mapped) === record && clean(f.value) && !otherLine(f.section, lob));
   if (!tagged.length) return null;
   return {
     subject: `QuoteCraftZ: Non Mapped Timeline Entries (${app.source.system})`,

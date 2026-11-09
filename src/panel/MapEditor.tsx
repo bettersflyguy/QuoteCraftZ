@@ -12,6 +12,8 @@ import {
 } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
 import { send } from "./api";
+import { capturedTargets } from "./capturedTargets";
+export { capturedTargets };
 
 type OptionGroup = { group: string; paths: { path: string; label: string }[] };
 
@@ -77,16 +79,6 @@ const useStyles = makeStyles({
  * under that label - this is how 2nd drivers, extra vehicles, garaging
  * addresses and any other repeated record reach a quote form. */
 export interface CapturedTarget { value: string; label: string }
-
-export function capturedTargets(fields: { label: string }[] | undefined): CapturedTarget[] {
-  const seen = new Map<string, string>();
-  for (const f of fields ?? []) {
-    const canon = String(f.label).replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase()
-      .replace(/[_-]+/g, " ").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-    if (canon && canon.length <= 100 && !seen.has(canon)) seen.set(canon, f.label);
-  }
-  return [...seen.entries()].map(([canon, label]) => ({ value: `label:${canon}`, label }));
-}
 
 export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek }: {
   /** Header text (defaults to "Field mapping for <origin>"). */

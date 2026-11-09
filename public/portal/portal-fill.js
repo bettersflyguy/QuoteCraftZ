@@ -336,7 +336,9 @@
       /* label targets can come from an IMPORTED share file: never let one pull
        * identifiers or payment data out of the capture, whatever the file says */
       if (isSensitiveSource(wanted) || PAYMENT_FIELD.test(wanted)) return null;
-      const field = (payloadFields || []).find((f) => mapper.canonical(f.label) === wanted && clean(f.value) && !isSensitiveSource(f.label));
+      /* the label alone, or its section with it ("auto policy info prior carrier") */
+      const field = (payloadFields || []).find((f) => (mapper.canonical(f.label) === wanted || mapper.canonical((f.section || "") + " " + f.label) === wanted) &&
+        clean(f.value) && !isSensitiveSource(f.label));
       return field ? { path, value: clean(field.value) } : null;
     }
     return candidates.find((c) => c.path === path) || null;
