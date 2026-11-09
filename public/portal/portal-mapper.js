@@ -246,5 +246,14 @@
     return at < 0 ? { section: "", label: str } : { section: str.slice(0, at), label: str.slice(at + 1) };
   }
 
-  return { buildCandidates, canonical, matchField, valueVariants, validForField, sectionOf, sectionKey, splitSection };
+  /* a wanted section against a field's: "*address" = any section of that
+   * kind (Primary / Other / Mailing Address), "" = anywhere */
+  function sectionMatches(want, actual) {
+    if (!want) return true;
+    if (want.charAt(0) !== "*") return want === actual;
+    const words = String(actual || "").split(" ");
+    return Boolean(actual) && words[words.length - 1] === want.slice(1);
+  }
+
+  return { buildCandidates, canonical, matchField, valueVariants, validForField, sectionOf, sectionKey, splitSection, sectionMatches };
 });

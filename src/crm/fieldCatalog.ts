@@ -21,7 +21,7 @@ export interface CatalogColumn {
 
 export interface CatalogEntity {
   /** Target key used in mappings: "crm:<key>.<column>". */
-  key: "account" | "primarycontact" | "contacts" | "policies" | "quote" | "opportunity";
+  key: "account" | "primarycontact" | "contacts" | "policies" | "addresses" | "quote" | "opportunity";
   logical: string;
   set: string;
   label: string;
@@ -44,6 +44,10 @@ export const CATALOG_ENTITIES: Omit<CatalogEntity, "columns">[] = [
   { key: "primarycontact", logical: "contact", set: "contacts", label: "Primary contact", array: false },
   { key: "contacts", logical: "contact", set: "contacts", label: "Related contacts (all rows)", array: true },
   { key: "policies", logical: "iacrm_policy", set: "iacrm_policies", label: "Policies (all rows)", array: true },
+  /* Dataverse's own address list (More Addresses): unlimited per insured;
+   * row N is address number N, so rows 1 and 2 ARE the account's Address 1
+   * and Address 2 (Dataverse keeps them in sync) and 3+ are the rest */
+  { key: "addresses", logical: "customeraddress", set: "customeraddresses", label: "Addresses (all rows)", array: true },
   { key: "quote", logical: "iacrm_quote", set: "iacrm_quotes", label: "Quote", array: false },
   { key: "opportunity", logical: "opportunity", set: "opportunities", label: "Opportunity", array: false }
 ];
@@ -67,8 +71,15 @@ const DENY = new Set([
   // AMS sync state is owned by the sync - writing synctoams could trigger a push
   "iacrm_synctoams", "iacrm_lastsyncon",
   // social/portal plumbing, never agent data
-  "primarysatoriid", "primarytwitterid"
+  "primarysatoriid", "primarytwitterid",
+  // customer address plumbing: the row decides addressnumber
+  "addressnumber", "objecttypecode", "freighttermscode", "shippingmethodcode", "utcoffset", "latitude", "longitude"
 ]);
+
+/** Row-slot record name -> its array entity ("contact" -> "contacts"). */
+export function slotEntityKey(name: string): string | null {
+  return name === "contact" ? "contacts" : name === "policy" ? "policies" : name === "address" ? "addresses" : null;
+}
 /** Power Pages portal plumbing columns. */
 const DENY_PREFIX = /^(adx_|mspp_)/;
 
@@ -245,8 +256,8 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
   return { envId: env.id, fetchedAt: Date.now(), entities };
 }
 
-// v2: entities carry their secured (pass-through) columns
-const CACHE_PREFIX = "crm/fieldCatalog/v2/";
+// v2: entities carry their secured (pass-through) columns; v3: addresses
+const CACHE_PREFIX = "crm/fieldCatalog/v3/";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 /** How many CRM columns the saved mappings (page sites and data services,
@@ -263,7 +274,7 @@ async function missingMappedColumns(catalog: FieldCatalog): Promise<number> {
   for (const t of new Set(targets)) {
     const m = /^(crm|secure):([a-z]+?)(\d*)(?:\[\])?\.([a-z0-9_]+)$/.exec(t);
     if (!m) continue;
-    const key = m[3] ? (m[2] === "contact" ? "contacts" : m[2] === "policy" ? "policies" : m[2]) : m[2];
+    const key = m[3] ? slotEntityKey(m[2]!) ?? m[2] : m[2];
     const entity = catalog.entities.find(e => e.key === key);
     const cols = m[1] === "secure" ? entity?.secured : entity?.columns;
     if (!cols?.some(c => c.name === m[4])) missing += 1;
@@ -295,12 +306,12 @@ export function catalogLabel(catalog: FieldCatalog | null, target: string): stri
   if (!m || !catalog) return null;
   const secure = m[1] === "secure";
   // row slots ("crm:contact3", "secure:contact2") name their array entity
-  const key = m[3] ? (m[2] === "contact" ? "contacts" : m[2] === "policy" ? "policies" : m[2]) : m[2];
+  const key = m[3] ? slotEntityKey(m[2]!) ?? m[2] : m[2];
   const entity = catalog.entities.find(e => e.key === key);
   const col = (secure ? entity?.secured : entity?.columns)?.find(c => c.name === m[4]);
   if (!entity || !col) return null;
   const base = m[3]
-    ? `${key === "contacts" ? "Related contact" : "Policy"} ${Number(m[3]) - (key === "contacts" ? 1 : 0)}`
+    ? `${key === "contacts" ? "Related contact" : key === "addresses" ? "Address" : "Policy"} ${Number(m[3]) - (key === "contacts" ? 1 : 0)}`
     : entity.label.replace(/ \(all rows\)$/, "");
   return `${secure ? "Secured: " : ""}${base}: ${col.label}`;
 }

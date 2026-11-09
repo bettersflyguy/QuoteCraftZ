@@ -1,3 +1,8 @@
+export interface CapturedAddress {
+  type: string; street: string; unit: string; address2: string; city: string; state: string;
+  county: string; postalCode: string; postalCodeSuffix: string; yearsAtAddress: string; monthsAtAddress: string;
+}
+
 export interface CapturedApplicant {
   ezlynxApplicantId: number;
   firstName: string;
@@ -15,6 +20,9 @@ export interface CapturedApplicant {
    * status, occupation, lead source...), keyed by field id, as display text.
    * Never SSN; license NUMBERS stay in dlNumber (secured columns only). */
   details?: Record<string, string>;
+  /** Every address the source holds, the primary first (one CRM address row
+   * each: row 1 = Address 1). */
+  addresses?: CapturedAddress[];
   coApplicants: {
     firstName: string; lastName: string; relationship: string; phone: string | null; email: string | null;
     dateOfBirth: string | null; dlNumber: string | null; dlState: string | null;

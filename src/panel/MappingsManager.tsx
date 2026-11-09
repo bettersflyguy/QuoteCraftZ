@@ -108,11 +108,11 @@ export function MappingsManager() {
   }, []);
   const dsPeek = useMemo(() => {
     const targets = effectiveTargets(dsMaps);
-    const out: { key: string; target: string }[] = [];
-    for (const f of EZLYNX_FIELDS.filter(x => x.section === "Applicant" && targets[x.id])) {
-      for (const l of f.pageLabels ?? [f.label]) {
+    const out: { key: string; target: string; family?: boolean }[] = [];
+    for (const f of EZLYNX_FIELDS.filter(x => x.section !== "Co-applicants" && targets[x.id])) {
+      for (const l of f.pageLabels ?? (f.section === "Applicant" ? [f.label] : [])) {
         const key = fieldKeyOf("", l);
-        if (!out.some(o => o.key === key)) out.push({ key, target: targets[f.id]! });
+        if (!out.some(o => o.key === key)) out.push({ key, target: targets[f.id]!, ...(l.startsWith("*") ? { family: true } : {}) });
       }
     }
     return out;

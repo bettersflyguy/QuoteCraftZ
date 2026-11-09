@@ -125,7 +125,18 @@
       "coApplicant.email": "contacts[].email",
       "coApplicant.phone": "contacts[].phone",
       "applicant.csr": "note",
-      "applicant.preferredContactMethod": "crm:primarycontact.preferredcontactmethodcode"
+      "applicant.preferredContactMethod": "crm:primarycontact.preferredcontactmethodcode",
+      "address.type": "crm:addresses[].name",
+      "address.street": "crm:addresses[].line1",
+      "address.address2": "crm:addresses[].line2",
+      "address.unit": "crm:addresses[].line3",
+      "address.city": "crm:addresses[].city",
+      "address.state": "crm:addresses[].stateorprovince",
+      "address.county": "crm:addresses[].county",
+      "address.postalCode": "crm:addresses[].postalcode",
+      "address.postalCodeSuffix": "",
+      "address.yearsAtAddress": "",
+      "address.monthsAtAddress": ""
     }
   },
   "options": {

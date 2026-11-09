@@ -398,12 +398,21 @@
     const m = globalThis.BettersPortalMapper;
     return m && m.sectionOf ? m.sectionOf(el) : { key: "", text: "" };
   }
-  /* "other address>city": only that section's City; plain "city": every one */
-  function fieldsByLabel(full) {
+  /* "other address>city": only that section's City; plain "city": every
+   * one. family: every section of the same kind ("primary address",
+   * "other address", "mailing address" all end in "address") - an ARRAY
+   * mapping on one card's field takes every card's, one row each */
+  function lastWord(s) { const w = String(s || "").trim().split(" "); return w[w.length - 1] || ""; }
+  function fieldsByLabel(full, family) {
     const at = String(full || "").indexOf(">");
     const section = at < 0 ? "" : full.slice(0, at);
     const els = labelledBoxes(at < 0 ? full : full.slice(at + 1));
-    return section ? els.filter((el) => sectionOf(el).key === section) : els;
+    if (!section) return els;
+    const kind = lastWord(section);
+    return els.filter((el) => {
+      const s = sectionOf(el).key;
+      return family ? Boolean(s) && lastWord(s) === kind : s === section;
+    });
   }
   function labelledBoxes(key) {
     const out = [];
@@ -807,7 +816,9 @@
     contacts: { slot: "contact", start: 2 }, vehicles: { slot: "vehicle", start: 1 },
     /* CRM-column arrays share the semantic numbering, so a table taught with
      * a mix of both kinds of target stays row-aligned */
-    "crm:contacts": { slot: "crm:contact", start: 2 }, "crm:policies": { slot: "crm:policy", start: 1 }
+    "crm:contacts": { slot: "crm:contact", start: 2 }, "crm:policies": { slot: "crm:policy", start: 1 },
+    /* row N = the insured's address number N (1 = Address 1 / primary) */
+    "crm:addresses": { slot: "crm:address", start: 1 }
   };
 
   /* An array teaching's selector points at ONE row's cell. The repeating axis
@@ -847,7 +858,7 @@
     const path = typeof t.path === "string" ? t.path : "";
     if (!path || isSecurePath(path)) return;
     if (t.page && labelKey(pageTitle()) !== t.page) return;
-    const els = fieldsByLabel(t.byLabel);
+    const els = fieldsByLabel(t.byLabel, /\[\]\./.test(path));
     if (!els.length) return;
     const label = clean(t.label) || fieldLabelText(els[0]) || t.byLabel;
     if (PAYMENT_FIELD.test(label) || sensitiveLabel(label)) return;
@@ -970,8 +981,8 @@
    * exactly the rows a capture would pull */
   globalThis.__bettersExpandTaughtRows = expandTaughtRows;
   /* labelled-field keys for the filler's peek and the editor's scan */
-  globalThis.__bettersFieldsByLabel = (page, key) =>
-    (page && labelKey(pageTitle()) !== page ? [] : fieldsByLabel(key));
+  globalThis.__bettersFieldsByLabel = (page, key, family) =>
+    (page && labelKey(pageTitle()) !== page ? [] : fieldsByLabel(key, Boolean(family)));
   globalThis.__bettersFieldLabelText = fieldLabelText;
   /* the label of the labelled form-field box an element sits in ("" when
    * it isn't in one) - click-to-map turns that into a label mapping */

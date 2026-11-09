@@ -137,7 +137,8 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
         const covers = (f: DataServiceField) => labelsOf(f).some(l => {
           const at = l.indexOf(">");
           const section = at < 0 ? "" : l.slice(0, at);
-          return canonical(at < 0 ? l : l.slice(at + 1)) === want && (!section || !pickSection || section === pickSection);
+          const kindOk = section.startsWith("*") ? pickSection.split(" ").pop() === section.slice(1) : section === pickSection;
+          return canonical(at < 0 ? l : l.slice(at + 1)) === want && (!section || !pickSection || kindOk);
         });
         const hit = EZLYNX_FIELDS.find(f => f.section === "Applicant" && covers(f)) ?? EZLYNX_FIELDS.find(covers);
         if (hit) { setFocus(hit.id); setPickNote(null); }
@@ -175,18 +176,18 @@ export function DataServiceMapEditor({ source = "ezlynx", page }: { source?: str
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
-      {(["Applicant", "Co-applicants"] as const).map(section => {
+      {(["Applicant", "Co-applicants", "Addresses"] as const).map(section => {
         // a field picked on the page always shows, whatever the filter
         const listed = EZLYNX_FIELDS.filter(f => f.section === section &&
           (show === "all" || f.id === focus || (show === "mapped" ? Boolean(targets[f.id]) : !targets[f.id])));
         if (!listed.length) return null;
         return (
         <div key={section}>
-          <Text size={200} className={styles.section} block>{section}{section === "Co-applicants" ? " (one row per person)" : ""}</Text>
+          <Text size={200} className={styles.section} block>{section}{section === "Co-applicants" ? " (one row per person)" : section === "Addresses" ? " (one row per address, primary first)" : ""}</Text>
           {listed.map(f => {
             const target = targets[f.id] ?? "";
             // co-applicant list targets resolve per row; the CRM column is the same
-            const concrete = target.replace("crm:contacts[]", "crm:contact2");
+            const concrete = target.replace("crm:contacts[]", "crm:contact2").replace("crm:addresses[]", "crm:address1");
             const col = choiceColumnOf(concrete, catalog);
             const key = col ? columnKeyOf(concrete) : null;
             return (

@@ -70,6 +70,10 @@ describe("normalizeApplicant", () => {
       dateOfBirth: "1949-11-18",
       dlNumber: null, dlState: null, ssn: null,
       address: { street: "100 EXAMPLE RD", city: "MOUNDS VIEW", state: "MN", postalCode: "55112" },
+      addresses: [{
+        type: "", street: "100 EXAMPLE RD", unit: "", address2: "", city: "MOUNDS VIEW", state: "MN", county: "Ramsey",
+        postalCode: "55112", postalCodeSuffix: "", yearsAtAddress: "", monthsAtAddress: ""
+      }],
       phones: [{ type: "Mobile", number: "6125550100" }], emails: ["alex.sample@example.com"],
       details: { assignedProducer: "Nathan Betters", county: "Ramsey", isCommercial: "No", ratingState: "MN" },
       coApplicants: [{ details: {}, firstName: "Blake", lastName: "Sample", relationship: "Spouse", phone: null, email: null, dateOfBirth: "1952-10-11", dlNumber: null, dlState: null, ssn: null }],

@@ -109,6 +109,9 @@ export interface PeekItem {
   kind: "mapped" | "auto" | "skip";
   /** Array teaching - highlight every row the capture would pull. */
   array?: boolean;
+  /** A section's field mapped to an array: every section of that kind
+   * (Primary / Other / Mailing Address) is a row. */
+  family?: boolean;
 }
 export interface PeekResult {
   shown: number;

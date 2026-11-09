@@ -9,13 +9,15 @@ import { isNoteTarget, isRoutablePath } from "@/portal/fieldMaps";
 export interface DataServiceField {
   id: string;
   label: string;
-  /** "Applicant" fields are one record; "Co-applicants" repeat per person. */
-  section: "Applicant" | "Co-applicants";
+  /** "Applicant" fields are one record; "Co-applicants" repeat per person;
+   * "Addresses" repeat per address (primary first). */
+  section: "Applicant" | "Co-applicants" | "Addresses";
   defaultTarget: string;
   /** How the source's own screens label it (canonical), so the page peek
    * knows which on-screen fields the data service already covers.
    * "primary address>city": only the City inside the Primary Address
-   * section (the Other Address twin is a separate page field). */
+   * section (the Other Address twin is a separate page field);
+   * "*address>city": the City in EVERY address section, one row each. */
   pageLabels?: string[];
   /** Identifier (SSN, DL#): secured pass-through only - never a capture
    * field, a note or a share file; mapped only to a secured CRM column. */
@@ -83,7 +85,19 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "coApplicant.driversLicenseStatus", label: "License status", section: "Co-applicants", defaultTarget: "" },
   { id: "coApplicant.driversLicenseState", label: "License state", section: "Co-applicants", defaultTarget: "crm:contacts[].iacrm_dlstate" },
   { id: "coApplicant.email", label: "Email", section: "Co-applicants", defaultTarget: "contacts[].email" },
-  { id: "coApplicant.phone", label: "Phone", section: "Co-applicants", defaultTarget: "contacts[].phone" }
+  { id: "coApplicant.phone", label: "Phone", section: "Co-applicants", defaultTarget: "contacts[].phone" },
+  // every address the insured has: row N = CRM address N (1 = Address 1)
+  { id: "address.type", label: "Address type", section: "Addresses", defaultTarget: "crm:addresses[].name", pageLabels: ["*address>address type"] },
+  { id: "address.street", label: "Street address", section: "Addresses", defaultTarget: "crm:addresses[].line1", pageLabels: ["*address>address"] },
+  { id: "address.address2", label: "Address line 2", section: "Addresses", defaultTarget: "crm:addresses[].line2", pageLabels: ["*address>address line 2"] },
+  { id: "address.unit", label: "Unit", section: "Addresses", defaultTarget: "crm:addresses[].line3", pageLabels: ["*address>unit"] },
+  { id: "address.city", label: "City", section: "Addresses", defaultTarget: "crm:addresses[].city", pageLabels: ["*address>city"] },
+  { id: "address.state", label: "State", section: "Addresses", defaultTarget: "crm:addresses[].stateorprovince", pageLabels: ["*address>state"] },
+  { id: "address.county", label: "County", section: "Addresses", defaultTarget: "crm:addresses[].county", pageLabels: ["*address>county"] },
+  { id: "address.postalCode", label: "ZIP code", section: "Addresses", defaultTarget: "crm:addresses[].postalcode", pageLabels: ["*address>postal code"] },
+  { id: "address.postalCodeSuffix", label: "ZIP suffix", section: "Addresses", defaultTarget: "", pageLabels: ["*address>postal code suffix"] },
+  { id: "address.yearsAtAddress", label: "Years at address", section: "Addresses", defaultTarget: "", pageLabels: ["*address>years at address"] },
+  { id: "address.monthsAtAddress", label: "Months at address", section: "Addresses", defaultTarget: "", pageLabels: ["*address>months at address"] }
 ];
 
 export const DATA_SERVICE_STORAGE_KEY = "dataservice/fieldMap";
@@ -119,6 +133,9 @@ function routeFor(target: string, row: number | null): string | undefined {
     if (semantic) return `contact${row + 2}.${semantic[1]}`;
     const crm = /^crm:contacts\[\]\.([a-z0-9_]+)$/.exec(target);
     if (crm) return `crm:contact${row + 2}.${crm[1]}`;
+    // addresses number from 1 (row 0 = the primary = Address 1)
+    const addr = /^crm:addresses\[\]\.([a-z0-9_]+)$/.exec(target);
+    if (addr) return `crm:address${row + 1}.${addr[1]}`;
   }
   return isRoutablePath(target) ? target : undefined;
 }
@@ -170,6 +187,13 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
       const value = (row[f.id] ?? "").trim();
       if (!value) continue;
       out.push({ label: f.label, value, section: "Co-applicants", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
+    }
+  });
+  (a.addresses ?? []).slice(0, 40).forEach((ad, i) => {
+    for (const f of EZLYNX_FIELDS.filter(x => x.section === "Addresses")) {
+      const value = (ad[f.id.slice("address.".length) as keyof typeof ad] ?? "").trim();
+      if (!value) continue;
+      out.push({ label: f.label, value, section: "Addresses", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i) });
     }
   });
   return out;

@@ -36,9 +36,9 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
-import { buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { addressRows, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
-import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAccountAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
 import { buildFillValues } from "@/portal/fillValues";
@@ -82,6 +82,7 @@ export interface Deps {
   createPolicy: typeof createPolicy;
   createQuote: typeof createQuote;
   fillIfEmpty: typeof fillIfEmpty;
+  upsertAccountAddress: typeof upsertAccountAddress;
   upsertRecordNote: typeof upsertRecordNote;
   /** Live CRM column catalog for capture mappings (cached per environment). */
   getFieldCatalog: (env: CrmEnvironment, refresh?: boolean) => Promise<FieldCatalog>;
@@ -821,6 +822,18 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
               results.push({ key: `${w.label} mapped columns`, status: 0, error: String((e as Error).message ?? e), entityId: null });
             }
           }
+          // the insured's addresses: captured row N -> address number N on
+          // the account (fill-if-empty; missing rows created)
+          for (const n of addressRows(app)) {
+            const values = coerceGroup(entityOf("addresses"), groupOf(`crm:address${n}`));
+            if (!Object.keys(values).length) continue;
+            try {
+              const r = await deps.upsertAccountAddress(env, msg.accountId, n, values);
+              if (r.outcome !== "unchanged") results.push({ key: `Address ${n}: ${r.outcome === "created" ? "added" : `filled ${r.columns.length} column${r.columns.length === 1 ? "" : "s"}`}`, status: 204, error: null, entityId: null });
+            } catch (e) {
+              results.push({ key: `Address ${n}`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+            }
+          }
           // secured pass-through: held values go ONLY to their secured
           // columns (fill-if-empty), related contacts matched by name
           const pending = await getPendingSecure();
@@ -1157,10 +1170,10 @@ async function dataServicePeekItems(origin: string, catalog: FieldCatalog | null
   if (origin !== "https://app.ezlynx.com") return [];
   const targets = effectiveTargets((await getDataServiceMaps())["ezlynx"]);
   const out: import("@/boldpenguin/types").PeekItem[] = [];
-  for (const f of EZLYNX_FIELDS.filter(x => x.section === "Applicant" && targets[x.id])) {
-    for (const l of f.pageLabels ?? [f.label]) {
+  for (const f of EZLYNX_FIELDS.filter(x => x.section !== "Co-applicants" && targets[x.id])) {
+    for (const l of f.pageLabels ?? (f.section === "Applicant" ? [f.label] : [])) {
       const key = fieldKeyOf("", l);
-      if (!out.some(o => o.key === key)) out.push({ key, label: peekLabel(targets[f.id]!, catalog), kind: "mapped" });
+      if (!out.some(o => o.key === key)) out.push({ key, label: peekLabel(targets[f.id]!, catalog), kind: "mapped", ...(l.startsWith("*") ? { family: true } : {}) });
     }
   }
   return out;
@@ -1215,7 +1228,8 @@ async function peekUnmappedTab(tabId: number, on: boolean): Promise<import("@/bo
     key,
     label: peekLabel(target, catalog),
     kind: target === "skip" ? "skip" : "mapped",
-    array: isArrayPath(target) || isNoteTarget(target) || key.startsWith("field:")
+    array: isArrayPath(target) || isNoteTarget(target) || key.startsWith("field:"),
+    family: key.startsWith("field:") && isArrayPath(target)
   }));
   const r = await peekPortalTab(tabId, items);
   // intake's eye reports the red count
@@ -1507,6 +1521,7 @@ export const realDeps: Deps = {
   createPolicy,
   createQuote,
   fillIfEmpty,
+  upsertAccountAddress,
   upsertRecordNote,
   getFieldCatalog: (env, refresh) => getFieldCatalog(env, { dvJson }, refresh),
   dvQuery: dvJson,

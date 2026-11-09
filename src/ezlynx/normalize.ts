@@ -127,6 +127,25 @@ function text(v: unknown): string {
   return "";
 }
 
+/** One source address as display text. */
+function addressOf(r: Record<string, unknown>): import("@/types").CapturedAddress {
+  return {
+    type: text(r["type"]), street: text(r["address1"]), unit: text(r["unit"]), address2: text(r["address2"]),
+    city: text(r["city"]), state: text(r["state"]), county: text(r["county"]),
+    postalCode: text(r["postalCode"]), postalCodeSuffix: text(r["postalCodeSuffix"]),
+    yearsAtAddress: text(r["yearsAtAddress"]), monthsAtAddress: text(r["monthsAtAddress"])
+  };
+}
+
+/** The primary address, then every other one (addresses[]), skipping empties. */
+function allAddresses(a: Record<string, unknown>): import("@/types").CapturedAddress[] {
+  const raw: unknown[] = [a["primaryAddress"], ...(Array.isArray(a["addresses"]) ? a["addresses"] as unknown[] : [])];
+  return raw
+    .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
+    .map(addressOf)
+    .filter(x => x.street || x.city || x.postalCode);
+}
+
 /** The person's other values (the data service returns far more than the
  * identity fields). SSN and license NUMBERS are not in here: they travel
  * only on the secured channel (see sources/ezlynxSource ezlynxSecure). */
@@ -186,6 +205,7 @@ export function normalizeApplicant(raw: unknown): CapturedApplicant {
     address: a.primaryAddress
       ? { street: a.primaryAddress.address1, city: a.primaryAddress.city, state: a.primaryAddress.state, postalCode: a.primaryAddress.postalCode }
       : null,
+    addresses: allAddresses(a as Record<string, unknown>),
     phones: (a.phoneNumbers ?? []).map(pn => ({ type: pn.type ?? null, number: pn.number })),
     emails: (a.emailAddresses ?? [])
       .map(e => {

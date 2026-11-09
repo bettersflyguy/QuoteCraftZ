@@ -84,6 +84,9 @@ const ROW_SLOTS: Record<string, { slot: string; start: number }> = {
   vehicles: { slot: "vehicle", start: 1 },
   "crm:contacts": { slot: "crm:contact", start: 2 },
   "crm:policies": { slot: "crm:policy", start: 1 },
+  /* the insured's addresses: row N is address number N on the account
+   * (1 and 2 are its Address 1 / Address 2, 3+ its More Addresses) */
+  "crm:addresses": { slot: "crm:address", start: 1 },
   "secure:contacts": { slot: "secure:contact", start: 2 }
 };
 
@@ -114,9 +117,9 @@ export function rowTargetOf(path: string): { arrayPath: string; row: number } | 
  * re-validates every column against the live catalog before writing. */
 /** Columns owned by the AMS sync - never written by extension features. */
 const AMS_OWNED = new Set(["iacrm_amsexternalid", "iacrm_synctoams", "iacrm_lastsyncon"]);
-const CRM_TARGET = /^crm:(account|primarycontact|quote|opportunity|contacts\[\]|policies\[\])\.([a-z][a-z0-9_]{0,99})$/;
+const CRM_TARGET = /^crm:(account|primarycontact|quote|opportunity|contacts\[\]|policies\[\]|addresses\[\])\.([a-z][a-z0-9_]{0,99})$/;
 /** Concrete per-row forms array teachings fan out into. */
-const CRM_ROUTABLE = /^crm:(account|primarycontact|quote|opportunity|contact(?:[2-9]|[1-3]\d)|policy(?:[1-9]|[1-3]\d))\.([a-z][a-z0-9_]{0,99})$/;
+const CRM_ROUTABLE = /^crm:(account|primarycontact|quote|opportunity|contact(?:[2-9]|[1-3]\d)|policy(?:[1-9]|[1-3]\d)|address(?:[1-9]|[1-3]\d))\.([a-z][a-z0-9_]{0,99})$/;
 
 export function isCrmTarget(path: string): boolean {
   const m = CRM_TARGET.exec(path);
@@ -322,6 +325,17 @@ const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
  * ("field:details|other address>city"): lowercase words only. The section
  * names a sub-section whose fields share labels with a twin section. */
 export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?(?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80}$/;
+/** A sub-section control's label key across every section of its kind
+ * ("other address" City -> "field:other address>city", which a list target
+ * reads from Primary, Other and Mailing Address alike). Null outside one. */
+export function familyKeyOf(r: { fieldLabel?: string; section?: string }): { key: string; label: string } | null {
+  const field = (r.fieldLabel ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80);
+  const section = (r.section ?? "").slice(0, 40);
+  if (!field || !section) return null;
+  const kind = section.split(" ").pop()!;
+  return { key: `field:${section}>${field}`, label: `${r.fieldLabel!.replace(/^[*\s]+|[:*\s]+$/g, "")} (every ${kind})` };
+}
+
 /** Parses a labelled-field key: [page, "section>label" or "label"]. */
 export const FIELD_KEY_PARTS = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
 

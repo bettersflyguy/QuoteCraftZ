@@ -269,6 +269,17 @@ export function crmGroup(app: CapturedApplication, name: string): Record<string,
   return Object.keys(out).length ? out : null;
 }
 
+/** Address row numbers the capture holds ("crm:address1".."crm:addressN"),
+ * ascending: row N is address number N on the insured's account. */
+export function addressRows(app: { normalized: Record<string, unknown> }): number[] {
+  return Object.keys(app.normalized)
+    .map(k => /^crm:address(\d+)$/.exec(k))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map(m => Number(m[1]))
+    .filter(n => n >= 1 && n <= 40)
+    .sort((a, b) => a - b);
+}
+
 /** One policy draft per CRM-taught policy row (policies are an array: an
  * AMS policies list fans into crm:policy1..N). Empty when no policy row was
  * taught - the caller falls back to the single label-scored draft. */

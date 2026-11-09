@@ -539,7 +539,7 @@
       .find((el) => {
         const lab = mapper.canonical(primaryLabel(el));
         const sec = mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "";
-        return wanted.some((w) => w.label === lab && (!w.section || w.section === sec));
+        return wanted.some((w) => w.label === lab && (mapper.sectionMatches ? mapper.sectionMatches(w.section, sec) : !w.section || w.section === sec));
       }) || null;
   }
 
@@ -616,6 +616,8 @@
       rows.push({
         key,
         label: inSection(element, primaryLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key,
+        fieldLabel: primaryLabel(element) || "",
+        section: mapper && mapper.sectionOf ? mapper.sectionOf(element).key : "",
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
         autoPath,
@@ -646,10 +648,14 @@
       seen.add(key);
       const m = FIELD_KEY_RE.exec(key);
       if (!m) continue;
-      const els = typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2]) : [];
+      /* a section field on a list target reads every section of its kind */
+      const family = m[2].indexOf(">") > 0 && /\[\]\./.test(String(ov[key] || ""));
+      const els = typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2], family) : [];
       const name = els.length && typeof globalThis.__bettersFieldLabelText === "function" ? globalThis.__bettersFieldLabelText(els[0]) : "";
+      const kind = m[2].slice(0, m[2].indexOf(">")).split(" ").pop();
       const label = name
-        ? inSection(els[0], name) + (els.length > 1 ? " (" + els.length + " on this page)" : "")
+        ? (family ? name + " (every " + kind + ", " + els.length + " on this page)"
+          : inSection(els[0], name) + (els.length > 1 ? " (" + els.length + " on this page)" : ""))
         : m[2].replace(">", ": ") + (m[1] ? " (" + m[1] + " page)" : "");
       rows.push({ key, label, type: "text", payment: false, autoPath: null, mapped: typeof ov[key] === "string" ? ov[key] : null });
     }
@@ -1043,7 +1049,7 @@
       var els = [];
       var fk = FIELD_KEY_RE.exec(it.key);
       if (fk) {
-        els = (typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2]) : [])
+        els = (typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2], it.family) : [])
           .filter(function (e) { return visible(e); });
       } else if (it.key.indexOf("pick:") === 0) {
         var sel = it.key.slice(5);
@@ -1099,7 +1105,7 @@
     var r = peek(items, true);
     var map = {};
     Object.keys((arg && arg.map) || {}).forEach(function (k) { map[k] = arg.map[k]; });
-    items.forEach(function (it) { if (it && typeof it.key === "string") map[it.key] = map[it.key] || "shown"; });
+    items.forEach(function (it) { if (it && typeof it.key === "string") map[it.key] = map[it.key] || (it.family ? "family" : "shown"); });
     var u = peekUnmapped({ map: map, payload: arg && arg.payload, pageLabels: arg && arg.pageLabels }, true);
     watchBadges(true);
     return { shown: r.shown, missing: r.missing, unmapped: u.shown };
@@ -1131,12 +1137,13 @@
     const serviceCovers = function (el) {
       const lab = canon(primaryLabel(el) || fieldName(el));
       const sec = mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "";
-      return serviceLabels.some(function (s) { return s.label === lab && (!s.section || s.section === sec); });
+      return serviceLabels.some(function (s) { return s.label === lab && (mapper.sectionMatches ? mapper.sectionMatches(s.section, sec) : !s.section || s.section === sec); });
     };
     Object.keys(keys).forEach(function (k) {
       const fk = FIELD_KEY_RE.exec(k);
       if (keys[k] && fk && typeof globalThis.__bettersFieldsByLabel === "function") {
-        globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2]).forEach(function (el) { covered.push(el); });
+        const family = keys[k] === "family" || /\[\]\./.test(String(keys[k]));
+        globalThis.__bettersFieldsByLabel(fk[1] || "", fk[2], family).forEach(function (el) { covered.push(el); });
         return;
       }
       if (!keys[k] || k.indexOf("pick:") !== 0) return;

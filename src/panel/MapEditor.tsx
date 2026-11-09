@@ -8,7 +8,7 @@ import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-co
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import {
   ARRAY_ROW_MAX, MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget,
-  isSensitiveLabel, rowTargetOf, toRowTarget
+  familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
 } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
 import { send } from "./api";
@@ -97,7 +97,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   inject?: PortalScanRow | null;
   /** On-screen fields another mapping covers (a data service): outlined by
    * the peek with the CRM target they feed. */
-  extraPeek?: { key: string; target: string }[];
+  extraPeek?: { key: string; target: string; family?: boolean }[];
   scan: PortalScanResult;
   /** This site's one-for-one choice mappings ({table.column: {text: value}}). */
   choices?: Record<string, ColumnOptionMap>;
@@ -235,10 +235,10 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     if (r.payment) return [];
     if (v === "skip") return [{ key: r.key, label: "Never fill", kind: "skip" }];
     if (isNoteTarget(v)) return [{ key: r.key, label: NOTE_TARGETS.find(t => t.value === v)!.label, kind: "mapped", array: true }];
-    if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v) }];
+    if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v), family: r.key.startsWith("field:") && isArrayPath(v) }];
     if (r.autoPath && !hideAuto) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
     return [];
-  }).concat((extraPeek ?? []).map(x => ({ key: x.key, label: targetText(x.target), kind: "mapped" as const })));
+  }).concat((extraPeek ?? []).map(x => ({ key: x.key, label: targetText(x.target), kind: "mapped" as const, ...(x.family ? { family: true } : {}) })));
   const peekSignature = JSON.stringify(peekItems);
   // on from the start: the page shows green/red while mapping and re-colors
   // with every change (the eye turns it off)
@@ -296,7 +296,22 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
         // a form control names ONE row of a list ("Driver 2" = row 1 of related contacts)
         const slot = !isPick ? rowTargetOf(current) : null;
         const pickerValue = slot ? slot.arrayPath : current;
-        const choose = (v: string) => setTarget(r.key, !isPick && isArrayPath(v) ? (toRowTarget(v, 1) ?? v) : v);
+        // a list target on a sub-section's control ("Other Address" City ->
+        // Addresses): every card of that kind is a row, so it maps by label
+        // across them all instead of naming one row
+        const choose = (v: string) => {
+          const fam = !isPick && isArrayPath(v) ? familyKeyOf(r) : null;
+          if (fam) {
+            if (!allRows.some(x => x.key === fam.key)) {
+              setExtraRows(x => [...x, { key: fam.key, label: fam.label, type: "text", payment: false, autoPath: null, mapped: null }]);
+            }
+            setDraft(d => ({ ...d, [r.key]: "", [fam.key]: v }));
+            reveal(fam.key);
+            setFocusKey(fam.key);
+            return;
+          }
+          setTarget(r.key, !isPick && isArrayPath(v) ? (toRowTarget(v, 1) ?? v) : v);
+        };
         // a CRM choice target: each of this field's options binds to one CRM choice
         const choiceCol = setChoices ? choiceColumnOf(current, catalog) : null;
         const choiceKey = choiceCol ? columnKeyOf(current) : null;

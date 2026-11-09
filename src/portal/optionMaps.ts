@@ -19,7 +19,8 @@ export const dataServiceScope = (name: string): string => `dataservice:${name}`;
 
 const ENTITY_TABLE: Record<string, string> = {
   account: "account", primarycontact: "contact", contacts: "contact", contact: "contact",
-  policies: "iacrm_policy", policy: "iacrm_policy", quote: "iacrm_quote", opportunity: "opportunity"
+  policies: "iacrm_policy", policy: "iacrm_policy", quote: "iacrm_quote", opportunity: "opportunity",
+  addresses: "customeraddress", address: "customeraddress"
 };
 
 /** "crm:contact3.educationcode" / "crm:contacts[].educationcode" /
@@ -34,7 +35,7 @@ export function columnKeyOf(target: string): string | null {
 export function entityKeyOf(target: string): string | null {
   const m = /^crm:([a-z]+?)(\d*)(?:\[\])?\./.exec(target);
   if (!m) return null;
-  if (m[2]) return m[1] === "contact" ? "contacts" : m[1] === "policy" ? "policies" : null;
+  if (m[2]) return m[1] === "contact" ? "contacts" : m[1] === "policy" ? "policies" : m[1] === "address" ? "addresses" : null;
   return m[1]!;
 }
 
