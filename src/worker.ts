@@ -9,7 +9,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (type === "portal/captureUpdated") return false; // panel-bound broadcast
 
   if (type === "portal/autoCaptured") {
-    handleAutoCaptured(msg as Parameters<typeof handleAutoCaptured>[0], sender.tab?.id)
+    handleAutoCaptured(msg as { url: string }, sender.tab?.id)
       .then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
     return true;
   }

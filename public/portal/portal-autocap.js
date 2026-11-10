@@ -1,7 +1,8 @@
 /* Auto-capture driver: while enabled, watches the page (SPA mutations + URL
- * changes), lets it settle, then harvests via the ingest collector and sends
- * the fields to the worker to merge into the held application. Pure observer -
- * it never clicks, types, or navigates. Injected on demand next to
+ * changes), lets it settle, and tells the worker the page changed; the
+ * worker runs the real Ingest with the agent's mappings (mapped, filled-in
+ * values only; EZLynx through its data service). Pure observer - it never
+ * clicks, types, or navigates. Injected on demand next to
  * portal-ingest.js after the user enables auto-capture for this site. */
 (function () {
   "use strict";
@@ -20,11 +21,10 @@
     if (!globalThis.__bettersAutoCapEnabled || !globalThis.__bettersPortalIngest) return;
     try {
       const res = globalThis.__bettersPortalIngest();
-      if (!res.fields.length) return;
-      const signature = res.fields.map((f) => f.label + "=" + f.value).sort().join("|");
+      const signature = location.href + "#" + res.fields.map((f) => f.label + "=" + f.value).sort().join("|");
       if (signature === lastSignature) return;
       lastSignature = signature;
-      chrome.runtime.sendMessage({ type: "portal/autoCaptured", fields: res.fields, title: res.title, url: res.url }).catch(() => {});
+      chrome.runtime.sendMessage({ type: "portal/autoCaptured", url: location.href }).catch(() => {});
     } catch (_e) { /* page mid-transition - the next settle retries */ }
   }
 

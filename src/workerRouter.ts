@@ -648,6 +648,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/autoCapture": {
         await deps.setAutoCapture(msg.tabId, msg.enable);
+        // turning it on captures what is already mapped and filled in now
+        if (msg.enable) {
+          const tab = await chrome.tabs.get(msg.tabId).catch(() => null);
+          if (tab?.url) await autoIngest(tab.url, msg.tabId);
+        }
         return { ok: true, data: null };
       }
 
@@ -1508,51 +1513,56 @@ async function isAutoCapturing(tabId: number): Promise<boolean> {
 
 const EZLYNX_PAGE = /^https:\/\/app\.ezlynx\.com\//i;
 
-/** One EZLynx service read at a time; page changes during one queue a
- * single follow-up read, so typing never stacks service calls. */
-let ezAuto: { running: boolean; again: { url: string; tabId: number } | null } = { running: false, again: null };
-async function ezlynxAutoIngest(url: string, tabId: number): Promise<void> {
-  if (ezAuto.running) { ezAuto.again = { url, tabId }; return; }
-  ezAuto.running = true;
+/** Auto-capture runs the real Ingest for the tab, one at a time: page
+ * changes during a run queue a single follow-up, so typing never stacks
+ * reads. EZLynx reads its data service (plus fields mapped on its pages);
+ * other sites keep only what the agent mapped and the page has filled in. */
+let autoRun: { running: boolean; again: { url: string; tabId: number } | null } = { running: false, again: null };
+async function autoIngest(url: string, tabId: number): Promise<void> {
+  if (autoRun.running) { autoRun.again = { url, tabId }; return; }
+  autoRun.running = true;
   try {
     let next: { url: string; tabId: number } | null = { url, tabId };
     while (next) {
-      ezAuto.again = null;
-      const r = await ingestEzlynx(realDeps, next.url, next.tabId).catch(() => null);
-      const o = r && r.ok ? r.data as { added: number; total: number; replaced: boolean } : null;
+      autoRun.again = null;
+      const o = await (EZLYNX_PAGE.test(next.url) ? autoIngestEzlynx(next.url, next.tabId) : autoIngestMapped(next.tabId)).catch(() => null);
       if (o) chrome.runtime.sendMessage({
         type: "portal/captureUpdated", added: o.added, total: o.total, replaced: o.replaced
       } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
-      next = ezAuto.again;
+      next = autoRun.again;
     }
   } finally {
-    ezAuto = { running: false, again: null };
+    autoRun = { running: false, again: null };
   }
 }
-
-/** Handles a page harvest sent by the auto-capture driver: merges it into the
- * held application (identity guard included) and tells the panel. Called by
- * the worker's message listener with the SENDER'S tab id - a tab that is not
- * auto-capture-enabled is ignored. */
-export async function handleAutoCaptured(
-  msg: { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string },
-  senderTabId: number | undefined
-): Promise<void> {
-  if (senderTabId == null || !(await isAutoCapturing(senderTabId))) return;
-  // EZLynx is a data-service source: auto-capture re-reads its service
-  // (Insured / Contacts / Addresses tables, quotes), never the raw page
-  if (EZLYNX_PAGE.test(msg.url)) return ezlynxAutoIngest(msg.url, senderTabId);
+type AutoOutcome = { added: number; total: number; replaced: boolean };
+async function autoIngestEzlynx(url: string, tabId: number): Promise<AutoOutcome | null> {
+  const r = await ingestEzlynx(realDeps, url, tabId);
+  return r.ok ? r.data as AutoOutcome : null;
+}
+/** a field the agent mapped (a saved control, label or taught mapping) */
+const isMappedField = (f: import("@/boldpenguin/types").CapturedAppField): boolean => Boolean(f.mapped) || f.source === "taught";
+async function autoIngestMapped(tabId: number): Promise<AutoOutcome | null> {
+  const page = await realDeps.ingestPortalTab(tabId);
+  const origin = (() => { try { return new URL(page.url).origin; } catch { return ""; } })();
+  const fields = translateCapturedChoices(page.fields.filter(f => isMappedField(f) && String(f.value ?? "").trim()), (await getOptionMaps())[origin], await catalogOrNull(realDeps));
+  const secure = page.secure ?? [];
+  if (!fields.length && !secure.length) return null;
   const existing = await getCapturedApplication();
-  const outcome = mergeIngestedFields(existing, msg.fields, {
-    system: new URL(msg.url).hostname, url: msg.url, title: msg.title
-  });
-  // only persist + announce when something actually changed
-  if (!outcome.replaced && existing !== null && outcome.added === 0) return;
+  const outcome = mergeIngestedFields(existing, fields, { system: new URL(page.url).hostname, url: page.url, title: page.title });
   await setCapturedApplication(outcome.app);
   if (outcome.replaced) { await chrome.storage.session.remove("bp/crmLink"); await clearPendingSecure(); }
-  chrome.runtime.sendMessage({
-    type: "portal/captureUpdated", added: outcome.added, total: outcome.total, replaced: outcome.replaced
-  } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
+  // secured values bypass the capture entirely, and follow their people
+  await addPendingSecure([...remapSecure(secure, outcome.slotMap), ...(outcome.secured ?? [])]);
+  return outcome;
+}
+
+/** The auto-capture driver saw the page change: re-ingest that tab. Called
+ * by the worker's message listener with the SENDER'S tab id - a tab that
+ * is not auto-capture-enabled is ignored. */
+export async function handleAutoCaptured(msg: { url: string }, senderTabId: number | undefined): Promise<void> {
+  if (senderTabId == null || !(await isAutoCapturing(senderTabId))) return;
+  await autoIngest(msg.url, senderTabId);
 }
 
 /** Full page loads kill content scripts - re-arm auto-capture on enabled tabs
