@@ -1506,6 +1506,30 @@ async function isAutoCapturing(tabId: number): Promise<boolean> {
   return (await autoCapTabs()).includes(tabId);
 }
 
+const EZLYNX_PAGE = /^https:\/\/app\.ezlynx\.com\//i;
+
+/** One EZLynx service read at a time; page changes during one queue a
+ * single follow-up read, so typing never stacks service calls. */
+let ezAuto: { running: boolean; again: { url: string; tabId: number } | null } = { running: false, again: null };
+async function ezlynxAutoIngest(url: string, tabId: number): Promise<void> {
+  if (ezAuto.running) { ezAuto.again = { url, tabId }; return; }
+  ezAuto.running = true;
+  try {
+    let next: { url: string; tabId: number } | null = { url, tabId };
+    while (next) {
+      ezAuto.again = null;
+      const r = await ingestEzlynx(realDeps, next.url, next.tabId).catch(() => null);
+      const o = r && r.ok ? r.data as { added: number; total: number; replaced: boolean } : null;
+      if (o) chrome.runtime.sendMessage({
+        type: "portal/captureUpdated", added: o.added, total: o.total, replaced: o.replaced
+      } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
+      next = ezAuto.again;
+    }
+  } finally {
+    ezAuto = { running: false, again: null };
+  }
+}
+
 /** Handles a page harvest sent by the auto-capture driver: merges it into the
  * held application (identity guard included) and tells the panel. Called by
  * the worker's message listener with the SENDER'S tab id - a tab that is not
@@ -1515,6 +1539,9 @@ export async function handleAutoCaptured(
   senderTabId: number | undefined
 ): Promise<void> {
   if (senderTabId == null || !(await isAutoCapturing(senderTabId))) return;
+  // EZLynx is a data-service source: auto-capture re-reads its service
+  // (Insured / Contacts / Addresses tables, quotes), never the raw page
+  if (EZLYNX_PAGE.test(msg.url)) return ezlynxAutoIngest(msg.url, senderTabId);
   const existing = await getCapturedApplication();
   const outcome = mergeIngestedFields(existing, msg.fields, {
     system: new URL(msg.url).hostname, url: msg.url, title: msg.title
