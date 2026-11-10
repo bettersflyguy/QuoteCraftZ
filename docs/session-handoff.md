@@ -1,6 +1,7 @@
 # Session handoff: QuoteCraftZ (EZLynx Quote Bridge)
 
 Handoff from a local Claude Code session (Nathan's Windows machine) to a cloud session, 2026-11-09. Read this first, then work from the repo.
+Full technical spec (data shapes, mapping grammar, pipelines, CRM contract, invariants): `docs/technical-spec.md`.
 
 ## The product
 
