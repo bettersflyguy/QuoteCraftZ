@@ -372,13 +372,19 @@ export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?(?:[a-z0-9 ]{1,40}>)?[a-z
 /** A sub-section control's label key across every section of its kind
  * ("other address" City -> "field:other address>city", which a list target
  * reads from Primary, Other and Mailing Address alike). Null outside one. */
-export function familyKeyOf(r: { fieldLabel?: string; section?: string; repeats?: number }): { key: string; label: string } | null {
+export function familyKeyOf(r: { fieldLabel?: string; section?: string; repeats?: number; repeatSections?: string[]; page?: string }): { key: string; label: string } | null {
   const field = (r.fieldLabel ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80);
   const section = (r.section ?? "").slice(0, 40);
-  // repeated cards (one per driver / vehicle): the label covers every card,
-  // the same way a dropdown picked on one card does
-  if (field && !section && (r.repeats ?? 0) > 1) {
-    return { key: `field:${field}`, label: `${r.fieldLabel!.replace(/^[*\s]+|[:*\s]+$/g, "")} (every card)` };
+  const shown = (r.fieldLabel ?? "").replace(/^[*\s]+|[:*\s]+$/g, "");
+  const kindOf = (s: string) => s.split(" ").pop() ?? "";
+  // repeated cards (one per driver: "Primary Insured", "Additional Driver"):
+  // the label on this page step covers every card, card order = row order,
+  // and each row finds its person by the name on that card. Sections of
+  // one kind ("Primary / Other Address") stay the section family below.
+  const sameKind = Boolean(section) && (r.repeatSections ?? []).every(s => s && kindOf(s) === kindOf(section));
+  if (field && (r.repeats ?? 0) > 1 && !sameKind) {
+    const page = (r.page ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 40);
+    return { key: `field:${page ? `${page}|` : ""}${field}`, label: `${shown} (every card)` };
   }
   if (!field || !section) return null;
   const kind = section.split(" ").pop()!;

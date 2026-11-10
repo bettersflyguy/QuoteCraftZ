@@ -215,6 +215,23 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inject]);
   const allRows = [...scan.rows, ...extraRows.filter(x => !scan.rows.some(r => r.key === x.key))];
+  // a control on repeated cards saved as ONE row of a list ("First Name"
+  // Row 1 on the Drivers page) becomes the every-card label mapping: each
+  // card is a row, matched to its person by the name on that card
+  useEffect(() => {
+    const moves = allRows.flatMap(r => {
+      if (r.key.startsWith("pick:") || r.key.startsWith("field:") || (r.repeats ?? 0) < 2) return [];
+      const slot = rowTargetOf(draft[r.key] ?? "");
+      const fam = slot ? familyKeyOf(r) : null;
+      return fam && slot && !(fam.key in draft) ? [{ from: r.key, fam, target: slot.arrayPath }] : [];
+    });
+    if (!moves.length) return;
+    setExtraRows(x => [...x, ...moves.filter(m => !allRows.some(r => r.key === m.fam.key))
+      .map(m => ({ key: m.fam.key, label: m.fam.label, type: "text", payment: false, autoPath: null, mapped: null }))]);
+    setDraft(d => ({ ...d, ...Object.fromEntries(moves.flatMap(m => [[m.from, ""], [m.fam.key, m.target]])) }));
+    moves.forEach(m => reveal(m.fam.key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scan.rows, extraRows.length]);
   // Only rows that mean something are listed: auto-matched, already mapped,
   // or picked/edited this session. Unknown page fields stay hidden until the
   // agent clicks them on the page - building a map beats scrolling a list

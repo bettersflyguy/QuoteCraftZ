@@ -103,6 +103,10 @@ export interface PortalScanRow {
   /** Picked controls: how many labelled fields on the page share its label
    * (2+ = repeated cards, e.g. one per driver). */
   repeats?: number;
+  /** Picked controls: the sub-section of each field sharing its label. */
+  repeatSections?: string[];
+  /** Picked controls: the page step ("drivers"), from the tab title. */
+  page?: string;
 }
 
 export interface PortalScanResult { origin: string; rows: PortalScanRow[] }

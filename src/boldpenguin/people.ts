@@ -150,7 +150,9 @@ export function alignPeople(held: NormalizedApplication | null, incoming: Captur
     if (target === null && p) {
       for (const [k, q] of roster) if (k > 1 && !assigned.has(k) && samePerson(p, q)) { target = k; break; }
     }
-    if (target === null) target = taken.has(s) || assigned.has(s) ? nextFree() : s;
+    // someone new takes the next free contact: no gaps when a card before
+    // them turned out to be the primary
+    if (target === null) target = nextFree();
     slotMap.set(s, target);
     if (target > 1) assigned.add(target);
   }

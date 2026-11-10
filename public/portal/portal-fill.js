@@ -621,6 +621,25 @@
     return { current, options };
   }
 
+  /* how many labelled fields on the page share a label (2+ = repeated
+   * cards, one per driver), the sub-section of each, and the page step
+   * ("Tracy Dittrich - Drivers" -> "drivers"): a list mapping on one card's
+   * control then covers every card, like a dropdown's label mapping */
+  function repeatInfo(label) {
+    const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container";
+    const repeatSections = [];
+    document.querySelectorAll(BOX).forEach((b) => {
+      if (b.parentElement && b.parentElement.closest(BOX)) return;
+      const lab = b.querySelector("label, mat-label, .k-label");
+      if (lab && norm(lab.textContent) && norm(lab.textContent) === norm(label)) {
+        repeatSections.push(mapper && mapper.sectionOf ? mapper.sectionOf(b).key : "");
+      }
+    });
+    const parts = String(document.title || "").split(" - ");
+    return { repeats: repeatSections.length, repeatSections, page: parts.length > 1 ? norm(parts[parts.length - 1]).slice(0, 40) : "" };
+  }
+
   /* mapping editor's view of this frame: every fillable control with its key,
    * visible label, what auto-matching would pick, and any saved mapping */
   function scanControls(payload, overrides) {
@@ -641,6 +660,7 @@
         key,
         label: inSection(element, primaryLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key,
         fieldLabel: primaryLabel(element) || "",
+        ...repeatInfo(primaryLabel(element) || ""),
         section: mapper && mapper.sectionOf ? mapper.sectionOf(element).key : "",
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
@@ -888,21 +908,14 @@
           var el = t.control;
           var name = fieldName(el) || "";
           var plain = primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id);
-          /* how many labelled fields on the page share this label: 2+ means
-           * repeated cards (each driver's "Defensive Driver Course Date"),
-           * so a list mapping covers every card, like a dropdown's does */
-          var norm = function (s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); };
-          var repeats = 0;
-          document.querySelectorAll("mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container").forEach(function (b) {
-            if (b.parentElement && b.parentElement.closest("mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container")) return;
-            var lab = b.querySelector("label, mat-label, .k-label");
-            if (lab && norm(lab.textContent) && norm(lab.textContent) === norm(plain)) repeats += 1;
-          });
+          var rep = repeatInfo(plain);
           finish({
             key: controlKey(el),
             label: inSection(el, plain) || controlKey(el),
             fieldLabel: plain,
-            repeats: repeats,
+            repeats: rep.repeats,
+            repeatSections: rep.repeatSections,
+            page: rep.page,
             section: mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "",
             scopes: mapper && mapper.scopesOf ? mapper.scopesOf(el) : [],
             type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
