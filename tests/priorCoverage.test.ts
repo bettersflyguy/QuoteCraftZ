@@ -10,6 +10,8 @@ vi.mock("@/crm/auth", () => ({
 
 import { priorCoverageColumns, priorCoveragesFromCapture } from "@/crm/appCommit";
 import { upsertPriorCoverage } from "@/crm/dataverse";
+import { isCrmTarget, isRoutablePath } from "@/portal/fieldMaps";
+import { CATALOG_ENTITIES } from "@/crm/fieldCatalog";
 import type { CapturedApplication } from "@/boldpenguin/types";
 
 const ENV = { id: "dev", name: "DEV", orgUrl: "https://org.crm.dynamics.com", color: "green" as const };
@@ -69,5 +71,27 @@ describe("prior coverage", () => {
     expect(again.outcome).toBe("filled");
     expect(calls.some(c => c.method === "POST")).toBe(false);
     expect(calls.find(c => c.method === "PATCH")?.body).toEqual({ iacrm_liabilitylimits: "100/300" });
+  });
+
+  it("Prior Coverage is a mapping target; mapped columns win, others ride along", () => {
+    expect(CATALOG_ENTITIES.find(e => e.key === "priorcoverage")).toMatchObject({ logical: "iacrm_priorcoverage", label: "Prior Coverage" });
+    expect(isCrmTarget("crm:priorcoverage.iacrm_expirationdate")).toBe(true);
+    expect(isRoutablePath("crm:priorcoverage.iacrm_expirationdate")).toBe(true);
+    const mapped = { ...app, fields: [
+      ...app.fields,
+      { label: "Prior Policy Expiration Date", value: "12/15/2019", section: "Prior Auto Policy", group: "", source: "control", mapped: "crm:priorcoverage.iacrm_expirationdate" },
+      { label: "Months", value: "18", section: "Prior Auto Policy", group: "", source: "control", mapped: "crm:priorcoverage.iacrm_monthswithcarrier" }
+    ] } as unknown as CapturedApplication;
+    const auto = priorCoveragesFromCapture(mapped)[0]!;
+    expect(auto.expirationDate).toBe("12/15/2019");
+    expect(auto.extra).toEqual({ iacrm_monthswithcarrier: "18" });
+  });
+
+  it("a mapped value on a page with no line joins the one prior policy held", () => {
+    const one = { ...app, fields: [
+      f("Prior Auto Policy", "Prior Carrier", "Travelers"),
+      { label: "Policy #", value: "TRV-1", section: "Details", group: "", source: "control", mapped: "crm:priorcoverage.iacrm_policynumber" }
+    ] } as unknown as CapturedApplication;
+    expect(priorCoveragesFromCapture(one).map(d => [d.line, d.policyNumber])).toEqual([["Auto", "TRV-1"]]);
   });
 });

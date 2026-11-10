@@ -867,7 +867,16 @@
      * a mix of both kinds of target stays row-aligned */
     "crm:contacts": { slot: "crm:contact", start: 2 }, "crm:policies": { slot: "crm:policy", start: 1 },
     /* row N = the insured's address number N (1 = Address 1 / primary) */
-    "crm:addresses": { slot: "crm:address", start: 1 }
+    "crm:addresses": { slot: "crm:address", start: 1 },
+    /* the insured's assets: row N = the Nth vehicle / boat / property... */
+    "crm:vehicles": { slot: "crm:vehicle", start: 1 }, "crm:watercraft": { slot: "crm:watercraft", start: 1 },
+    "crm:properties": { slot: "crm:property", start: 1 }, "crm:equipment": { slot: "crm:equipment", start: 1 },
+    "crm:scheduleditems": { slot: "crm:scheduleditem", start: 1 },
+    /* records on an asset: mortgagees / lienholders, a property's history */
+    "crm:additionalinterests": { slot: "crm:additionalinterest", start: 1 },
+    "crm:propertyrenovations": { slot: "crm:propertyrenovation", start: 1 },
+    "crm:propertylosses": { slot: "crm:propertyloss", start: 1 },
+    "crm:propertyparties": { slot: "crm:propertyparty", start: 1 }
   };
 
   /* An array teaching's selector points at ONE row's cell. The repeating axis
@@ -1052,6 +1061,10 @@
       /* identifier data never becomes a timeline note, by label OR by what
        * the text itself says ("SSN 123...", "Passport ...") */
       .filter((f) => !(f.mapped && /^note/.test(f.mapped) && (identifierField(f) || sensitiveLabel(f.value))));
+    /* a value mapped to Prior Coverage belongs to the line the page is
+     * headed by: "Prior Auto Policy" and "Prior Home Policy" stay apart */
+    const line = lineOfPage();
+    if (line) fields.forEach((f) => { if (f.mapped && /^crm:priorcoverage\./.test(f.mapped)) f.section = "Prior " + line + " Policy"; });
     return { fields, secure, title: document.title, url: location.href };
   };
 })();

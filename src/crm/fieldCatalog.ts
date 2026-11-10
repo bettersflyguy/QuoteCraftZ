@@ -5,7 +5,7 @@
  * class columns are excluded. The same catalog gates the commit: a captured
  * value is only ever written to a column present here, coerced to its type. */
 import { canonical, clean } from "@/boldpenguin/normalize";
-import { isSensitiveLabel } from "@/portal/fieldMaps";
+import { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, isSensitiveLabel } from "@/portal/fieldMaps";
 import { autoMatchOption } from "@/portal/optionMaps";
 import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
 import type { CrmEnvironment } from "./environments";
@@ -21,7 +21,7 @@ export interface CatalogColumn {
 
 export interface CatalogEntity {
   /** Target key used in mappings: "crm:<key>.<column>". */
-  key: "account" | "primarycontact" | "contacts" | "policies" | "addresses" | "quote" | "opportunity";
+  key: "account" | "primarycontact" | "contacts" | "policies" | "addresses" | "quote" | "opportunity" | "priorcoverage" | (typeof ASSET_TABLES)[number]["key"] | (typeof CHILD_TABLES)[number]["key"];
   logical: string;
   set: string;
   label: string;
@@ -49,7 +49,12 @@ export const CATALOG_ENTITIES: Omit<CatalogEntity, "columns">[] = [
    * the contact's Address 1-3 (Dataverse keeps them in sync), 4+ the rest */
   { key: "addresses", logical: "customeraddress", set: "customeraddresses", label: "Addresses (all rows)", array: true },
   { key: "quote", logical: "iacrm_quote", set: "iacrm_quotes", label: "Quote", array: false },
-  { key: "opportunity", logical: "opportunity", set: "opportunities", label: "Opportunity", array: false }
+  { key: "opportunity", logical: "opportunity", set: "opportunities", label: "Opportunity", array: false },
+  /* the insured's prior (incumbent) policy, one per line: the line comes
+   * from the page a value was mapped on ("Prior Auto Policy") */
+  { key: "priorcoverage", logical: "iacrm_priorcoverage", set: "iacrm_priorcoverages", label: "Prior Coverage", array: false },
+  // the insured's assets: one record per row (vehicles, boats, properties...)
+  ...ROW_TABLES.map(a => ({ key: a.key as CatalogEntity["key"], logical: a.logical, set: a.set, label: a.label, array: true }))
 ];
 
 const WRITABLE_TYPES = new Set(["String", "Memo", "Integer", "BigInt", "Decimal", "Double", "Money", "DateTime", "Boolean", "Picklist"]);
@@ -78,7 +83,7 @@ const DENY = new Set([
 
 /** Row-slot record name -> its array entity ("contact" -> "contacts"). */
 export function slotEntityKey(name: string): string | null {
-  return name === "contact" ? "contacts" : name === "policy" ? "policies" : name === "address" ? "addresses" : null;
+  return SLOT_ENTITY[name] ?? null;
 }
 /** Power Pages portal plumbing columns. */
 const DENY_PREFIX = /^(adx_|mspp_)/;
@@ -257,8 +262,8 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
 }
 
 // v2: entities carry their secured (pass-through) columns; v3: addresses;
-// v4: "Contacts (all rows)"
-const CACHE_PREFIX = "crm/fieldCatalog/v4/";
+// v4: "Contacts (all rows)"; v5: Prior Coverage; v6: assets; v7: asset children
+const CACHE_PREFIX = "crm/fieldCatalog/v7/";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 /** How many CRM columns the saved mappings (page sites and data services,

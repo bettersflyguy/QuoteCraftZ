@@ -1026,3 +1026,76 @@ export async function getCoverageRowIds(env: CrmEnvironment, quoteId: string): P
   const { value } = await dvJson<{ value: { iacrm_quotecoverageid: string }[] }>(env, q);
   return value.map(v => v.iacrm_quotecoverageid);
 }
+
+/** A display name for an asset record that has none mapped: "2019 Honda
+ * Civic", the property's street, the item's maker and model... */
+export function assetName(values: Record<string, unknown>, fallback: string): string {
+  const v = (k: string) => (typeof values[k] === "string" || typeof values[k] === "number" ? String(values[k]).trim() : "");
+  const parts = [v("iacrm_year"), v("iacrm_make"), v("iacrm_model")].filter(Boolean).join(" ") ||
+    v("iacrm_addressline1") || [v("iacrm_brandormaker"), v("iacrm_modelorstyle")].filter(Boolean).join(" ") ||
+    v("iacrm_description") || v("iacrm_vin") || v("iacrm_hullid") || v("iacrm_serialnumber");
+  return (parts || fallback).slice(0, 200);
+}
+
+/** One of the insured's assets (vehicle, watercraft, property, equipment,
+ * scheduled item): the same asset (by VIN / hull ID / street / serial, else
+ * name) on that insured is filled where empty, never duplicated; otherwise
+ * a new record on the insured. */
+export async function upsertAsset(
+  env: CrmEnvironment,
+  table: { set: string; logical: string; match: string; singular: string },
+  accountId: string,
+  values: Record<string, unknown>
+): Promise<{ outcome: "created" | "filled" | "unchanged"; id: string }> {
+  return upsertOwnedRecord(env, table, { column: "iacrm_accountid", id: accountId }, {
+    "iacrm_accountid@odata.bind": `/accounts(${accountId})`
+  }, values, table.singular);
+}
+
+/** A record hanging off an asset (additional interest, renovation, loss,
+ * party): the same named record under that parent is filled where empty,
+ * otherwise created under it. */
+export async function upsertChildRecord(
+  env: CrmEnvironment,
+  table: { set: string; logical: string; bind: string; parentSet: string; accountBind: boolean },
+  parentId: string,
+  accountId: string,
+  values: Record<string, unknown>,
+  fallbackName: string
+): Promise<{ outcome: "created" | "filled" | "unchanged"; id: string }> {
+  return upsertOwnedRecord(env, { ...table, match: "iacrm_name" }, { column: table.bind, id: parentId }, {
+    [`${table.bind}@odata.bind`]: `/${table.parentSet}(${parentId})`,
+    ...(table.accountBind ? { "iacrm_accountid@odata.bind": `/accounts(${accountId})` } : {})
+  }, values, fallbackName);
+}
+
+/** The insured item an asset's plug-in registered for it (where additional
+ * interests attach); null until it exists. */
+export async function insuredItemOf(env: CrmEnvironment, assetSet: string, assetId: string): Promise<string | null> {
+  const r = await dvJson<Record<string, string | null>>(env, `${assetSet}(${assetId})?$select=_iacrm_insureditemid_value`);
+  return r["_iacrm_insureditemid_value"] ?? null;
+}
+
+async function upsertOwnedRecord(
+  env: CrmEnvironment,
+  table: { set: string; logical: string; match: string },
+  owner: { column: string; id: string },
+  binds: Record<string, string>,
+  values: Record<string, unknown>,
+  fallbackName: string
+): Promise<{ outcome: "created" | "filled" | "unchanged"; id: string }> {
+  const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+  const row = { ...values };
+  if (!row["iacrm_name"]) row["iacrm_name"] = assetName(row, fallbackName);
+  const key = typeof row[table.match] === "string" && (row[table.match] as string).trim() ? table.match : "iacrm_name";
+  const idCol = `${table.logical}id`;
+  const filter = [`_${owner.column}_value eq ${owner.id}`, "statecode eq 0", `${key} eq ${q(String(row[key]))}`].join(" and ");
+  const { value } = await dvJson<{ value: Record<string, string>[] }>(env, `${table.set}?$select=${idCol}&$filter=${encodeURIComponent(filter)}&$top=1`);
+  const existing = value[0]?.[idCol];
+  if (existing) {
+    const written = await fillIfEmpty(env, table.set, existing, row);
+    return { outcome: written.length ? "filled" : "unchanged", id: existing };
+  }
+  const created = await dvPost<Record<string, string>>(env, `${table.set}?$select=${idCol}`, { ...row, ...binds });
+  return { outcome: "created", id: created[idCol]! };
+}

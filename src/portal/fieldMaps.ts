@@ -3,6 +3,8 @@
  * between business users' extensions. */
 
 import { COLUMN_KEY, sanitizeColumnMap, type OptionMaps } from "./optionMaps";
+import { ROW_TABLES } from "./assetTables";
+export { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, type AssetTable, type ChildTable } from "./assetTables";
 
 export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
 
@@ -79,7 +81,11 @@ export const ARRAY_ROW_MAX = 10;
 
 /** Per array: the slot prefix and the slot number of row 1 (related
  * contacts start at 2 because contact1 is the primary insured). */
+const ASSET_ARRAYS = ROW_TABLES.map(a => `${a.key}\\[\\]`).join("|");
+const ASSET_ROWS = ROW_TABLES.map(a => `${a.slot}(?:[1-9]|[1-3]\\d)`).join("|");
+
 const ROW_SLOTS: Record<string, { slot: string; start: number }> = {
+  ...Object.fromEntries(ROW_TABLES.map(a => [`crm:${a.key}`, { slot: `crm:${a.slot}`, start: 1 }])),
   contacts: { slot: "contact", start: 2 },
   vehicles: { slot: "vehicle", start: 1 },
   "crm:contacts": { slot: "crm:contact", start: 2 },
@@ -117,9 +123,9 @@ export function rowTargetOf(path: string): { arrayPath: string; row: number } | 
  * re-validates every column against the live catalog before writing. */
 /** Columns owned by the AMS sync - never written by extension features. */
 const AMS_OWNED = new Set(["iacrm_amsexternalid", "iacrm_synctoams", "iacrm_lastsyncon"]);
-const CRM_TARGET = /^crm:(account|primarycontact|quote|opportunity|contacts\[\]|policies\[\]|addresses\[\])\.([a-z][a-z0-9_]{0,99})$/;
+const CRM_TARGET = new RegExp(`^crm:(account|primarycontact|quote|opportunity|priorcoverage|contacts\\[\\]|policies\\[\\]|addresses\\[\\]|${ASSET_ARRAYS})\\.([a-z][a-z0-9_]{0,99})$`);
 /** Concrete per-row forms array teachings fan out into. */
-const CRM_ROUTABLE = /^crm:(account|primarycontact|quote|opportunity|contact(?:[2-9]|[1-3]\d)|policy(?:[1-9]|[1-3]\d)|address(?:[1-9]|[1-3]\d))\.([a-z][a-z0-9_]{0,99})$/;
+const CRM_ROUTABLE = new RegExp(`^crm:(account|primarycontact|quote|opportunity|priorcoverage|contact(?:[2-9]|[1-3]\\d)|policy(?:[1-9]|[1-3]\\d)|address(?:[1-9]|[1-3]\\d)|${ASSET_ROWS})\\.([a-z][a-z0-9_]{0,99})$`);
 
 /** Identifier-class CRM columns (SSN, government ID, driver's license
  * NUMBERS - "iacrm_driverslicense" too): secured pass-through only, never a

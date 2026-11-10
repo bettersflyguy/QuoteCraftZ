@@ -500,21 +500,41 @@ export function noteOutcomeText(outcome: "created" | "updated" | "unchanged"): s
 export interface PriorCoverageDraft {
   line: string; carrier: string; policyNumber: string; effectiveDate: string; expirationDate: string;
   term: string; premium: string; liabilityLimits: string; yearsWithCarrier: string; yearsContinuous: string;
+  /** Prior Coverage columns the agent mapped directly (no draft slot). */
+  extra: Record<string, string>;
 }
+
+/** Prior Coverage columns that ARE a draft slot (names, carrier match,
+ * dates and term keep their handling when mapped directly). */
+const PRIOR_SLOT: Record<string, Exclude<keyof PriorCoverageDraft, "line" | "extra">> = {
+  iacrm_priorcarriername: "carrier", iacrm_policynumber: "policyNumber", iacrm_effectivedate: "effectiveDate",
+  iacrm_expirationdate: "expirationDate", iacrm_policyterm: "term", iacrm_premium: "premium",
+  iacrm_liabilitylimits: "liabilityLimits", iacrm_yearswithpriorcarrier: "yearsWithCarrier",
+  iacrm_yearscontinuouscoverage: "yearsContinuous"
+};
 
 export function priorCoveragesFromCapture(app: CapturedApplication): PriorCoverageDraft[] {
   const byLine = new Map<string, PriorCoverageDraft>();
+  const draft = (line: string) => byLine.get(line) ?? byLine.set(line, {
+    line, carrier: "", policyNumber: "", effectiveDate: "", expirationDate: "", term: "", premium: "",
+    liabilityLimits: "", yearsWithCarrier: "", yearsContinuous: "", extra: {}
+  }).get(line)!;
+  // values mapped straight to a Prior Coverage column on a page without a line
+  const unlined: { column: string; value: string }[] = [];
   for (const f of app.fields) {
     const m = /^prior (.{1,30}) policy$/i.exec(f.section ?? "");
     const value = clean(f.value);
-    if (!m || !value) continue;
-    const line = m[1]!;
-    const d = byLine.get(line) ?? byLine.set(line, {
-      line, carrier: "", policyNumber: "", effectiveDate: "", expirationDate: "", term: "", premium: "",
-      liabilityLimits: "", yearsWithCarrier: "", yearsContinuous: ""
-    }).get(line)!;
+    if (!value) continue;
+    const col = /^crm:priorcoverage\.([a-z0-9_]+)$/.exec(f.mapped ?? "")?.[1];
+    if (col) {
+      if (m) putColumn(draft(m[1]!), col, value);
+      else unlined.push({ column: col, value });
+      continue;
+    }
+    if (!m) continue;
+    const d = draft(m[1]!);
     const l = f.label.toLowerCase();
-    const set = (k: keyof PriorCoverageDraft) => { if (!d[k]) d[k] = value; };
+    const set = (k: Exclude<keyof PriorCoverageDraft, "line" | "extra">) => { if (!d[k]) d[k] = value; };
     if (/continuous coverage/.test(l)) set("yearsContinuous");
     else if (/years with (prior |current )?(carrier|insurer)/.test(l)) set("yearsWithCarrier");
     else if (/carrier|insurer|company/.test(l)) set("carrier");
@@ -525,7 +545,18 @@ export function priorCoveragesFromCapture(app: CapturedApplication): PriorCovera
     else if (/premium/.test(l)) set("premium");
     else if (/limit/.test(l)) set("liabilityLimits");
   }
-  return [...byLine.values()].filter(d => d.carrier || d.expirationDate || d.policyNumber);
+  // no line on the page: the one prior policy held, else its own record
+  if (unlined.length) {
+    const target = byLine.size === 1 ? [...byLine.values()][0]! : draft("");
+    for (const u of unlined) putColumn(target, u.column, u.value);
+  }
+  return [...byLine.values()].filter(d => d.carrier || d.expirationDate || d.policyNumber || Object.keys(d.extra).length);
+}
+/** A directly mapped column wins over what the label suggested. */
+function putColumn(d: PriorCoverageDraft, column: string, value: string): void {
+  const slot = PRIOR_SLOT[column];
+  if (slot) d[slot] = value;
+  else d.extra[column] = value;
 }
 
 /** A prior coverage as CRM Prior Coverage columns (dates ISO, premium a
@@ -534,7 +565,7 @@ export function priorCoverageColumns(d: PriorCoverageDraft, source: string): Rec
   const iso = (v: string) => toIsoDate(v || null) ?? undefined;
   const term = /\b6\b/.test(d.term) ? 298400000 : /\b12\b/.test(d.term) ? 298400001 : d.term ? 298400002 : undefined;
   const out: Record<string, unknown> = {
-    iacrm_name: `Prior ${d.line} Policy${d.carrier ? ` - ${d.carrier}` : ""}`.slice(0, 200),
+    iacrm_name: `Prior ${d.line ? `${d.line} ` : ""}Policy${d.carrier ? ` - ${d.carrier}` : ""}`.slice(0, 200),
     iacrm_priorcarriername: d.carrier.slice(0, 200) || undefined,
     iacrm_policynumber: d.policyNumber.slice(0, 100) || undefined,
     iacrm_effectivedate: iso(d.effectiveDate),
@@ -779,3 +810,9 @@ export async function writeApplicationKnowledge(
   return upsertKnowledge(env, accountId, questions, answers, api);
 }
 
+
+/** The page sections a mapped row's values came from ("crm:vehicle2" ->
+ * {"Vehicles"}): records on an asset attach to the asset from the same page. */
+export function rowSections(app: CapturedApplication, row: string): Set<string> {
+  return new Set(app.fields.filter(f => f.mapped?.startsWith(`${row}.`) && f.section).map(f => f.section));
+}

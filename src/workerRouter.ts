@@ -20,7 +20,7 @@ import { buildQuoteOps } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
-import { getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, noteLabelOf, rowTargetOf, securedIfIdentifier } from "@/portal/fieldMaps";
+import { ASSET_TABLES, CHILD_TABLES, getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, noteLabelOf, rowTargetOf, securedIfIdentifier } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
   getCoverageRowIds,
@@ -39,7 +39,7 @@ import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { slotOf, withSlot } from "@/boldpenguin/people";
 import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
-import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertPriorCoverage, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
+import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAsset, upsertChildRecord, insuredItemOf, upsertPriorCoverage, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
 import { buildFillValues } from "@/portal/fillValues";
@@ -85,6 +85,9 @@ export interface Deps {
   fillIfEmpty: typeof fillIfEmpty;
   upsertRecordAddress: typeof upsertRecordAddress;
   upsertPriorCoverage: typeof upsertPriorCoverage;
+  upsertAsset: typeof upsertAsset;
+  upsertChildRecord: typeof upsertChildRecord;
+  insuredItemOf: typeof insuredItemOf;
   upsertRecordNote: typeof upsertRecordNote;
   /** Live CRM column catalog for capture mappings (cached per environment). */
   getFieldCatalog: (env: CrmEnvironment, refresh?: boolean) => Promise<FieldCatalog>;
@@ -505,9 +508,36 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         };
       }
 
+      case "panel/upsertAsset": {
+        const table = ASSET_TABLES.find(a => a.key === msg.asset);
+        if (!table) return { ok: false, error: `Unknown asset table: ${msg.asset}`, kind: "unknown" };
+        const env = await deps.getActiveEnvironment();
+        // only columns the live catalog lists, coerced to their CRM types
+        const values = await coercedExtras(deps, env, table.key, msg.values);
+        if (!Object.keys(values).length) return { ok: true, data: { outcome: "unchanged", id: "" } };
+        return { ok: true, data: await deps.upsertAsset(env, table, msg.accountId, values) };
+      }
+
+      case "panel/upsertChild": {
+        const table = CHILD_TABLES.find(c => c.key === msg.child);
+        const parentTable = ASSET_TABLES.find(a => a.key === msg.parent.asset);
+        if (!table || !parentTable) return { ok: false, error: `Unknown record type: ${msg.child}`, kind: "unknown" };
+        const env = await deps.getActiveEnvironment();
+        const values = await coercedExtras(deps, env, table.key, msg.values);
+        if (!Object.keys(values).length) return { ok: true, data: { outcome: "unchanged", id: "" } };
+        // additional interests attach to the asset's insured item
+        const parentId = table.parent === "asset" ? await deps.insuredItemOf(env, parentTable.set, msg.parent.id) : msg.parent.id;
+        if (!parentId) return { ok: false, error: `The ${parentTable.singular.toLowerCase()} has no insured item yet. Load again in a minute.`, kind: "unknown" };
+        return { ok: true, data: await deps.upsertChildRecord(env, table, parentId, msg.accountId, values, msg.fallbackName) };
+      }
+
       case "panel/upsertPriorCoverage": {
         const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.upsertPriorCoverage(env, { accountId: msg.accountId, opportunityId: msg.opportunityId, lobId: msg.lobId, carrierId: msg.carrierId, values: msg.values }) };
+        // columns mapped straight to Prior Coverage ride along, coerced to
+        // their CRM types; a value the CRM refuses never blocks the record
+        const extra = await coercedExtras(deps, env, "priorcoverage", msg.extra);
+        const ids = { accountId: msg.accountId, opportunityId: msg.opportunityId, lobId: msg.lobId, carrierId: msg.carrierId };
+        return { ok: true, data: await withExtrasFallback(extra, x => deps.upsertPriorCoverage(env, { ...ids, values: { ...msg.values, ...x } })) };
       }
 
       case "panel/upsertNote": {
@@ -1627,6 +1657,9 @@ export const realDeps: Deps = {
   fillIfEmpty,
   upsertRecordAddress,
   upsertPriorCoverage,
+  upsertAsset,
+  upsertChildRecord,
+  insuredItemOf,
   upsertRecordNote,
   getFieldCatalog: (env, refresh) => getFieldCatalog(env, { dvJson }, refresh),
   dvQuery: dvJson,

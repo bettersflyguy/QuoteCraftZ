@@ -6,7 +6,8 @@ import type { CapturedApplication } from "@/messages";
 import type { AccountMatch, BatchItemResult, CarrierRow, ExistingMatch, LobRow, OppSummary, PipelineStages, UserRow } from "@/crm/dataverse";
 import type { CapturedApplicant } from "@/types";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { accountAddressColumns, addressChoices, otherLine, priorCoverageColumns, priorCoveragesFromCapture, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { accountAddressColumns, addressChoices, otherLine, priorCoverageColumns, priorCoveragesFromCapture, rowSections, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
+import { ARRAY_ROW_MAX, ASSET_TABLES, CHILD_TABLES } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: {
@@ -406,18 +407,63 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         const carrierList = carriers ?? await send<CarrierRow[]>({ type: "panel/getCarriers" }).catch(() => [] as CarrierRow[]);
         const near = (a: string, b: string) => { const x = a.toLowerCase().trim(), y = b.toLowerCase().trim(); return Boolean(x && y && (x === y || x.includes(y) || y.includes(x))); };
         for (const pc of priors) {
-          const oppId = [...oppLine.entries()].find(([, lob]) => !otherLine(`Prior ${pc.line} Policy`, lob))?.[0] ??
-            (oppLine.size === 0 && createdOppId ? createdOppId : null);
+          // a prior policy with no line attaches only where there's no doubt
+          const oppId = pc.line
+            ? [...oppLine.entries()].find(([, lob]) => !otherLine(`Prior ${pc.line} Policy`, lob))?.[0] ?? (oppLine.size === 0 && createdOppId ? createdOppId : null)
+            : oppLine.size === 1 ? [...oppLine.keys()][0]! : oppLine.size === 0 ? createdOppId ?? null : null;
           const lobId = lobList.find(l => near(l.name, pc.line))?.lobId ?? null;
           const carrierId = pc.carrier ? carrierList.find(c => near(c.name, pc.carrier))?.carrierId ?? null : null;
           try {
             const r = await send<{ outcome: "created" | "filled" | "unchanged" }>({
               type: "panel/upsertPriorCoverage", accountId, opportunityId: oppId, lobId, carrierId,
-              values: priorCoverageColumns(pc, app.source.system)
+              values: priorCoverageColumns(pc, app.source.system), extra: pc.extra
             });
-            rows.push({ key: `Prior ${pc.line} Policy: ${r.outcome === "created" ? "added to Prior Coverage" : r.outcome === "filled" ? "Prior Coverage updated" : "already in Prior Coverage"}`, status: 204, error: null, entityId: null });
+            rows.push({ key: `Prior ${pc.line ? `${pc.line} ` : ""}Policy: ${r.outcome === "created" ? "added to Prior Coverage" : r.outcome === "filled" ? "Prior Coverage updated" : "already in Prior Coverage"}`, status: 204, error: null, entityId: null });
           } catch (e) {
-            rows.push({ key: `Prior ${pc.line} Policy`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+            rows.push({ key: `Prior ${pc.line ? `${pc.line} ` : ""}Policy`, status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
+        }
+      }
+      // the insured's assets: each mapped row (Vehicle 1, Watercraft 2,
+      // Property 1...) becomes its own record on the insured
+      const outcomeText = (o: string) => o === "created" ? "added" : o === "filled" ? "updated" : "already in CRM";
+      const loadedAssets: { asset: string; id: string; sections: Set<string> }[] = [];
+      for (const asset of ASSET_TABLES) {
+        for (let n = 1; n <= ARRAY_ROW_MAX; n += 1) {
+          const values = crmGroup(app, `crm:${asset.slot}${n}`);
+          if (!values) continue;
+          const label = `${asset.singular} ${n}`;
+          try {
+            const r = await send<{ outcome: string; id: string }>({ type: "panel/upsertAsset", asset: asset.key, accountId, values });
+            if (r.id) loadedAssets.push({ asset: asset.key, id: r.id, sections: rowSections(app, `crm:${asset.slot}${n}`) });
+            rows.push({ key: `${label}: ${outcomeText(r.outcome)}`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            rows.push({ key: label, status: 0, error: String((e as Error).message ?? e), entityId: null });
+          }
+        }
+      }
+      // records on an asset (lienholder, mortgagee, a property's renovations,
+      // losses, parties) attach to the asset mapped on the same page, or the
+      // only one this load wrote
+      for (const child of CHILD_TABLES) {
+        for (let n = 1; n <= ARRAY_ROW_MAX; n += 1) {
+          const values = crmGroup(app, `crm:${child.slot}${n}`);
+          if (!values) continue;
+          const label = `${child.singular} ${n}`;
+          const options = loadedAssets.filter(a => child.parent === "asset" || a.asset === child.parent);
+          const own = rowSections(app, `crm:${child.slot}${n}`);
+          const same = options.filter(a => [...own].some(s => a.sections.has(s)));
+          const parent = same.length === 1 ? same[0] : options.length === 1 ? options[0] : undefined;
+          const kind = child.parent === "asset" ? "vehicle, boat or property" : "property";
+          if (!parent) {
+            rows.push({ key: label, status: 0, error: options.length ? `More than one ${kind} in this load; map it on that ${kind}'s page.` : `No ${kind} in this load to attach it to.`, entityId: null });
+            continue;
+          }
+          try {
+            const r = await send<{ outcome: string }>({ type: "panel/upsertChild", child: child.key, accountId, parent: { asset: parent.asset, id: parent.id }, values, fallbackName: label });
+            rows.push({ key: `${label}: ${outcomeText(r.outcome)}`, status: 204, error: null, entityId: null });
+          } catch (e) {
+            rows.push({ key: label, status: 0, error: String((e as Error).message ?? e), entityId: null });
           }
         }
       }

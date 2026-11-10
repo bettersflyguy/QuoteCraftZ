@@ -7,6 +7,7 @@
  * site words its options differently; keyed per CRM COLUMN ("contact.
  * educationcode"), so every row of a list shares one mapping. */
 import { canonical } from "@/boldpenguin/normalize";
+import { ROW_TABLES, SLOT_ENTITY } from "./assetTables";
 
 export const OPTIONMAP_STORAGE_KEY = "portal/optionMap";
 
@@ -19,8 +20,9 @@ export const dataServiceScope = (name: string): string => `dataservice:${name}`;
 
 const ENTITY_TABLE: Record<string, string> = {
   account: "account", primarycontact: "contact", contacts: "contact", contact: "contact",
-  policies: "iacrm_policy", policy: "iacrm_policy", quote: "iacrm_quote", opportunity: "opportunity",
-  addresses: "customeraddress", address: "customeraddress"
+  policies: "iacrm_policy", policy: "iacrm_policy", quote: "iacrm_quote", opportunity: "opportunity", priorcoverage: "iacrm_priorcoverage",
+  addresses: "customeraddress", address: "customeraddress",
+  ...Object.fromEntries(ROW_TABLES.flatMap(a => [[a.key, a.logical], [a.slot, a.logical]]))
 };
 
 /** "crm:contact3.educationcode" / "crm:contacts[].educationcode" /
@@ -35,7 +37,7 @@ export function columnKeyOf(target: string): string | null {
 export function entityKeyOf(target: string): string | null {
   const m = /^crm:([a-z]+?)(\d*)(?:\[\])?\./.exec(target);
   if (!m) return null;
-  if (m[2]) return m[1] === "contact" ? "contacts" : m[1] === "policy" ? "policies" : m[1] === "address" ? "addresses" : null;
+  if (m[2]) return SLOT_ENTITY[m[1]!] ?? null;
   return m[1]!;
 }
 
