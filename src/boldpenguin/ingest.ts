@@ -139,10 +139,15 @@ export function mergeIngestedFields(
   if (identityConflict(existing.normalized, incomingNormalized)) return fresh(true);
 
   // a capture held from before identifiers were refused gives them up too
-  const kept = withoutIdentifiers(existing.fields, secured);
-  const known = new Set(kept.map(fieldKey));
+  // a field read again (same section, row and label) takes the page's
+  // current value: the old one is replaced, never kept beside it
+  const slot = (f: CapturedAppField) => [f.section, f.group, canonical(f.label)].join("|");
+  const reread = new Set(incoming.map(slot));
+  const held = withoutIdentifiers(existing.fields, secured);
+  const known = new Set(held.map(fieldKey));
+  const now = new Set(incoming.map(fieldKey));
   const added = incoming.filter(field => !known.has(fieldKey(field)));
-  const fields = [...kept, ...added];
+  const fields = [...held.filter(f => !reread.has(slot(f)) || now.has(fieldKey(f))), ...added];
   const app: CapturedApplication = {
     ...existing,
     capturedAt: new Date().toISOString(),

@@ -12,7 +12,7 @@ import { QuotesView } from "../QuotesView";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { isGridRow } from "@/boldpenguin/normalize";
-import { isNoteTarget, isPrimaryTarget, noteLabelOf } from "@/portal/fieldMaps";
+import { PATH_LABEL, isNoteTarget, isPrimaryTarget, noteLabelOf } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -101,6 +101,18 @@ function gridTables(fields: CapturedApplication["fields"]): GridTable[] {
     : { title, columns: t.columns, rows: [...t.rows.values()] });
 }
 const PRIMARY_COLUMN = "Primary";
+
+/** A policy page's table ("Opportunity Policy - Auto", "Prior Auto Policy"):
+ * every value from it shows together, wherever it is mapped to. */
+const isPolicySection = (section: string | undefined): boolean =>
+  /^opportunity policy - /i.test(section ?? "") || /^prior .{1,30} policy$/i.test(section ?? "");
+/** Where a captured value goes, in words. */
+function targetText(mapped: string | undefined): string {
+  if (!mapped) return "";
+  if (isNoteTarget(mapped)) return noteLabelOf(mapped);
+  const m = /^crm:([a-z]+)\d*\.(.+)$/.exec(mapped);
+  return PATH_LABEL.get(mapped) ?? (m ? `CRM ${m[1]}: ${m[2]}` : mapped);
+}
 
 /** Icon-only action with its description as the hover tooltip. Disabled
  * actions stay hoverable so the tooltip still says why/what. */
@@ -315,8 +327,9 @@ export function PortalFill({ onChanged, onFlowActive }: {
 
   const name = businessName(app);
   // values tagged for a timeline note show apart from the regular capture
-  const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped)) : [];
-  const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped)) : [];
+  const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
+  const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
+  const policyFields = app ? app.fields.filter(f => isPolicySection(f.section)) : [];
   const renderGrid = (t: GridTable) => (
     <div key={t.title}>
       {t.label === "Fields" && <div className={styles.gridTitle}>{t.title}</div>}
@@ -480,6 +493,12 @@ export function PortalFill({ onChanged, onFlowActive }: {
         </div>
       )}
       {app && view === "data" && gridTables(regular).map(renderGrid)}
+      {app && view === "data" && [...new Set(policyFields.map(f => f.section))].map(sec => renderGrid({
+        title: sec, label: "Fields", columns: ["Field", "Value", "Goes to"],
+        rows: policyFields.filter(f => f.section === sec).map(f => ({
+          Field: f.group ? `${f.label} (${f.group})` : f.label, Value: usDate(f.value), "Goes to": targetText(f.mapped)
+        }))
+      }))}
       {app && view === "data" && secureHeld.length > 0 && (
         <div>
           <div className={styles.gridTitle} title="Held in memory for this session only. Written to the secured CRM columns on load; never exported or noted.">

@@ -489,6 +489,27 @@
     return lab ? stripMarks(text(lab)) : "";
   }
 
+  /* A label that repeats NEXT TO different one-off fields ("Years with
+   * Prior Carrier" + "Month", "Years with Continuous Coverage" + "Month") is
+   * part of each of those fields, not rows of a table: each element's
+   * labelled field just before it, or null when these are repeated cards
+   * (driver / vehicle cards repeat every label, so their neighbours do too). */
+  function companionLabels(els, own) {
+    const boxes = Array.from(document.querySelectorAll(FORM_FIELD)).filter((b) => isVisible(b) && !(b.parentElement && b.parentElement.closest(FORM_FIELD)));
+    const out = els.map((el) => {
+      let best = "";
+      for (const b of boxes) {
+        if (b === el || b.contains(el) || el.contains(b)) continue;
+        if (!(b.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) break;
+        const t = fieldLabelText(b);
+        if (t && labelKey(t) !== labelKey(own)) best = t;
+      }
+      return best;
+    });
+    const once = (t) => t && boxes.filter((b) => labelKey(fieldLabelText(b)) === labelKey(t)).length === 1;
+    return out.every(once) && new Set(out.map(labelKey)).size === out.length ? out : null;
+  }
+
   /* rows in page order, renumbered 1..n so columns from different fields
    * of the same cards line up */
   function inPageOrder(els) {
@@ -614,6 +635,19 @@
     byKey.forEach((group) => {
       if (group.length < 2) return;
       const ordered = inPageOrder(group.map((g) => g.control));
+      /* one-off pairs ("Years with Prior Carrier" + its "Month"): each value
+       * is part of its own field, not a table row */
+      const boxesOf = ordered.map((c) => (c.closest ? c.closest(FORM_FIELD) : null) || c);
+      const pair = /\[\]/.test(group[0].field.mapped || "") ? null : companionLabels(boxesOf, group[0].field.label);
+      if (pair) {
+        ordered.forEach((control, i) => {
+          const g = group.find((x) => x.control === control);
+          const named = pair[i] + " (" + (fieldLabelOf(control) || g.field.label) + ")";
+          g.field.label = named;
+          g.field.section = sectionOf(control).text || sectionFor(named) || g.field.section;
+        });
+        return;
+      }
       const title = stepTable(repeatTitle(ordered) || pageTitle());
       ordered.forEach((control, i) => {
         const g = group.find((x) => x.control === control);
@@ -935,6 +969,14 @@
     const multi = els.length > 1;
     const own = sectionOf(els[0]).text;
     if (NOTE_PATH.test(path)) {
+      const pair = multi && !/\[\]/.test(path) ? companionLabels(els, label) : null;
+      if (pair) {
+        values.forEach((value, i) => {
+          const named = pair[i] + " (" + label + ")";
+          if (value) out.push({ label: named, value, section: sectionOf(els[i]).text || sectionFor(named) || "Notes", group: "", source: "taught", mapped: path });
+        });
+        return;
+      }
       const section = multi ? stepTitle() : own || sectionFor(label) || "Notes";
       values.forEach((value, i) => { if (value) out.push({ label, value, section, group: multi ? "Row " + (i + 1) : "", source: "taught", mapped: noteRow(path, i) }); });
       return;

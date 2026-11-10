@@ -134,6 +134,26 @@ describe("section-scoped field keys", () => {
     document.title = "";
   });
 
+  it("a one-off 'Month' belongs to the field before it; repeated cards stay rows", () => {
+    document.title = "Tracy Dittrich - Policy Info";
+    document.body.innerHTML = `<header><h1>Auto</h1></header><main>${field("Years with Prior Carrier", "yp", "yp", "5")}${field("Month", "m1", "m1", "0")}${field("Years with Continuous Coverage", "yc", "yc", "More than 15")}${field("Month", "m2", "m2", "11")}${field("Quote as Package", "qp", "qp", "Yes")}</main>`;
+    const r = g.__bettersPortalIngest!([
+      { byLabel: "month", page: "policy info", label: "", path: "note" },
+      { byLabel: "quote as package", page: "policy info", label: "", path: "note" }
+    ], {}) as { fields: { label: string; value: string; section: string; group: string; mapped?: string }[] };
+    expect(r.fields.filter(f => f.mapped).map(f => [f.section, f.label, f.value, f.group])).toEqual([
+      ["Prior Auto Policy", "Years with Prior Carrier (Month)", "0", ""],
+      ["Prior Auto Policy", "Years with Continuous Coverage (Month)", "11", ""],
+      ["Opportunity Policy - Auto", "Quote as Package", "Yes", ""]
+    ]);
+
+    document.title = "Tracy Dittrich - Drivers";
+    document.body.innerHTML = `<header><h1>Auto</h1></header><main>${field("First Name", "f1", "f1", "Tracy")}${field("Last Name", "l1", "l1", "Dittrich")}${field("First Name", "f2", "f2", "Jake")}${field("Last Name", "l2", "l2", "Dittrich")}</main>`;
+    const d = g.__bettersPortalIngest!([{ byLabel: "first name", page: "drivers", label: "", path: "note" }], {}) as { fields: { label: string; value: string; group: string; mapped?: string }[] };
+    expect(d.fields.filter(f => f.mapped).map(f => [f.label, f.value, f.group])).toEqual([["First Name", "Tracy", "Row 1"], ["First Name", "Jake", "Row 2"]]);
+    document.title = "";
+  });
+
   it("a heading that is not a line of business never names a policy", () => {
     document.title = "Quote - Applicant";
     document.body.innerHTML = `<header><h1>Get a Quote</h1></header><main>${field("Prior Carrier", "pc2", "pc", "Travelers")}</main>`;
