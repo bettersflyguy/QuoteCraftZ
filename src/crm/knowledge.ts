@@ -169,3 +169,61 @@ export async function writeQuestionKnowledge(
 
   return upsertKnowledge(env, accountId, questions, answers, api);
 }
+
+export interface LinkAnswersResult {
+  linked: number;
+  /** "no-column": the riskanswer -> insured item lookup isn't in CRM */
+  skipped: "no-tables" | "no-column" | null;
+}
+
+/** Points the account's risk answers captured from one asset row at that
+ * asset's insured item (the optional iacrm_insureditemid lookup). Answers
+ * already pointing there are left alone; nothing else is touched. */
+export async function linkAnswersToInsuredItem(
+  env: CrmEnvironment,
+  accountId: string,
+  questionKeys: string[],
+  insuredItemId: string,
+  api: KnowledgeApi
+): Promise<LinkAnswersResult> {
+  const navs = await api.getKnowledgeNavProps(env);
+  if (!navs) return { linked: 0, skipped: "no-tables" };
+  if (!navs.insuredItemNav) return { linked: 0, skipped: "no-column" };
+  if (!questionKeys.length) return { linked: 0, skipped: null };
+  const qLogical = navs.questionNav.toLowerCase();
+  const aLogical = navs.accountNav.toLowerCase();
+  const iLogical = navs.insuredItemNav.toLowerCase();
+
+  // the dictionary rows behind these keys
+  const questionIds: string[] = [];
+  for (let i = 0; i < questionKeys.length; i += 20) {
+    const filter = questionKeys.slice(i, i + 20).map(k => `iacrm_questionid eq '${esc(k)}'`).join(" or ");
+    const { value } = await api.query<{ value: Record<string, string>[] }>(
+      env, `iacrm_carrierquestions?$select=iacrm_carrierquestionid&$filter=${filter}`
+    );
+    questionIds.push(...value.map(r => r["iacrm_carrierquestionid"]!));
+  }
+  if (!questionIds.length) return { linked: 0, skipped: null };
+
+  // this account's answers to them
+  const answers: Record<string, string | null>[] = [];
+  for (let i = 0; i < questionIds.length; i += 20) {
+    const ors = questionIds.slice(i, i + 20).map(id => `_${qLogical}_value eq ${id}`).join(" or ");
+    const { value } = await api.query<{ value: Record<string, string | null>[] }>(
+      env, `iacrm_riskanswers?$select=iacrm_riskanswerid,_${iLogical}_value&$filter=_${aLogical}_value eq ${accountId} and (${ors})`
+    );
+    answers.push(...value);
+  }
+  const ops = answers
+    .filter(a => (a[`_${iLogical}_value`] ?? "").toLowerCase() !== insuredItemId.toLowerCase())
+    .map((a, n) => ({
+      key: `link:${n}`, method: "PATCH" as const, url: `iacrm_riskanswers(${a["iacrm_riskanswerid"]})`,
+      body: { [`${navs.insuredItemNav}@odata.bind`]: `/iacrm_insureditems(${insuredItemId})` }
+    }));
+  if (ops.length) {
+    const results = await api.executeBatch(env, ops);
+    const failed = results.filter(r => r.error != null);
+    if (failed.length) throw new Error(`${failed.length} answer link(s) failed: ${failed[0]!.error}`);
+  }
+  return { linked: ops.length, skipped: null };
+}

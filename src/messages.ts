@@ -54,6 +54,7 @@ export type PanelRequest =
   | { type: "panel/crmFieldCatalog"; refresh?: boolean }
   /** Writes a "Non Mapped Timeline Entries" note on a record the panel created. */
   | { type: "panel/upsertAsset"; asset: string; accountId: string; values: Record<string, string> }
+  | { type: "panel/linkRiskAnswers"; accountId: string; items: { asset: string; id: string; row: string }[] }
   | { type: "panel/upsertChild"; child: string; accountId: string; parent: { asset: string; id: string }; values: Record<string, string>; fallbackName: string }
   | { type: "panel/upsertPriorCoverage"; accountId: string; opportunityId: string | null; lobId: string | null; carrierId: string | null; values: Record<string, unknown>; extra?: Record<string, string> }
   | { type: "panel/upsertNote"; record: "account" | "contact" | "opportunity" | "quote" | "policy"; id: string; subject: string; html: string }

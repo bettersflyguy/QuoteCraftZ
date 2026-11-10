@@ -625,17 +625,32 @@
    * cards, one per driver), the sub-section of each, and the page step
    * ("Tracy Dittrich - Drivers" -> "drivers"): a list mapping on one card's
    * control then covers every card, like a dropdown's label mapping */
-  function repeatInfo(label) {
+  function repeatInfo(label, element) {
     const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container";
-    const repeatSections = [];
+    const sectionKey = (el) => (mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "");
+    /* the box's own visible label too: a box's accessible name ("Applicant
+     * first name") can differ from the label every card shows */
+    const ownBox = element && element.closest ? element.closest(BOX) : null;
+    /* the ingester's box label also finds a question written above the box */
+    const boxText = (b) => {
+      const viaIngest = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(b) : "";
+      const lab = b.querySelector("label, mat-label, .k-label");
+      return norm(viaIngest || (lab ? lab.textContent : ""));
+    };
+    const names = [norm(label), ownBox ? boxText(ownBox) : ""].filter(Boolean);
+    let repeatSections = [];
     document.querySelectorAll(BOX).forEach((b) => {
       if (b.parentElement && b.parentElement.closest(BOX)) return;
-      const lab = b.querySelector("label, mat-label, .k-label");
-      if (lab && norm(lab.textContent) && norm(lab.textContent) === norm(label)) {
-        repeatSections.push(mapper && mapper.sectionOf ? mapper.sectionOf(b).key : "");
-      }
+      const t = boxText(b);
+      if (t && names.indexOf(t) >= 0) repeatSections.push(sectionKey(b));
     });
+    /* boxes sharing this control's key are the same field on every card */
+    if (element) {
+      const key = controlKey(element);
+      const twins = pageControls(activeModal() || document).filter((c) => c === element || controlKey(c) === key);
+      if (twins.length > repeatSections.length) repeatSections = twins.map(sectionKey);
+    }
     const parts = String(document.title || "").split(" - ");
     return { repeats: repeatSections.length, repeatSections, page: parts.length > 1 ? norm(parts[parts.length - 1]).slice(0, 40) : "" };
   }
@@ -660,7 +675,7 @@
         key,
         label: inSection(element, primaryLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key,
         fieldLabel: primaryLabel(element) || "",
-        ...repeatInfo(primaryLabel(element) || ""),
+        ...repeatInfo(primaryLabel(element) || "", element),
         section: mapper && mapper.sectionOf ? mapper.sectionOf(element).key : "",
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
@@ -908,7 +923,7 @@
           var el = t.control;
           var name = fieldName(el) || "";
           var plain = primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id);
-          var rep = repeatInfo(plain);
+          var rep = repeatInfo(plain, el);
           finish({
             key: controlKey(el),
             label: inSection(el, plain) || controlKey(el),

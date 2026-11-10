@@ -6,7 +6,7 @@ import {
   searchAccounts,
   getOpenOpportunities,
   getCarriers,
-  getExistingQuoteStatuses,
+  findExistingQuotes,
   getQuotingMethodId,
   createQuotingMethod,
   searchUsers,
@@ -16,10 +16,10 @@ import {
   getStagesForLob,
   executeBatch
 } from "@/crm/dataverse";
-import { buildQuoteOps } from "@/crm/mapping";
+import { buildQuoteOps, quoteLookups } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
-import { writeQuestionKnowledge } from "@/crm/knowledge";
+import { linkAnswersToInsuredItem, writeQuestionKnowledge } from "@/crm/knowledge";
 import { ASSET_TABLES, CHILD_TABLES, getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, noteLabelOf, rowTargetOf, securedIfIdentifier } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
@@ -37,7 +37,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { slotOf, withSlot } from "@/boldpenguin/people";
-import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge, assetRowQuestionKeys } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAsset, upsertChildRecord, insuredItemOf, upsertPriorCoverage, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -57,7 +57,7 @@ export interface Deps {
   searchAccounts: typeof searchAccounts;
   getOpenOpportunities: typeof getOpenOpportunities;
   getCarriers: typeof getCarriers;
-  getExistingQuoteStatuses: typeof getExistingQuoteStatuses;
+  findExistingQuotes: typeof findExistingQuotes;
   getQuotingMethodId: typeof getQuotingMethodId;
   createQuotingMethod: typeof createQuotingMethod;
   searchUsers: typeof searchUsers;
@@ -231,14 +231,18 @@ function remapSecure(list: { path: string; value: string }[], slotMap: Map<numbe
   });
 }
 
-/** A carrier portal page showing a quoted premium (no policy number) as a
- * held quote, one per site. */
+/** A carrier portal page whose premium is mapped to the quote premium (and
+ * has no policy number) as a held quote, one per site. */
+function portalQuoteKeyOf(app: import("@/boldpenguin/types").CapturedApplication): string {
+  const host = (() => { try { return new URL(app.source.url).hostname; } catch { return app.source.system; } })();
+  return `portal:${host}`;
+}
 function portalHeldQuote(app: import("@/boldpenguin/types").CapturedApplication): HeldQuote | null {
   const draft = quoteFromCapture(app);
   if (!draft.hasQuote) return null;
   const host = (() => { try { return new URL(app.source.url).hostname; } catch { return app.source.system; } })();
   return {
-    key: `portal:${host}`,
+    key: portalQuoteKeyOf(app),
     provider: "Portal",
     source: host,
     lob: "",
@@ -296,8 +300,10 @@ async function writeHeldQuotes(
       createdOpportunityIds: msg.groups.filter(g => g.created).map(g => g.opportunityId),
       premiumStatusByKey: Object.fromEntries(ez.map(q => [q.key, q.premiumStatus]))
     };
-    const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
-    const quoteResults = await deps.executeBatch(env, deps.buildQuoteOps(payload, existing));
+    // read-then-write: the quotes already in CRM are updated by id, the rest
+    // created (never keyed on iacrm_amsexternalid, the AMS sync's column)
+    const matches = await deps.findExistingQuotes(env, "EZLynx", quoteLookups(payload));
+    const quoteResults = await deps.executeBatch(env, deps.buildQuoteOps(payload, matches));
     results.push(...quoteResults.map(r => {
       const q = ez.find(x => x.key === r.key);
       return q ? { ...r, key: `Quote: ${q.carrierName} ${q.lob} ${q.premium != null ? `$${q.premium.toFixed(2)}` : ""} (${q.premiumStatus === "firm" ? "Firm" : "Estimated"})` } : r;
@@ -343,8 +349,6 @@ async function writeHeldQuotes(
       let quotingMethodId = await deps.getQuotingMethodId(env, "Carrier Direct");
       if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "Carrier Direct");
       const sourceUrl = q.link ?? app.source.url;
-      const ext = `${new URL(sourceUrl).hostname}:${g.opportunityId}`;
-      const keepFirm = (await deps.getExistingQuoteStatuses(env, [ext], "Portal")).get(ext) === 738590002;
       const extra = await coercedExtras(deps, env, "quote", crmGroup(app, "crm:quote") ?? undefined);
       const { quoteId } = await withExtrasFallback(extra, x => deps.createQuote(env, {
         accountId: msg.accountId,
@@ -357,8 +361,7 @@ async function writeHeldQuotes(
         effectiveDate: g.desiredEffectiveDate,
         sourceUrl,
         quotingMethodId,
-        premiumStatus: q.premiumStatus,
-        keepFirm
+        premiumStatus: q.premiumStatus
       }, x));
       results.push({ key: `Quote: ${q.carrierName} ${q.premium != null ? `$${q.premium.toFixed(2)}` : ""} (${q.premiumStatus === "firm" ? "Firm" : "Estimated"})`, status: 204, error: null, entityId: quoteId });
       if (q.coverageLines.length) {
@@ -518,6 +521,28 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: await deps.upsertAsset(env, table, msg.accountId, values) };
       }
 
+      case "panel/linkRiskAnswers": {
+        // each loaded vehicle / boat / property: the risk answers captured
+        // from its row point at its insured item
+        const app = await deps.getCapturedApplication();
+        if (!app) return { ok: false, error: "The captured application is no longer available. Capture or ingest it again.", kind: "session" };
+        const env = await deps.getActiveEnvironment();
+        const api = { getKnowledgeNavProps: deps.getKnowledgeNavProps, executeBatch: deps.executeBatch, query: deps.dvQuery };
+        let linked = 0;
+        let waiting = 0;
+        for (const it of msg.items) {
+          const table = ASSET_TABLES.find(a => a.key === it.asset);
+          const keys = assetRowQuestionKeys(app, it.row);
+          if (!table || !keys.length) continue;
+          const itemId = await deps.insuredItemOf(env, table.set, it.id);
+          if (!itemId) { waiting += 1; continue; }
+          const r = await linkAnswersToInsuredItem(env, msg.accountId, keys, itemId, api);
+          if (r.skipped) return { ok: true, data: { linked, waiting, skipped: r.skipped } };
+          linked += r.linked;
+        }
+        return { ok: true, data: { linked, waiting, skipped: null } };
+      }
+
       case "panel/upsertChild": {
         const table = CHILD_TABLES.find(c => c.key === msg.child);
         const parentTable = ASSET_TABLES.find(a => a.key === msg.parent.asset);
@@ -617,8 +642,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             results.push({ key: "Servicing assignment", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
           }
         }
-        const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
-        const ops = deps.buildQuoteOps(payload, existing);
+        const matches = await deps.findExistingQuotes(env, "EZLynx", quoteLookups(payload));
+        const ops = deps.buildQuoteOps(payload, matches);
         const quoteResults = await deps.executeBatch(env, ops);
         results.push(...quoteResults);
 
@@ -804,9 +829,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           url: harvested.url,
           title: harvested.title
         });
-        // a portal page showing a quoted premium holds it as a quote too
+        // a premium mapped to the quote premium holds a quote for this site;
+        // without one, a quote an earlier version held for the site goes
         const held = portalHeldQuote(outcome.app);
         if (held) outcome.app.quotes = mergeHeldQuotes(outcome.app.quotes, [held]);
+        else if (outcome.app.quotes?.length) outcome.app.quotes = outcome.app.quotes.filter(q => q.key !== portalQuoteKeyOf(outcome.app));
         await deps.setCapturedApplication(outcome.app);
         if (outcome.replaced) {
           await chrome.storage.session.remove("bp/crmLink");
@@ -1629,7 +1656,7 @@ export const realDeps: Deps = {
   searchAccounts,
   getOpenOpportunities,
   getCarriers,
-  getExistingQuoteStatuses,
+  findExistingQuotes,
   getQuotingMethodId,
   createQuotingMethod,
   searchUsers,

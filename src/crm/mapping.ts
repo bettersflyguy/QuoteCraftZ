@@ -1,5 +1,5 @@
 import type { CapturedRun } from "@/types";
-import { altKeyUrl } from "./dataverse";
+import { quoteWrite, type QuoteLookup, type QuoteMatches } from "./dataverse";
 
 export interface BlockSelection {
   opportunityId: string;
@@ -41,13 +41,37 @@ function addMonths(isoDate: string, months: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** A quote's CRM name: carrier, line, effective date, "Alt" for an
+ * alternate. Chain for the date: the opportunity's desired effective date,
+ * then the rate run's own date. EZLynx results carry no explicit effective
+ * date (recon); the true application effective date lives on the unreliable
+ * risk-application endpoint - deferred. Run date beats an empty field. */
+function effectiveOf(run: CapturedRun, sel: BlockSelection): string | null {
+  return sel.desiredEffectiveDate ?? run.ratedAt?.slice(0, 10) ?? null;
+}
+function quoteName(q: CapturedRun["blocks"][number]["quotes"][number], lob: string, effective: string | null): string {
+  return `${q.carrierName} - ${lob}${effective ? ` - ${effective}` : ""}` + (q.kind === "alternate" ? " - Alt" : "");
+}
+
+/** What findExistingQuotes needs to recognize this load's selected quotes. */
+export function quoteLookups(payload: CommitPayload): QuoteLookup[] {
+  const selected = new Set(payload.selectedKeys);
+  return payload.run.blocks.flatMap(block => {
+    const sel = payload.blockSelections[block.lob];
+    if (!sel) return [];
+    const effective = effectiveOf(payload.run, sel);
+    return block.quotes.filter(q => selected.has(q.key))
+      .map(q => ({ key: q.key, opportunityId: sel.opportunityId, name: quoteName(q, block.lob, effective) }));
+  });
+}
+
 export function buildQuoteOps(
   payload: CommitPayload,
-  existingStatuses: Map<string, number>
-): { key: string; method: "PATCH"; url: string; body: Record<string, unknown> }[] {
+  matches: QuoteMatches
+): { key: string; method: "PATCH" | "POST"; url: string; body: Record<string, unknown> }[] {
   const { run, accountId, quotingMethodId, blockSelections, carrierMap, selectedKeys, ownerId } = payload;
   const selected = new Set(selectedKeys);
-  const ops: { key: string; method: "PATCH"; url: string; body: Record<string, unknown> }[] = [];
+  const ops: { key: string; method: "PATCH" | "POST"; url: string; body: Record<string, unknown> }[] = [];
 
   for (const block of run.blocks) {
     const sel = blockSelections[block.lob];
@@ -56,14 +80,8 @@ export function buildQuoteOps(
     for (const q of block.quotes) {
       if (!selected.has(q.key)) continue;
 
-      // Chain: opportunity's desired effective date -> the rate run's own date.
-      // EZLynx results carry no explicit effective date (recon); the true
-      // application effective date lives on the unreliable risk-application
-      // endpoint - deferred. Run date beats an empty field.
-      const effective = sel.desiredEffectiveDate ?? run.ratedAt?.slice(0, 10) ?? null;
-      const name =
-        `${q.carrierName} - ${block.lob}${effective ? ` - ${effective}` : ""}` +
-        (q.kind === "alternate" ? " - Alt" : "");
+      const effective = effectiveOf(run, sel);
+      const name = quoteName(q, block.lob, effective);
 
       // @odata.bind uses SCHEMA-cased nav properties (iacrm_AccountId, not
       // iacrm_accountid) - logical case fails with "undeclared property".
@@ -71,7 +89,6 @@ export function buildQuoteOps(
       const body: Record<string, unknown> = {
         iacrm_quote_name: name,
         iacrm_provider: "EZLynx",
-        iacrm_amsexternalid: q.key,
         iacrm_sourcetype: SOURCETYPE_COMPARATIVE_RATER,
         iacrm_status: STATUS_QUOTE_RECEIVED,
         iacrm_coveragelimitsummary: q.coverageSummary,
@@ -93,7 +110,7 @@ export function buildQuoteOps(
       // agent already set in CRM (spec invariant)
       if (payload.premiumStatusByKey?.[q.key] === "firm") {
         body["iacrm_premium_status"] = PREMIUM_STATUS_FIRM;
-      } else if (existingStatuses.get(q.key) !== PREMIUM_STATUS_FIRM) {
+      } else if (matches.byKey.get(q.key)?.premiumStatus !== PREMIUM_STATUS_FIRM) {
         body["iacrm_premium_status"] = PREMIUM_STATUS_ESTIMATED;
       }
 
@@ -110,7 +127,7 @@ export function buildQuoteOps(
       if (quotingMethodId) body["iacrm_QuotingMethodId@odata.bind"] = `/iacrm_quotingmethods(${quotingMethodId})`;
       if (ownerId) body["ownerid@odata.bind"] = `/systemusers(${ownerId})`;
 
-      ops.push({ key: q.key, method: "PATCH", url: altKeyUrl(q.key), body });
+      ops.push({ key: q.key, ...quoteWrite(q.key, matches, body) });
     }
   }
   return ops;
