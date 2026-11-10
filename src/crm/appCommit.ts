@@ -581,11 +581,11 @@ export function priorCoverageColumns(d: PriorCoverageDraft, source: string): Rec
   return out;
 }
 
-/** The line of business a section names: "Prior Home Policy", "New Auto
- * Policy", "Auto: Vehicles"; "" when it names none. */
+/** The line of business a section names: "Prior Home Policy", "Opportunity
+ * Policy - Auto", "Auto: Vehicles"; "" when it names none. */
 export function lineOfSection(section: string | undefined): string {
   const s = section ?? "";
-  const policy = /^(?:prior|new) (.{1,30}) policy$/i.exec(s);
+  const policy = /^(?:prior|new) (.{1,30}) policy$/i.exec(s) ?? /^opportunity policy - (.{1,30})$/i.exec(s);
   if (policy) return policy[1]!;
   const step = /^([^:]{1,40}):\s/.exec(s);
   return step ? step[1]! : "";

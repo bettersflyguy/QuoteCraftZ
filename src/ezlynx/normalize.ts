@@ -373,3 +373,27 @@ export function harvestLicenses(appRaw: unknown): { firstName: string; lastName:
       dlNumber: p.driversLicenseNumber!, dlState: p.driversLicenseState ?? null
     }));
 }
+
+/** The drivers on an Auto risk application as people: a driver added on
+ * the quote's Drivers step is not on the applicant's contact list, so the
+ * data service would miss them. Licence numbers ride separately (secured). */
+export function driversFromRiskApp(appRaw: unknown): CapturedApplicant["coApplicants"] {
+  const drivers = (appRaw as { drivers?: unknown } | null)?.drivers;
+  if (!Array.isArray(drivers)) return [];
+  return drivers.flatMap(raw => {
+    const d = (raw ?? {}) as Record<string, unknown>;
+    const firstName = text(d["firstName"]), lastName = text(d["lastName"]);
+    if (!firstName || !lastName) return [];
+    const rel = d["relationship"] ?? d["relationshipToApplicant"] ?? d["relation"];
+    const dob = text(d["dateOfBirth"] ?? d["birthDate"] ?? d["dob"]);
+    return [{
+      details: { ...personDetails(d, null), isDriver: "Yes" },
+      firstName, lastName,
+      relationship: text(typeof rel === "object" && rel ? (rel as Record<string, unknown>)["name"] ?? (rel as Record<string, unknown>)["description"] : rel),
+      phone: null, email: null,
+      dateOfBirth: dob ? dob.slice(0, 10) : null,
+      dlNumber: text(d["driversLicenseNumber"]) || null,
+      dlState: text(d["driversLicenseState"]) || null
+    }];
+  });
+}

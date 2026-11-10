@@ -24,7 +24,7 @@ const app = { capturedAt: 0, source: { system: "EZLynx", url: "", title: "" }, n
   f("Prior Auto Policy", "Prior Policy Premium", "$980"),
   f("Prior Auto Policy", "Years with Prior Carrier", "5"),
   f("Prior Auto Policy", "Years with Continuous Coverage", "More than 15"),
-  f("New Auto Policy", "New Policy Term", "6 Month"),
+  f("Opportunity Policy - Auto", "New Policy Term", "6 Month"),
   f("Prior Home Policy", "Prior Carrier", "Foremost")
 ] } as unknown as CapturedApplication;
 

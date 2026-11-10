@@ -128,8 +128,8 @@ describe("section-scoped field keys", () => {
       ["Prior Auto Policy", "Prior Carrier"],
       ["Prior Auto Policy", "Prior Policy Expiration Date"],
       ["Prior Auto Policy", "Years with Continuous Coverage"],
-      ["New Auto Policy", "New Policy Term"],
-      ["Auto: Policy Info", "Paperless"]
+      ["Opportunity Policy - Auto", "New Policy Term"],
+      ["Opportunity Policy - Auto", "Paperless"]
     ]);
     document.title = "";
   });

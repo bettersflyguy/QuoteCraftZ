@@ -412,7 +412,7 @@
   }
   /* the line of business a page is headed by ("Auto", "Home", "Dwelling
    * Fire"...), "" when the heading isn't one */
-  var LINE = /\b(auto|home|homeowners?|dwelling|fire|renters?|condo|umbrella|motorcycle|boat|watercraft|yacht|rv|motorhome|flood|earthquake|landlord|mobile home|manufactured|farm|ranch|commercial|business|bop|liability|workers|inland marine|life|health)\b/i;
+  var LINE = /\b(auto|home|homeowners?|dwelling|fire|renters?|condo|umbrella|motorcycle|boat|watercraft|yacht|rv|motorhome|flood|earthquake|landlord|mobile home|manufactured|farm|ranch|commercial|business|bop|liability|workers|inland marine|personal articles|scheduled personal property|jewelry|life|health)\b/i;
   function lineOfPage() {
     const h = lobHeading();
     return h && LINE.test(h) && h.length <= 30 ? h : "";
@@ -425,7 +425,7 @@
     if (!line) return "";
     const l = String(label || "");
     if (/\bprior\b|continuous coverage|current (carrier|insurer|policy)/i.test(l)) return "Prior " + line + " Policy";
-    if (/\bnew policy\b|quote as package|underwriting reports|effective date|policy term/i.test(l)) return "New " + line + " Policy";
+    if (/\bnew policy\b|quote as package|underwriting reports|effective date|policy term/i.test(l)) return opportunityPolicy(line);
     return "";
   }
   function sectionFor(label) { return policyTable(label) || stepTitle(); }
@@ -434,7 +434,15 @@
   function stepTitle() {
     const parts = String(document.title || "").split(" - ");
     const step = parts.length > 1 ? clean(parts[parts.length - 1]) : "";
-    return step && step.length <= 40 ? withHeading(step) : lobHeading();
+    return step && step.length <= 40 ? stepTable(step) : lobHeading();
+  }
+  /* the policy being quoted is the opportunity's: "Opportunity Policy - Auto" */
+  function opportunityPolicy(line) { return "Opportunity Policy - " + line; }
+  /* a step's table: the line's Policy Info step is the opportunity's policy,
+   * other steps "Auto: Drivers" */
+  function stepTable(step) {
+    const line = lineOfPage();
+    return line && /\bpolic(y|ies)\b/i.test(step) ? opportunityPolicy(line) : withHeading(step);
   }
 
   /* "other address>city": only that section's City; plain "city": every
@@ -606,7 +614,7 @@
     byKey.forEach((group) => {
       if (group.length < 2) return;
       const ordered = inPageOrder(group.map((g) => g.control));
-      const title = withHeading(repeatTitle(ordered) || pageTitle());
+      const title = stepTable(repeatTitle(ordered) || pageTitle());
       ordered.forEach((control, i) => {
         const g = group.find((x) => x.control === control);
         g.field.group = "Row " + (i + 1);

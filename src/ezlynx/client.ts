@@ -1,5 +1,5 @@
 import endpoints from "@/config/endpoints.json";
-import { normalizeApplicant, normalizeQuoteResult, normalizeRunList, buildIcqPairs, harvestLicenses } from "./normalize";
+import { normalizeApplicant, normalizeQuoteResult, normalizeRunList, buildIcqPairs, harvestLicenses, driversFromRiskApp } from "./normalize";
 import type { CapturedRun, RunListItem } from "@/types";
 
 export class EzlynxSessionError extends Error {
@@ -77,6 +77,8 @@ export async function fetchCapturedRun(
             }
           }
         }
+        // drivers added on the quote (not on the contact list) join the people
+        addDrivers(applicant, driversFromRiskApp(appRaw));
       } catch { /* leave b.icq null */ }
     }
   } catch { /* no catalog - leave all null */ }
@@ -93,4 +95,21 @@ export async function fetchCapturedRun(
 export function applicantIdFromUrl(href: string): number | null {
   const m = new RegExp(endpoints.applicantUrlPattern).exec(href);
   return m?.[1] ? Number(m[1]) : null;
+}
+
+/** Drivers who aren't already the applicant or a contact become contacts
+ * (same name = same person: their driver details fill what's missing). */
+export function addDrivers(applicant: CapturedRun["applicant"], drivers: CapturedRun["applicant"]["coApplicants"]): void {
+  const eq = (x: string, y: string) => x.trim().toLowerCase() === y.trim().toLowerCase();
+  for (const d of drivers) {
+    const same = (p: { firstName: string; lastName: string }) => eq(p.firstName, d.firstName) && eq(p.lastName, d.lastName);
+    if (same(applicant)) { applicant.details = { ...(d.details ?? {}), ...(applicant.details ?? {}) }; continue; }
+    const co = applicant.coApplicants.find(same);
+    if (co) {
+      co.details = { ...(d.details ?? {}), ...(co.details ?? {}) };
+      co.dateOfBirth = co.dateOfBirth ?? d.dateOfBirth;
+      continue;
+    }
+    applicant.coApplicants.push(d);
+  }
 }

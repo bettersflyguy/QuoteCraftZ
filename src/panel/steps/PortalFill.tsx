@@ -319,7 +319,8 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped)) : [];
   const renderGrid = (t: GridTable) => (
     <div key={t.title}>
-      {t.label !== "Notes" && <div className={styles.gridTitle}>{t.title} ({t.rows.length} row{t.rows.length === 1 ? "" : "s"})</div>}
+      {t.label === "Fields" && <div className={styles.gridTitle}>{t.title}</div>}
+      {t.label !== "Notes" && t.label !== "Fields" && <div className={styles.gridTitle}>{t.title} ({t.rows.length} row{t.rows.length === 1 ? "" : "s"})</div>}
       <div className={styles.grid}>
         <table className={styles.table} style={{ tableLayout: "auto", minWidth: "100%" }}>
           <thead>
@@ -496,7 +497,12 @@ export function PortalFill({ onChanged, onFlowActive }: {
             return (
               <div key={target}>
                 <div className={styles.gridTitle}>On {noteLabelOf(target).replace(/^Notes: /, "")}</div>
-                {singles.length > 0 && renderGrid({ title: `${target}:singles`, label: "Notes", columns: ["Field", "Value"], rows: singles.map(f => ({ Field: f.label, Value: usDate(f.value) })) })}
+                {/* single values grouped by where they came from ("Opportunity
+                    Policy - Auto", "Prior Auto Policy"...), each its own table */}
+                {[...new Set(singles.map(f => f.section ?? ""))].map(sec => renderGrid({
+                  title: sec || `${target}:singles`, label: sec ? "Fields" : "Notes", columns: ["Field", "Value"],
+                  rows: singles.filter(f => (f.section ?? "") === sec).map(f => ({ Field: f.label, Value: usDate(f.value) }))
+                }))}
                 {gridTables(forRecord).map(renderGrid)}
               </div>
             );
