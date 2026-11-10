@@ -231,14 +231,18 @@ function remapSecure(list: { path: string; value: string }[], slotMap: Map<numbe
   });
 }
 
-/** A carrier portal page showing a quoted premium (no policy number) as a
- * held quote, one per site. */
+/** A carrier portal page whose premium is mapped to the quote premium (and
+ * has no policy number) as a held quote, one per site. */
+function portalQuoteKeyOf(app: import("@/boldpenguin/types").CapturedApplication): string {
+  const host = (() => { try { return new URL(app.source.url).hostname; } catch { return app.source.system; } })();
+  return `portal:${host}`;
+}
 function portalHeldQuote(app: import("@/boldpenguin/types").CapturedApplication): HeldQuote | null {
   const draft = quoteFromCapture(app);
   if (!draft.hasQuote) return null;
   const host = (() => { try { return new URL(app.source.url).hostname; } catch { return app.source.system; } })();
   return {
-    key: `portal:${host}`,
+    key: portalQuoteKeyOf(app),
     provider: "Portal",
     source: host,
     lob: "",
@@ -825,9 +829,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
           url: harvested.url,
           title: harvested.title
         });
-        // a portal page showing a quoted premium holds it as a quote too
+        // a premium mapped to the quote premium holds a quote for this site;
+        // without one, a quote an earlier version held for the site goes
         const held = portalHeldQuote(outcome.app);
         if (held) outcome.app.quotes = mergeHeldQuotes(outcome.app.quotes, [held]);
+        else if (outcome.app.quotes?.length) outcome.app.quotes = outcome.app.quotes.filter(q => q.key !== portalQuoteKeyOf(outcome.app));
         await deps.setCapturedApplication(outcome.app);
         if (outcome.replaced) {
           await chrome.storage.session.remove("bp/crmLink");

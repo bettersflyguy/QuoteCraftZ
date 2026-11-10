@@ -116,7 +116,7 @@ powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
 1. **Driver cards:** a one-row person mapping saved on a box every driver card shares (First Name -> Related contact 1, Row 1) now reads every card, one person per card, placed by name. The editor counts repeats by visible label and shared key too.
 2. **Quotes no longer write `iacrm_amsexternalid`:** read-then-write by record id (source key column, then the legacy value read-only, then name on the opportunity). CRM brief: `docs/crm-handoff-quote-source-key.md` (new column `iacrm_sourcequotekey`, data fix, drop the old alternate key).
 3. **Risk answers link to insured items:** after Load writes vehicles / properties, answers captured from each asset row get `iacrm_insureditemid` (link discovered from metadata; skipped with a note when the lookup isn't there).
-4. **Open question for Nathan:** carrier-site pages create a held quote from ANY "Premium" label with a dollar value, mapped or not (`quoteFromCapture`, `portalHeldQuote`). Proposed: only when the premium field is mapped. Waiting on his call.
+4. **Carrier-site quotes need a mapped quote premium** (Nathan, 2026-11-10): a portal page holds a quote only when a value is mapped to `crm:quote.iacrm_premium`; other premiums (prior policy, current policy) never make one. An ingest without one drops the quote an earlier version held for that site.
 
 ## Open items (in priority order)
 

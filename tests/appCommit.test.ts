@@ -324,19 +324,20 @@ describe("buildSupplementalNote", () => {
 });
 
 describe("quoteFromCapture (rating portal, live Breeze shape)", () => {
-  it("flags a quote when a premium exists without a policy number, with coverage summary", async () => {
+  const breeze = (premiumMapped?: string) => capture({
+    source: { system: "breeze.bhhc.com", url: "https://breeze.bhhc.com/quotes/x/forms/coverages", title: "Breeze" },
+    normalized: {},
+    fields: [
+      { label: "CSL", value: "$300,000", section: "Coverage", group: "", source: "review-row" },
+      { label: "Medical Payments", value: "$5,000", section: "Coverage", group: "", source: "review-row" },
+      { label: "Physical Damage", value: "$2,731", section: "Coverage", group: "", source: "money-line" },
+      { label: "Total Annual Premium", value: "$35,516", section: "Coverage", group: "", source: "money-line", ...(premiumMapped ? { mapped: premiumMapped } : {}) }
+    ]
+  });
+
+  it("flags a quote only when a premium is mapped to the quote premium, with coverage summary", async () => {
     const { quoteFromCapture } = await import("@/crm/appCommit");
-    const app = capture({
-      source: { system: "breeze.bhhc.com", url: "https://breeze.bhhc.com/quotes/x/forms/coverages", title: "Breeze" },
-      normalized: {},
-      fields: [
-        { label: "CSL", value: "$300,000", section: "Coverage", group: "", source: "review-row" },
-        { label: "Medical Payments", value: "$5,000", section: "Coverage", group: "", source: "review-row" },
-        { label: "Physical Damage", value: "$2,731", section: "Coverage", group: "", source: "money-line" },
-        { label: "Total Annual Premium", value: "$35,516", section: "Coverage", group: "", source: "money-line" }
-      ]
-    });
-    const d = quoteFromCapture(app);
+    const d = quoteFromCapture(breeze("crm:quote.iacrm_premium"));
     expect(d.hasQuote).toBe(true);
     expect(d.premiumText).toBe("$35,516");
     expect(d.carrierName).toBe("Berkshire Hathaway Homestate");
@@ -344,10 +345,21 @@ describe("quoteFromCapture (rating portal, live Breeze shape)", () => {
     expect(d.coverageSummary).toContain("Physical Damage: $2,731");
   });
 
+  it("a premium on the page that is not mapped to the quote premium makes no quote", async () => {
+    const { quoteFromCapture } = await import("@/crm/appCommit");
+    // nothing mapped at all
+    expect(quoteFromCapture(breeze()).hasQuote).toBe(false);
+    // a prior policy's premium, or any other premium column
+    expect(quoteFromCapture(breeze("crm:iacrm_priorcoverage.iacrm_premium")).hasQuote).toBe(false);
+    expect(quoteFromCapture(breeze("coverage.currentPremium")).hasQuote).toBe(false);
+    expect(quoteFromCapture(breeze("policy.premium")).hasQuote).toBe(false);
+  });
+
   it("does not flag a quote once a policy number exists (that's the policy flow)", async () => {
     const { quoteFromCapture } = await import("@/crm/appCommit");
     const sold = capture({
-      normalized: { policy: { number: "6277201270", premium: "$922.00" } }
+      normalized: { policy: { number: "6277201270", premium: "$922.00" } },
+      fields: [{ label: "Premium", value: "$922.00", section: "Policy", group: "", source: "control", mapped: "crm:quote.iacrm_premium" }]
     });
     expect(quoteFromCapture(sold).hasQuote).toBe(false);
   });

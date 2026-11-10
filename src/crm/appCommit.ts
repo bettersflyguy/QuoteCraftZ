@@ -725,9 +725,14 @@ export function carrierGuess(app: CapturedApplication): string {
   return app.source.system;
 }
 
+/** The mapping target that marks a page value as a QUOTE's premium. Only
+ * a value the agent mapped here makes a quote: a page shows other
+ * premiums too (the prior policy's, the current policy's). */
+export const QUOTE_PREMIUM_TARGET = "crm:quote.iacrm_premium";
+
 /** What a rating portal's coverage/summary screen yields toward an
- * iacrm_quote: a quoted premium WITHOUT a policy number (a number means it
- * sold - that's the policy flow instead). */
+ * iacrm_quote: a premium MAPPED to the quote premium, WITHOUT a policy
+ * number (a number means it sold - that's the policy flow instead). */
 export interface QuoteDraft {
   hasQuote: boolean;
   premiumText: string;
@@ -738,8 +743,7 @@ export interface QuoteDraft {
 
 export function quoteFromCapture(app: CapturedApplication): QuoteDraft {
   const policy = policyFromCapture(app);
-  const premium = str(app, "policy", "premium") ||
-    fieldValue(app, /total\s+(annual\s+)?premium|^premium$/i);
+  const premium = clean(app.fields.find(f => f.mapped === QUOTE_PREMIUM_TARGET && clean(f.value))?.value ?? "");
   const lines = flatFields(app)
     .filter(f => /\$\s*[\d,]/.test(f.value) || /coverage|liabilit|deductible|csl|\bum\b|uim|pip|medical|physical damage|comprehensive|collision|limit/i.test(f.label))
     .map(f => `${f.label}: ${f.value}`);
