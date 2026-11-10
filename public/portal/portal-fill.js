@@ -632,13 +632,18 @@
     /* the box's own visible label too: a box's accessible name ("Applicant
      * first name") can differ from the label every card shows */
     const ownBox = element && element.closest ? element.closest(BOX) : null;
-    const ownLab = ownBox ? ownBox.querySelector("label, mat-label, .k-label") : null;
-    const names = [norm(label), ownLab ? norm(ownLab.textContent) : ""].filter(Boolean);
+    /* the ingester's box label also finds a question written above the box */
+    const boxText = (b) => {
+      const viaIngest = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(b) : "";
+      const lab = b.querySelector("label, mat-label, .k-label");
+      return norm(viaIngest || (lab ? lab.textContent : ""));
+    };
+    const names = [norm(label), ownBox ? boxText(ownBox) : ""].filter(Boolean);
     let repeatSections = [];
     document.querySelectorAll(BOX).forEach((b) => {
       if (b.parentElement && b.parentElement.closest(BOX)) return;
-      const lab = b.querySelector("label, mat-label, .k-label");
-      if (lab && norm(lab.textContent) && names.indexOf(norm(lab.textContent)) >= 0) repeatSections.push(sectionKey(b));
+      const t = boxText(b);
+      if (t && names.indexOf(t) >= 0) repeatSections.push(sectionKey(b));
     });
     /* boxes sharing this control's key are the same field on every card */
     if (element) {

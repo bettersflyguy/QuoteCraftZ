@@ -315,15 +315,44 @@
   const FORM_FIELD = "mat-form-field, .mat-form-field, .mat-mdc-form-field, .k-floating-label-container, .form-group, .form-field, .field";
   function stripMarks(s) { return clean(s).replace(/^[*\s]+|[:*\s]+$/g, ""); }
 
+  /* a form-field box's label: its own label, else the question written
+   * just above it (EZLynx's long questions, "Driver Telematics/Smartride/
+   * Right Track Discount", sit outside the dropdown's box). Only the box's
+   * own wrapper counts: an ancestor that also holds another field box is
+   * shared, so its text names nothing in particular. */
+  function boxLabel(box) {
+    if (!box) return "";
+    const own = box.querySelector("label, mat-label, .k-label, legend");
+    const t = own ? stripMarks(text(own)) : "";
+    if (t) return t.length <= 80 ? t : "";
+    let a = box;
+    for (let hops = 0; hops < 4 && a.parentElement; hops += 1) {
+      a = a.parentElement;
+      if (a.matches("form, main, body")) break;
+      const others = Array.from(a.querySelectorAll(FORM_FIELD)).some((b) => b !== box && !b.contains(box) && !box.contains(b));
+      if (others) break;
+      const before = [];
+      const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (box.contains(n)) break;
+        if (!(box.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_PRECEDING)) break;
+        const s = clean(n.textContent);
+        if (s) before.push(s);
+      }
+      const q = stripMarks(before.join(" "));
+      if (q.length >= 2 && q.length <= 80) return q;
+    }
+    return "";
+  }
+
   /* the label of the field an element belongs to ("Year", never "*Year"
    * and never the value it shows) */
   function fieldLabelOf(el) {
     if (!el) return "";
     const ff = el.closest(FORM_FIELD);
     if (ff) {
-      const lab = ff.querySelector("label, mat-label, .k-label, legend");
-      const t = lab ? stripMarks(text(lab)) : "";
-      if (t && t.length <= 60) return t;
+      const t = boxLabel(ff);
+      if (t && t.length <= 80) return t;
     }
     const control = el.matches("input, select, textarea") ? el : el.closest("[role='combobox'], select");
     if (control && control.matches("input, select, textarea")) {
@@ -354,8 +383,7 @@
     const out = [];
     document.querySelectorAll(FORM_FIELD).forEach((f) => {
       if (f.tagName + "." + String(f.className).split(/\s+/)[0] !== kind || !isVisible(f)) return;
-      const lab = f.querySelector("label, mat-label, .k-label, legend");
-      if (!lab || stripMarks(text(lab)) !== label) return;
+      if (boxLabel(f) !== label) return;
       let el = f;
       for (const i of path) { el = el && el.children[i]; }
       out.push(el || f);
@@ -465,8 +493,8 @@
     const out = [];
     document.querySelectorAll(FORM_FIELD).forEach((f) => {
       if (!isVisible(f) || (f.parentElement && f.parentElement.closest(FORM_FIELD))) return;
-      const lab = f.querySelector("label, mat-label, .k-label, legend");
-      if (lab && labelKey(stripMarks(text(lab))) === key) out.push(f);
+      const lab = boxLabel(f);
+      if (lab && labelKey(lab) === key) out.push(f);
     });
     if (!out.length) {
       document.querySelectorAll("input, select, textarea").forEach((c) => {
@@ -485,8 +513,7 @@
   }
   function fieldLabelText(el) {
     if (el.matches("input, select, textarea")) return stripMarks(labelFor(el));
-    const lab = el.querySelector("label, mat-label, .k-label, legend");
-    return lab ? stripMarks(text(lab)) : "";
+    return el.matches(FORM_FIELD) ? boxLabel(el) : "";
   }
 
   /* A label that repeats NEXT TO different one-off fields ("Years with
@@ -1134,10 +1161,7 @@
    * it isn't in one) - click-to-map turns that into a label mapping */
   globalThis.__bettersFormFieldLabel = (el) => {
     const box = el && el.closest ? el.closest(FORM_FIELD) : null;
-    if (!box) return "";
-    const lab = box.querySelector("label, mat-label, .k-label, legend");
-    const t = lab ? stripMarks(text(lab)) : "";
-    return t && t.length <= 80 ? t : "";
+    return box ? boxLabel(box) : "";
   };
   globalThis.__bettersCaptureElements = captureElements;
   /* `controls`: the page's saved control mappings. `secure` comes back
