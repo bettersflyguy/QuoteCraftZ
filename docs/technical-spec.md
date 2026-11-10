@@ -1,6 +1,6 @@
 # QuoteCraftZ: Technical Specification
 
-Version covered: v0.1.66 (2026-11-09). Repo: `bettersflyguy/QuoteCraftZ`. Companion docs: `docs/technical-spec.md` is this file; `docs/session-handoff.md` (working context and rules), `docs/crm-handoff-policy-drivers.md` (pending CRM contract).
+Version covered: v0.1.66 (2026-11-09). Repo: `bettersflyguy/QuoteCraftZ`. Companion docs: `docs/session-handoff.md` (working context and rules), `docs/crm-handoff-policy-drivers.md` (pending CRM contract).
 
 This document describes what the extension is for, how it is built, the data shapes it stores and moves, and the rules it must keep. When the code and this spec disagree, the code is current; update the spec in the same commit.
 
