@@ -888,10 +888,21 @@
           var el = t.control;
           var name = fieldName(el) || "";
           var plain = primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id);
+          /* how many labelled fields on the page share this label: 2+ means
+           * repeated cards (each driver's "Defensive Driver Course Date"),
+           * so a list mapping covers every card, like a dropdown's does */
+          var norm = function (s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); };
+          var repeats = 0;
+          document.querySelectorAll("mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container").forEach(function (b) {
+            if (b.parentElement && b.parentElement.closest("mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container")) return;
+            var lab = b.querySelector("label, mat-label, .k-label");
+            if (lab && norm(lab.textContent) && norm(lab.textContent) === norm(plain)) repeats += 1;
+          });
           finish({
             key: controlKey(el),
             label: inSection(el, plain) || controlKey(el),
             fieldLabel: plain,
+            repeats: repeats,
             section: mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "",
             scopes: mapper && mapper.scopesOf ? mapper.scopesOf(el) : [],
             type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),

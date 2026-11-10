@@ -113,6 +113,10 @@ describe("address cards on a page", () => {
     expect(familyKeyOf({ fieldLabel: "*City", section: "other address" }))
       .toEqual({ key: "field:other address>city", label: "City (every address)" });
     expect(familyKeyOf({ fieldLabel: "Prefix", section: "" })).toBeNull();
+    // a date box repeated on every driver card maps every card, like a dropdown
+    expect(familyKeyOf({ fieldLabel: "Defensive Driver Course Date", section: "", repeats: 2 }))
+      .toEqual({ key: "field:defensive driver course date", label: "Defensive Driver Course Date (every card)" });
+    expect(familyKeyOf({ fieldLabel: "Prefix", section: "", repeats: 1 })).toBeNull();
   });
 
   it("the data service's address fields cover every card, not the rating ZIP", () => {

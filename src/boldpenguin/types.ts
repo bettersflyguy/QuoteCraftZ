@@ -100,6 +100,9 @@ export interface PortalScanRow {
   section?: string;
   /** Picked fields: every titled box around it and "#<page heading>". */
   scopes?: string[];
+  /** Picked controls: how many labelled fields on the page share its label
+   * (2+ = repeated cards, e.g. one per driver). */
+  repeats?: number;
 }
 
 export interface PortalScanResult { origin: string; rows: PortalScanRow[] }
