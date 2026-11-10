@@ -97,7 +97,7 @@ export interface Deps {
   getAccessToken: typeof getAccessToken;
   clearToken: typeof clearToken;
   /** Finds the EZLynx tab, relays a BridgeRequest to its content script, returns its Res. */
-  sendToEzlynxTab: <T>(req: BridgeRequest) => Promise<Res<T>>;
+  sendToEzlynxTab: <T>(req: BridgeRequest, tabId?: number) => Promise<Res<T>>;
   /** Finds the Bold Penguin tab and relays a capture request to its content script.
    * The scan clicks through every question set, so this can legitimately run minutes. */
   sendToBoldPenguinTab: <T>(req: { type: string }) => Promise<Res<T>>;
@@ -157,21 +157,21 @@ async function catalogOrNull(deps: Deps): Promise<FieldCatalog | null> {
 }
 
 async function ingestEzlynx(deps: Deps, url: string, tabId?: number): Promise<Res<unknown>> {
-  const ctx = await deps.sendToEzlynxTab<{ applicantId: number | null }>({ type: "ezlynx/getContext" });
+  const ctx = await deps.sendToEzlynxTab<{ applicantId: number | null }>({ type: "ezlynx/getContext" }, tabId);
   if (!ctx.ok) return ctx;
   const applicantId = ctx.data.applicantId;
   if (applicantId == null) return { ok: false, error: "Open an EZLynx applicant, then ingest.", kind: "session" };
   let run: import("@/types").CapturedRun | null = null;
-  const runs = await deps.sendToEzlynxTab<import("@/types").RunListItem[]>({ type: "ezlynx/listRuns", applicantId });
+  const runs = await deps.sendToEzlynxTab<import("@/types").RunListItem[]>({ type: "ezlynx/listRuns", applicantId }, tabId);
   if (runs.ok && runs.data.length) {
     const latest = [...runs.data].sort((a, b) => b.created.localeCompare(a.created))[0]!;
-    const captured = await deps.sendToEzlynxTab<import("@/types").CapturedRun>({ type: "ezlynx/captureRun", applicantId, run: latest });
+    const captured = await deps.sendToEzlynxTab<import("@/types").CapturedRun>({ type: "ezlynx/captureRun", applicantId, run: latest }, tabId);
     if (!captured.ok) return captured;
     run = captured.data;
   }
   let applicant = run?.applicant ?? null;
   if (!applicant) {
-    const a = await deps.sendToEzlynxTab<import("@/types").CapturedApplicant>({ type: "ezlynx/getApplicant", applicantId });
+    const a = await deps.sendToEzlynxTab<import("@/types").CapturedApplicant>({ type: "ezlynx/getApplicant", applicantId }, tabId);
     if (!a.ok) return a;
     applicant = a.data;
   }
@@ -648,12 +648,14 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/autoCapture": {
         await deps.setAutoCapture(msg.tabId, msg.enable);
-        // turning it on captures what is already mapped and filled in now
-        if (msg.enable) {
-          const tab = await chrome.tabs.get(msg.tabId).catch(() => null);
-          if (tab?.url) await autoIngest(tab.url, msg.tabId);
-        }
-        return { ok: true, data: null };
+        // turning it on captures what is already mapped and filled in now,
+        // and says why when it can't
+        if (!msg.enable) return { ok: true, data: null };
+        if (autoRun.running) await autoRun.running.catch(() => {});
+        const tab = await chrome.tabs.get(msg.tabId).catch(() => null);
+        if (!tab?.url) return { ok: true, data: null };
+        const r = await runAutoOnce(tab.url, msg.tabId);
+        return { ok: true, data: r.ok ? null : { error: r.error } };
       }
 
       case "panel/crmSearch": {
@@ -1061,9 +1063,10 @@ async function ensureContentScriptAlive(tabId: number, probeType: string, hostFr
   }
 }
 
-async function sendToEzlynxTab<T>(req: BridgeRequest): Promise<Res<T>> {
+async function sendToEzlynxTab<T>(req: BridgeRequest, tabId?: number): Promise<Res<T>> {
+  // the tab the agent is working in; else the active EZLynx tab, else any
   const tabs = await chrome.tabs.query({ url: "https://app.ezlynx.com/*" });
-  const tab = tabs[0];
+  const tab = tabs.find(t => tabId !== undefined && t.id === tabId) ?? tabs.find(t => t.active) ?? tabs[0];
   if (!tab?.id) {
     return { ok: false, error: "Open an EZLynx applicant page in another tab, then retry.", kind: "session" };
   }
@@ -1517,28 +1520,39 @@ const EZLYNX_PAGE = /^https:\/\/app\.ezlynx\.com\//i;
  * changes during a run queue a single follow-up, so typing never stacks
  * reads. EZLynx reads its data service (plus fields mapped on its pages);
  * other sites keep only what the agent mapped and the page has filled in. */
-let autoRun: { running: boolean; again: { url: string; tabId: number } | null } = { running: false, again: null };
+let autoRun: { running: Promise<void> | null; again: { url: string; tabId: number } | null } = { running: null, again: null };
 async function autoIngest(url: string, tabId: number): Promise<void> {
   if (autoRun.running) { autoRun.again = { url, tabId }; return; }
-  autoRun.running = true;
-  try {
-    let next: { url: string; tabId: number } | null = { url, tabId };
-    while (next) {
-      autoRun.again = null;
-      const o = await (EZLYNX_PAGE.test(next.url) ? autoIngestEzlynx(next.url, next.tabId) : autoIngestMapped(next.tabId)).catch(() => null);
-      if (o) chrome.runtime.sendMessage({
-        type: "portal/captureUpdated", added: o.added, total: o.total, replaced: o.replaced
-      } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
-      next = autoRun.again;
+  autoRun.running = (async () => {
+    try {
+      let next: { url: string; tabId: number } | null = { url, tabId };
+      while (next) {
+        autoRun.again = null;
+        await runAutoOnce(next.url, next.tabId);
+        next = autoRun.again;
+      }
+    } finally {
+      autoRun = { running: null, again: null };
     }
-  } finally {
-    autoRun = { running: false, again: null };
-  }
+  })();
+  await autoRun.running;
 }
 type AutoOutcome = { added: number; total: number; replaced: boolean };
-async function autoIngestEzlynx(url: string, tabId: number): Promise<AutoOutcome | null> {
-  const r = await ingestEzlynx(realDeps, url, tabId);
-  return r.ok ? r.data as AutoOutcome : null;
+/** One auto-capture read of a tab; announces a landed capture to the panel. */
+async function runAutoOnce(url: string, tabId: number): Promise<Res<AutoOutcome | null>> {
+  let r: Res<AutoOutcome | null>;
+  try {
+    r = EZLYNX_PAGE.test(url)
+      ? await ingestEzlynx(realDeps, url, tabId) as Res<AutoOutcome>
+      : { ok: true, data: await autoIngestMapped(tabId) };
+  } catch (e) {
+    r = { ok: false, error: String((e as Error)?.message ?? e), kind: "unknown" };
+  }
+  if (!r.ok) console.warn("QuoteCraftZ auto-capture:", r.error);
+  else if (r.data) chrome.runtime.sendMessage({
+    type: "portal/captureUpdated", added: r.data.added, total: r.data.total, replaced: r.data.replaced
+  } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
+  return r;
 }
 /** a field the agent mapped (a saved control, label or taught mapping) */
 const isMappedField = (f: import("@/boldpenguin/types").CapturedAppField): boolean => Boolean(f.mapped) || f.source === "taught";

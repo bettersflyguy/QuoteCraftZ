@@ -234,9 +234,14 @@ export function PortalFill({ onChanged, onFlowActive }: {
     setError(null);
     try {
       const tab = await grantActiveTab(setAwaitingGrant);
-      await send({ type: "panel/autoCapture", tabId: tab.id, enable: !autoCap });
+      const r = await send<{ error?: string } | null>({ type: "panel/autoCapture", tabId: tab.id, enable: !autoCap });
       setAutoCap(!autoCap);
       if (autoCap) setLive(null);
+      else {
+        refresh();
+        onChanged();
+        if (r?.error) setError(new PanelError("unknown", `Auto-capture is on, but this page could not be read yet: ${r.error}`));
+      }
     } catch (e) {
       setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message ?? e)));
     } finally {

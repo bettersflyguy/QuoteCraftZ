@@ -33,7 +33,7 @@ export async function send<T>(msg: PanelRequest): Promise<T> {
   ]);
   const timeoutMs =
     CRM_WRITE_TYPES.has(msg.type) ? AUTH_TIMEOUT_MS :
-    msg.type === "panel/bpCapture" ? BP_CAPTURE_TIMEOUT_MS :
+    msg.type === "panel/bpCapture" || msg.type === "panel/autoCapture" ? BP_CAPTURE_TIMEOUT_MS :
     TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {

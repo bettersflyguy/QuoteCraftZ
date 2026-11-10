@@ -3,7 +3,7 @@
  * the values the agent mapped and the page has filled in. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { backing, reset } from "./helpers/chromeStub";
-import { handleAutoCaptured } from "@/workerRouter";
+import { handleAutoCaptured, routeMessage, realDeps } from "@/workerRouter";
 
 const query = vi.fn(async (_q: unknown) => [] as { id?: number }[]);
 const harvest = {
@@ -43,5 +43,13 @@ describe("auto-capture", () => {
   it("a tab without auto-capture is ignored", async () => {
     await handleAutoCaptured({ url: harvest.url }, 9);
     expect(executeScript).not.toHaveBeenCalled();
+  });
+
+  it("turning it on reads the page now, and says why when it can't", async () => {
+    (g.chrome.tabs as { get: unknown }).get = vi.fn(async () => ({ url: "https://app.ezlynx.com/web/account/123/details" }));
+    const r = await routeMessage({ type: "panel/autoCapture", tabId: 7, enable: true }, { ...realDeps, setAutoCapture: vi.fn(async () => {}) }) as { ok: boolean; data: { error?: string } | null };
+    expect(query).toHaveBeenCalledWith({ url: "https://app.ezlynx.com/*" });
+    expect(r.ok).toBe(true);
+    expect(r.data?.error).toMatch(/EZLynx/);
   });
 });

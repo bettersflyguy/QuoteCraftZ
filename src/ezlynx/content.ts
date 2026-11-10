@@ -9,6 +9,8 @@ const ezAlreadyLoaded = ezGuard.__bettersEzLoaded === true;
 ezGuard.__bettersEzLoaded = true;
 
 if (!ezAlreadyLoaded) chrome.runtime.onMessage.addListener((msg: BridgeRequest, _sender, sendResponse: (r: Res<unknown>) => void) => {
+  // only bridge requests: other scripts in this tab (auto-capture) answer their own
+  if (!String((msg as { type?: string })?.type ?? "").startsWith("ezlynx/")) return false;
   (async () => {
     try {
       switch (msg.type) {
