@@ -604,6 +604,7 @@
     const map = controlMap || {};
     const keyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
     const noteControls = [];
+    const personControls = [];
 
     Array.from(root.querySelectorAll("input, select, textarea, [role='combobox'], [role='checkbox'], [role='switch']"))
       .filter(isVisible)
@@ -626,8 +627,30 @@
         if (path && (/^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ||
             NOTE_PATH.test(path))) field.mapped = path;
         if (field.mapped && /^note/.test(field.mapped)) noteControls.push({ field, control, key: keyOf(control) });
+        else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) });
         fields.push(field);
       });
+    /* one person mapping on a box every driver card shares ("First Name" on
+     * Primary Insured and Additional Driver): each card is its own person,
+     * in page order, like the every-card label mapping. A primary-insured
+     * mapping keeps card 1 on the primary; otherwise card 1 is the first
+     * list row. The capture merge then moves each card onto the person its
+     * own name matches. */
+    const personByKey = new Map();
+    personControls.forEach((p) => { if (!personByKey.has(p.key)) personByKey.set(p.key, []); personByKey.get(p.key).push(p); });
+    personByKey.forEach((group) => {
+      if (group.length < 2) return;
+      const ordered = inPageOrder(group.map((g) => g.control));
+      const title = stepTable(repeatTitle(ordered) || pageTitle());
+      const base = personSlot(group[0].field.mapped) === 1 ? 1 : 2;
+      ordered.forEach((control, i) => {
+        const g = group.find((x) => x.control === control);
+        g.field.group = "Row " + (i + 1);
+        g.field.section = title;
+        g.field.label = fieldLabelOf(control) || g.field.label;
+        g.field.mapped = withPersonSlot(g.field.mapped, base + i);
+      });
+    });
     /* one note mapping on a control that repeats per card (both vehicles'
      * VIN boxes share a key): rows of the cards' table, in page order */
     const byKey = new Map();
@@ -903,6 +926,21 @@
    * (row 1 -> note:contact2, like the related-contact slots) */
   var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]))?$/;
   function noteRow(path, i) { return path === "note:contacts[]" ? "note:contact" + (i + 2) : path; }
+  /* a person's mapped path (1 = the primary insured, N = related contact
+   * N-1); same grammar as src/boldpenguin/people.ts slotOf / withSlot */
+  var PERSON_PATH = /^(?:(contact|crm:primarycontact)|(contact|crm:contact)(\d+))\.([a-zA-Z][a-zA-Z0-9_]{0,99})$/;
+  function personSlot(path) {
+    const m = PERSON_PATH.exec(String(path || ""));
+    return !m ? null : m[1] ? 1 : Number(m[3]);
+  }
+  function withPersonSlot(path, slot) {
+    const m = PERSON_PATH.exec(String(path || ""));
+    if (!m) return path;
+    const crm = (m[1] || m[2]).indexOf("crm:") === 0;
+    if (slot === 1) return (crm ? "crm:primarycontact." : "contact.") + m[4];
+    return (crm ? "crm:contact" : "contact") + slot + "." + m[4];
+  }
+
   var ARRAY_SLOTS = {
     contacts: { slot: "contact", start: 2 }, vehicles: { slot: "vehicle", start: 1 },
     /* CRM-column arrays share the semantic numbering, so a table taught with
