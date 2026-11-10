@@ -6,7 +6,7 @@ import {
   searchAccounts,
   getOpenOpportunities,
   getCarriers,
-  getExistingQuoteStatuses,
+  findExistingQuotes,
   getQuotingMethodId,
   createQuotingMethod,
   searchUsers,
@@ -16,7 +16,7 @@ import {
   getStagesForLob,
   executeBatch
 } from "@/crm/dataverse";
-import { buildQuoteOps } from "@/crm/mapping";
+import { buildQuoteOps, quoteLookups } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
 import { writeQuestionKnowledge } from "@/crm/knowledge";
@@ -57,7 +57,7 @@ export interface Deps {
   searchAccounts: typeof searchAccounts;
   getOpenOpportunities: typeof getOpenOpportunities;
   getCarriers: typeof getCarriers;
-  getExistingQuoteStatuses: typeof getExistingQuoteStatuses;
+  findExistingQuotes: typeof findExistingQuotes;
   getQuotingMethodId: typeof getQuotingMethodId;
   createQuotingMethod: typeof createQuotingMethod;
   searchUsers: typeof searchUsers;
@@ -296,8 +296,10 @@ async function writeHeldQuotes(
       createdOpportunityIds: msg.groups.filter(g => g.created).map(g => g.opportunityId),
       premiumStatusByKey: Object.fromEntries(ez.map(q => [q.key, q.premiumStatus]))
     };
-    const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
-    const quoteResults = await deps.executeBatch(env, deps.buildQuoteOps(payload, existing));
+    // read-then-write: the quotes already in CRM are updated by id, the rest
+    // created (never keyed on iacrm_amsexternalid, the AMS sync's column)
+    const matches = await deps.findExistingQuotes(env, "EZLynx", quoteLookups(payload));
+    const quoteResults = await deps.executeBatch(env, deps.buildQuoteOps(payload, matches));
     results.push(...quoteResults.map(r => {
       const q = ez.find(x => x.key === r.key);
       return q ? { ...r, key: `Quote: ${q.carrierName} ${q.lob} ${q.premium != null ? `$${q.premium.toFixed(2)}` : ""} (${q.premiumStatus === "firm" ? "Firm" : "Estimated"})` } : r;
@@ -343,8 +345,6 @@ async function writeHeldQuotes(
       let quotingMethodId = await deps.getQuotingMethodId(env, "Carrier Direct");
       if (quotingMethodId == null) quotingMethodId = await deps.createQuotingMethod(env, "Carrier Direct");
       const sourceUrl = q.link ?? app.source.url;
-      const ext = `${new URL(sourceUrl).hostname}:${g.opportunityId}`;
-      const keepFirm = (await deps.getExistingQuoteStatuses(env, [ext], "Portal")).get(ext) === 738590002;
       const extra = await coercedExtras(deps, env, "quote", crmGroup(app, "crm:quote") ?? undefined);
       const { quoteId } = await withExtrasFallback(extra, x => deps.createQuote(env, {
         accountId: msg.accountId,
@@ -357,8 +357,7 @@ async function writeHeldQuotes(
         effectiveDate: g.desiredEffectiveDate,
         sourceUrl,
         quotingMethodId,
-        premiumStatus: q.premiumStatus,
-        keepFirm
+        premiumStatus: q.premiumStatus
       }, x));
       results.push({ key: `Quote: ${q.carrierName} ${q.premium != null ? `$${q.premium.toFixed(2)}` : ""} (${q.premiumStatus === "firm" ? "Firm" : "Estimated"})`, status: 204, error: null, entityId: quoteId });
       if (q.coverageLines.length) {
@@ -617,8 +616,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
             results.push({ key: "Servicing assignment", status: 0, error: `Failed (quotes still imported): ${String((e as Error).message ?? e)}`, entityId: null });
           }
         }
-        const existing = await deps.getExistingQuoteStatuses(env, payload.selectedKeys);
-        const ops = deps.buildQuoteOps(payload, existing);
+        const matches = await deps.findExistingQuotes(env, "EZLynx", quoteLookups(payload));
+        const ops = deps.buildQuoteOps(payload, matches);
         const quoteResults = await deps.executeBatch(env, ops);
         results.push(...quoteResults);
 
@@ -1629,7 +1628,7 @@ export const realDeps: Deps = {
   searchAccounts,
   getOpenOpportunities,
   getCarriers,
-  getExistingQuoteStatuses,
+  findExistingQuotes,
   getQuotingMethodId,
   createQuotingMethod,
   searchUsers,

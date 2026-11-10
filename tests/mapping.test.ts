@@ -58,19 +58,23 @@ const payload: CommitPayload = {
   createdOpportunityIds: []
 };
 
+const NONE = { byKey: new Map(), keyColumn: true };
+
 describe("buildQuoteOps", () => {
-  const ops = buildQuoteOps(payload, new Map());
+  const ops = buildQuoteOps(payload, NONE);
 
   it("emits one op per selected quote in pinned blocks only (Home skipped)", () => {
     expect(ops.map(o => o.key).sort()).toEqual(["ezlynx:1:alt0", "ezlynx:1:req", "ezlynx:2:req"]);
   });
 
-  it("addresses the alternate key and stamps provider/source/status", () => {
+  it("creates new quotes, stamps provider/source/status and its source key, never iacrm_amsexternalid", () => {
     const op = ops.find(o => o.key === "ezlynx:1:req")!;
-    expect(op.url).toBe("iacrm_quotes(iacrm_provider='EZLynx',iacrm_amsexternalid='ezlynx:1:req')");
+    expect(op.method).toBe("POST");
+    expect(op.url).toBe("iacrm_quotes");
+    expect(op.body).not.toHaveProperty("iacrm_amsexternalid");
     expect(op.body).toMatchObject({
       iacrm_provider: "EZLynx",
-      iacrm_amsexternalid: "ezlynx:1:req",
+      iacrm_sourcequotekey: "ezlynx:1:req",
       iacrm_sourcetype: 100000002,
       iacrm_status: 738590002,
       iacrm_premium_status: 738590000,
@@ -109,7 +113,7 @@ describe("buildQuoteOps", () => {
   });
 
   it("omits iacrm_premium_status when the existing row is Firm", () => {
-    const opsWithFirm = buildQuoteOps(payload, new Map([["ezlynx:1:req", 738590002]]));
+    const opsWithFirm = buildQuoteOps(payload, { byKey: new Map([["ezlynx:1:req", { id: "Q-1", premiumStatus: 738590002 }]]), keyColumn: true });
     const firm = opsWithFirm.find(o => o.key === "ezlynx:1:req")!;
     expect("iacrm_premium_status" in firm.body).toBe(false);
     const notFirm = opsWithFirm.find(o => o.key === "ezlynx:1:alt0")!;
@@ -120,26 +124,26 @@ describe("buildQuoteOps", () => {
     const noDate = buildQuoteOps({
       ...payload,
       blockSelections: { Auto: { opportunityId: "OPP-AUTO", lineOfBusinessId: null, desiredEffectiveDate: null } }
-    }, new Map());
+    }, NONE);
     const op = noDate.find(o => o.key === "ezlynx:1:req")!;
     expect(op.body["iacrm_effectivedate"]).toBe("2026-08-10");
     expect(op.body["iacrm_expirationdate"]).toBe("2027-08-10");
   });
 
   it("omits the owner bind when ownerId is null", () => {
-    const noOwner = buildQuoteOps({ ...payload, ownerId: null }, new Map());
+    const noOwner = buildQuoteOps({ ...payload, ownerId: null }, NONE);
     expect(noOwner[0]!.body["ownerid@odata.bind"]).toBeUndefined();
   });
 
   it("embeds the block's carrier Q&A into rawpayload", () => {
-    const op = buildQuoteOps(payload, new Map()).find(o => o.key === "ezlynx:1:req")!;
+    const op = buildQuoteOps(payload, NONE).find(o => o.key === "ezlynx:1:req")!;
     const raw = JSON.parse(op.body["iacrm_rawpayload"] as string);
     expect(raw.icq.pairs[0]).toMatchObject({ questionId: "coverage_paperlessauto_common", answer: "Yes" });
   });
 
   it("serializes rawpayload as JSON and honors deselection", () => {
-    const fewer = buildQuoteOps({ ...payload, selectedKeys: ["ezlynx:1:req"] }, new Map());
+    const fewer = buildQuoteOps({ ...payload, selectedKeys: ["ezlynx:1:req"] }, NONE);
     expect(fewer).toHaveLength(1);
-    expect(typeof buildQuoteOps(payload, new Map())[0]!.body["iacrm_rawpayload"]).toBe("string");
+    expect(typeof buildQuoteOps(payload, NONE)[0]!.body["iacrm_rawpayload"]).toBe("string");
   });
 });

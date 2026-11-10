@@ -85,8 +85,87 @@ async function dvPost<T>(env: CrmEnvironment, path: string, body: unknown): Prom
   return res.json() as Promise<T>;
 }
 
-export function altKeyUrl(key: string): string {
-  return `iacrm_quotes(iacrm_provider='EZLynx',iacrm_amsexternalid='${esc(key)}')`;
+/** The quote's own source key column ("ezlynx:123:req", "<host>:<opp>"):
+ * what tells a reload "this quote is already in CRM". iacrm_amsexternalid
+ * belongs to the AMS sync and is NEVER written here; it is only READ, to
+ * recognize quotes that earlier versions stamped with it. Contract with the
+ * CRM session: docs/crm-handoff-quote-source-key.md. */
+export const QUOTE_KEY_COLUMN = "iacrm_sourcequotekey";
+
+export type QuoteProvider = "EZLynx" | "Portal";
+
+/** One quote a load wants to write: its source key, plus the opportunity
+ * and name used to find it while the source key column isn't deployed. */
+export interface QuoteLookup { key: string; opportunityId: string; name: string }
+
+export interface ExistingQuote { id: string; premiumStatus: number | null }
+
+export interface QuoteMatches {
+  byKey: Map<string, ExistingQuote>;
+  /** false until the CRM deploys QUOTE_KEY_COLUMN */
+  keyColumn: boolean;
+}
+
+type QuoteRow = {
+  iacrm_quoteid: string; iacrm_quote_name?: string | null; iacrm_amsexternalid?: string | null;
+  iacrm_sourcequotekey?: string | null; iacrm_premium_status?: number | null; _iacrm_opportunityid_value?: string | null;
+};
+
+/** Finds the CRM quotes a load's quotes already are, by (in order) the
+ * source key column, the legacy key earlier versions stamped in
+ * iacrm_amsexternalid, then the same name on the same opportunity. Reads
+ * only. Missing source key column = keyColumn false (one retry without it). */
+export async function findExistingQuotes(env: CrmEnvironment, provider: QuoteProvider, items: QuoteLookup[]): Promise<QuoteMatches> {
+  const byKey = new Map<string, ExistingQuote>();
+  if (!items.length) return { byKey, keyColumn: true };
+  const run = async (keyColumn: boolean): Promise<QuoteRow[]> => {
+    const rows: QuoteRow[] = [];
+    // a few quotes per request keeps the URL well under Dataverse's limit
+    for (let i = 0; i < items.length; i += 8) {
+      const chunk = items.slice(i, i + 8);
+      const ors = chunk.flatMap(it => [
+        ...(keyColumn ? [`${QUOTE_KEY_COLUMN} eq '${esc(it.key)}'`] : []),
+        `iacrm_amsexternalid eq '${esc(it.key)}'`,
+        `(_iacrm_opportunityid_value eq ${it.opportunityId} and iacrm_quote_name eq '${esc(it.name)}')`
+      ]).join(" or ");
+      const select = `iacrm_quoteid,iacrm_quote_name,iacrm_amsexternalid,iacrm_premium_status,_iacrm_opportunityid_value${keyColumn ? `,${QUOTE_KEY_COLUMN}` : ""}`;
+      const path = `iacrm_quotes?$select=${select}&$filter=iacrm_provider eq '${provider}' and (${ors})`;
+      const res = await dv(env, path);
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        if (keyColumn && res.status === 400 && detail.includes(QUOTE_KEY_COLUMN)) throw new MissingKeyColumn();
+        throw new Error(`Dataverse ${res.status} looking up quotes: ${detail.slice(0, 300)}`);
+      }
+      rows.push(...((await res.json()) as { value: QuoteRow[] }).value);
+    }
+    return rows;
+  };
+  let keyColumn = true;
+  let rows: QuoteRow[];
+  try { rows = await run(true); }
+  catch (e) {
+    if (!(e instanceof MissingKeyColumn)) throw e;
+    keyColumn = false;
+    rows = await run(false);
+  }
+  for (const it of items) {
+    const hit = rows.find(r => keyColumn && r.iacrm_sourcequotekey === it.key)
+      ?? rows.find(r => r.iacrm_amsexternalid === it.key)
+      ?? rows.find(r => r._iacrm_opportunityid_value?.toLowerCase() === it.opportunityId.toLowerCase() && r.iacrm_quote_name === it.name);
+    if (hit) byKey.set(it.key, { id: hit.iacrm_quoteid, premiumStatus: hit.iacrm_premium_status ?? null });
+  }
+  return { byKey, keyColumn };
+}
+
+class MissingKeyColumn extends Error {}
+
+/** Update the quote already in CRM by its id, else create it; the source
+ * key rides on the body once the column exists. Never iacrm_amsexternalid. */
+export function quoteWrite(key: string, matches: QuoteMatches, body: Record<string, unknown>): { method: "PATCH" | "POST"; url: string; body: Record<string, unknown> } {
+  const { iacrm_amsexternalid: _ams, ...clean } = body;
+  const out = matches.keyColumn ? { ...clean, [QUOTE_KEY_COLUMN]: key } : clean;
+  const hit = matches.byKey.get(key);
+  return hit ? { method: "PATCH", url: `iacrm_quotes(${hit.id})`, body: out } : { method: "POST", url: "iacrm_quotes", body: out };
 }
 
 export async function searchAccounts(env: CrmEnvironment, name: string, postalCode: string | null): Promise<AccountMatch[]> {
@@ -245,17 +324,21 @@ export interface NewQuoteFields {
  * duplicating. Same column conventions as the EZLynx writer; premium status
  * is always Estimated (standing rule), source type left unset (carrier
  * direct, not comparative rater). */
+/** A carrier portal quote on its opportunity: updates the one already in
+ * CRM (found by findExistingQuotes) or creates it. Source key
+ * "<host>:<opportunity>": one quote per site per opportunity. */
 export async function createQuote(env: CrmEnvironment, f: NewQuoteFields, extra: Record<string, unknown> = {}): Promise<{ quoteId: string }> {
-  const host = new URL(f.sourceUrl).hostname;
-  const ext = `${host}:${f.opportunityId}`.replace(/'/g, "''");
+  const key = portalQuoteKey(f.sourceUrl, f.opportunityId);
+  const matches = await findExistingQuotes(env, "Portal", [{ key, opportunityId: f.opportunityId, name: f.name }]);
+  const existing = matches.byKey.get(key);
+  const keepFirm = f.keepFirm || existing?.premiumStatus === 738590002;
   const body: Record<string, unknown> = {
     ...extra,
     iacrm_quote_name: f.name,
     iacrm_provider: "Portal",
-    iacrm_amsexternalid: `${host}:${f.opportunityId}`,
     iacrm_status: 738590002,          // Quote Received
     // Firm 738590002 / Estimated 738590000; an existing Firm is never downgraded
-    ...(f.premiumStatus === "firm" ? { iacrm_premium_status: 738590002 } : f.keepFirm ? {} : { iacrm_premium_status: 738590000 }),
+    ...(f.premiumStatus === "firm" ? { iacrm_premium_status: 738590002 } : keepFirm ? {} : { iacrm_premium_status: 738590000 }),
     iacrm_coveragelimitsummary: f.coverageSummary.slice(0, 4000),
     iacrm_quotelink: f.sourceUrl.slice(0, 500),
     "iacrm_AccountId@odata.bind": `/accounts(${f.accountId})`,
@@ -266,14 +349,20 @@ export async function createQuote(env: CrmEnvironment, f: NewQuoteFields, extra:
   if (f.carrierId) body["iacrm_CarrierId@odata.bind"] = `/iacrm_carriers(${f.carrierId})`;
   if (f.lobId) body["iacrm_LineOfBusinessId@odata.bind"] = `/iacrm_lineofbusinesses(${f.lobId})`;
   if (f.quotingMethodId) body["iacrm_QuotingMethodId@odata.bind"] = `/iacrm_quotingmethods(${f.quotingMethodId})`;
-  const r = await dv(env, `iacrm_quotes(iacrm_provider='Portal',iacrm_amsexternalid='${ext}')`, {
-    method: "PATCH",
+  const op = quoteWrite(key, matches, body);
+  const r = await dv(env, `${op.url}?$select=iacrm_quoteid`, {
+    method: op.method,
     headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-    body: JSON.stringify(body)
+    body: JSON.stringify(op.body)
   });
-  if (!r.ok) throw new Error(`quote upsert failed (${r.status}): ${(await r.text()).slice(0, 300)}`);
+  if (!r.ok) throw new Error(`quote ${op.method === "POST" ? "create" : "update"} failed (${r.status}): ${(await r.text()).slice(0, 300)}`);
   const rec = (await r.json()) as Record<string, string>;
-  return { quoteId: rec["iacrm_quoteid"]! };
+  return { quoteId: rec["iacrm_quoteid"] ?? existing!.id };
+}
+
+/** A portal quote's source key: one quote per site per opportunity. */
+export function portalQuoteKey(sourceUrl: string, opportunityId: string): string {
+  return `${new URL(sourceUrl).hostname}:${opportunityId}`;
 }
 
 export interface InsuredSearchRow {
@@ -887,14 +976,6 @@ export async function createQuotingMethod(env: CrmEnvironment, name: string): Pr
     iacrm_quotingmethod_name: name
   });
   return r["iacrm_quotingmethodid"]!;
-}
-
-export async function getExistingQuoteStatuses(env: CrmEnvironment, keys: string[], provider: "EZLynx" | "Portal" = "EZLynx"): Promise<Map<string, number>> {
-  if (!keys.length) return new Map();
-  const ors = keys.map(k => `iacrm_amsexternalid eq '${esc(k)}'`).join(" or ");
-  const q = `iacrm_quotes?$select=iacrm_amsexternalid,iacrm_premium_status&$filter=iacrm_provider eq '${provider}' and (${ors})`;
-  const { value } = await dvJson<{ value: { iacrm_amsexternalid: string; iacrm_premium_status: number | null }[] }>(env, q);
-  return new Map(value.filter(v => v.iacrm_premium_status != null).map(v => [v.iacrm_amsexternalid, v.iacrm_premium_status!]));
 }
 
 export async function executeBatch(

@@ -98,10 +98,10 @@ describe("premium status on write", () => {
   });
   const FIRM = 738590002, ESTIMATED = 738590000;
   it("writes Firm when the agent chose it, Estimated otherwise, never downgrading a CRM Firm", () => {
-    expect(buildQuoteOps(payload("firm"), new Map())[0]!.body["iacrm_premium_status"]).toBe(FIRM);
-    expect(buildQuoteOps(payload("estimated"), new Map())[0]!.body["iacrm_premium_status"]).toBe(ESTIMATED);
-    expect(buildQuoteOps(payload(), new Map())[0]!.body["iacrm_premium_status"]).toBe(ESTIMATED);
-    expect(buildQuoteOps(payload("estimated"), new Map([["ezlynx:1:req", FIRM]]))[0]!.body).not.toHaveProperty("iacrm_premium_status");
+    expect(buildQuoteOps(payload("firm"), { byKey: new Map(), keyColumn: true })[0]!.body["iacrm_premium_status"]).toBe(FIRM);
+    expect(buildQuoteOps(payload("estimated"), { byKey: new Map(), keyColumn: true })[0]!.body["iacrm_premium_status"]).toBe(ESTIMATED);
+    expect(buildQuoteOps(payload(), { byKey: new Map(), keyColumn: true })[0]!.body["iacrm_premium_status"]).toBe(ESTIMATED);
+    expect(buildQuoteOps(payload("estimated"), { byKey: new Map([["ezlynx:1:req", { id: "Q-1", premiumStatus: FIRM }]]), keyColumn: true })[0]!.body).not.toHaveProperty("iacrm_premium_status");
   });
 });
 

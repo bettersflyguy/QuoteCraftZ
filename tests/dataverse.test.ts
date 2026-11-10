@@ -6,17 +6,22 @@ vi.mock("@/crm/auth", () => ({
   AuthRequiredError: class extends Error {}
 }));
 
-import { altKeyUrl, executeBatch, getExistingQuoteStatuses, searchAccounts, CrmAccessError,
+import { createQuote, executeBatch, findExistingQuotes, quoteWrite, searchAccounts, CrmAccessError,
   phoneFilterVariants, personNameVariants, findInsuredMatches } from "@/crm/dataverse";
 
 const ENV = { id: "dev", name: "DEV", orgUrl: "https://org.crm.dynamics.com", color: "green" as const };
 
 beforeEach(() => vi.restoreAllMocks());
 
-describe("altKeyUrl", () => {
-  it("addresses the alternate key and escapes single quotes", () => {
-    expect(altKeyUrl("ezlynx:1:req")).toBe("iacrm_quotes(iacrm_provider='EZLynx',iacrm_amsexternalid='ezlynx:1:req')");
-    expect(altKeyUrl("o'brien")).toContain("o''brien");
+describe("quoteWrite", () => {
+  const body = { iacrm_quote_name: "Q", iacrm_amsexternalid: "never" };
+  it("updates a quote already in CRM by its id, and never writes iacrm_amsexternalid", () => {
+    const op = quoteWrite("ezlynx:1:req", { byKey: new Map([["ezlynx:1:req", { id: "Q-1", premiumStatus: null }]]), keyColumn: true }, body);
+    expect(op).toEqual({ method: "PATCH", url: "iacrm_quotes(Q-1)", body: { iacrm_quote_name: "Q", iacrm_sourcequotekey: "ezlynx:1:req" } });
+  });
+  it("creates a new quote; no source key until the column exists", () => {
+    const op = quoteWrite("ezlynx:2:req", { byKey: new Map(), keyColumn: false }, body);
+    expect(op).toEqual({ method: "POST", url: "iacrm_quotes", body: { iacrm_quote_name: "Q" } });
   });
 });
 
@@ -38,8 +43,8 @@ describe("executeBatch", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     const results = await executeBatch(ENV, [
-      { key: "k1", method: "PATCH", url: altKeyUrl("k1"), body: { a: 1 } },
-      { key: "k2", method: "PATCH", url: altKeyUrl("k2"), body: { a: 2 } }
+      { key: "k1", method: "PATCH", url: "iacrm_quotes(Q-1)", body: { a: 1 } },
+      { key: "k2", method: "PATCH", url: "iacrm_quotes(Q-2)", body: { a: 2 } }
     ]);
     expect(results).toEqual([
       { key: "k1", status: 204, error: null, entityId: null },
@@ -159,18 +164,75 @@ describe("getStagesForLob pipeline selection", () => {
   });
 });
 
-describe("getExistingQuoteStatuses", () => {
-  it("or-chains keys and maps status by amsexternalid", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      expect(decodeURIComponent(url)).toContain("iacrm_amsexternalid eq 'ezlynx:1:req' or iacrm_amsexternalid eq 'ezlynx:2:req'");
-      return {
-        ok: true, status: 200, headers: new Headers(),
-        json: async () => ({ value: [{ iacrm_amsexternalid: "ezlynx:1:req", iacrm_premium_status: 738590002 }] })
-      } as unknown as Response;
+describe("findExistingQuotes", () => {
+  const items = [
+    { key: "ezlynx:1:req", opportunityId: "OPP-1", name: "Progressive - Auto - 2026-09-01" },
+    { key: "ezlynx:2:req", opportunityId: "OPP-1", name: "Safeco - Auto - 2026-09-01" },
+    { key: "ezlynx:3:req", opportunityId: "OPP-1", name: "Travelers - Auto - 2026-09-01" }
+  ];
+  const rows = [
+    { iacrm_quoteid: "Q-1", iacrm_sourcequotekey: "ezlynx:1:req", iacrm_premium_status: 738590002 },
+    { iacrm_quoteid: "Q-2", iacrm_amsexternalid: "ezlynx:2:req", iacrm_premium_status: null },
+    { iacrm_quoteid: "Q-3", _iacrm_opportunityid_value: "opp-1", iacrm_quote_name: "Travelers - Auto - 2026-09-01" }
+  ];
+
+  it("matches by source key, then the legacy key, then name on the opportunity (reads only)", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      expect(init?.method ?? "GET").toBe("GET");
+      urls.push(decodeURIComponent(url));
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ value: rows }) } as unknown as Response;
     }));
-    const m = await getExistingQuoteStatuses(ENV, ["ezlynx:1:req", "ezlynx:2:req"]);
-    expect(m.get("ezlynx:1:req")).toBe(738590002);
-    expect(m.has("ezlynx:2:req")).toBe(false);
+    const m = await findExistingQuotes(ENV, "EZLynx", items);
+    expect(m.keyColumn).toBe(true);
+    expect([...m.byKey].map(([k, v]) => [k, v.id, v.premiumStatus])).toEqual([
+      ["ezlynx:1:req", "Q-1", 738590002], ["ezlynx:2:req", "Q-2", null], ["ezlynx:3:req", "Q-3", null]
+    ]);
+    expect(urls[0]).toContain("iacrm_provider eq 'EZLynx'");
+    expect(urls[0]).toContain("iacrm_sourcequotekey eq 'ezlynx:1:req'");
+  });
+
+  it("works before the CRM deploys the source key column", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(decodeURIComponent(url));
+      if (decodeURIComponent(url).includes("iacrm_sourcequotekey")) {
+        return { ok: false, status: 400, headers: new Headers(), text: async () => "Could not find a property named 'iacrm_sourcequotekey'" } as unknown as Response;
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ value: rows.slice(1) }) } as unknown as Response;
+    }));
+    const m = await findExistingQuotes(ENV, "EZLynx", items);
+    expect(m.keyColumn).toBe(false);
+    expect([...m.byKey.keys()]).toEqual(["ezlynx:2:req", "ezlynx:3:req"]);
+    expect(urls).toHaveLength(2);
+  });
+});
+
+describe("createQuote (carrier portal quotes)", () => {
+  it("updates the site's quote already on the opportunity, keeps its Firm, and never writes iacrm_amsexternalid", async () => {
+    const calls: { url: string; method: string; body?: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url: decodeURIComponent(url), method, ...(init?.body ? { body: JSON.parse(init.body as string) } : {}) });
+      if (method === "GET") {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ value: [
+          { iacrm_quoteid: "Q-9", iacrm_amsexternalid: "www.progressive.com:OPP-1", iacrm_premium_status: 738590002 }
+        ] }) } as unknown as Response;
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ iacrm_quoteid: "Q-9" }) } as unknown as Response;
+    }));
+    const r = await createQuote(ENV, {
+      accountId: "ACC-1", opportunityId: "OPP-1", carrierId: null, lobId: null, name: "Progressive - Tracy Dittrich",
+      premium: 1200, coverageSummary: "", effectiveDate: null, sourceUrl: "https://www.progressive.com/quote/1",
+      quotingMethodId: null, premiumStatus: "estimated"
+    });
+    expect(r.quoteId).toBe("Q-9");
+    const write = calls.find(c => c.method !== "GET")!;
+    expect(write.method).toBe("PATCH");
+    expect(write.url).toContain("iacrm_quotes(Q-9)");
+    expect(write.body).not.toHaveProperty("iacrm_amsexternalid");
+    expect(write.body).not.toHaveProperty("iacrm_premium_status");
+    expect(write.body).toMatchObject({ iacrm_sourcequotekey: "www.progressive.com:OPP-1", iacrm_premium: 1200 });
   });
 });
 
