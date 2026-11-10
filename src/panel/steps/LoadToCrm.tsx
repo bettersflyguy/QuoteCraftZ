@@ -427,7 +427,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       // the insured's assets: each mapped row (Vehicle 1, Watercraft 2,
       // Property 1...) becomes its own record on the insured
       const outcomeText = (o: string) => o === "created" ? "added" : o === "filled" ? "updated" : "already in CRM";
-      const loadedAssets: { asset: string; id: string; sections: Set<string> }[] = [];
+      const loadedAssets: { asset: string; id: string; row: string; sections: Set<string> }[] = [];
       for (const asset of ASSET_TABLES) {
         for (let n = 1; n <= ARRAY_ROW_MAX; n += 1) {
           const values = crmGroup(app, `crm:${asset.slot}${n}`);
@@ -435,7 +435,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           const label = `${asset.singular} ${n}`;
           try {
             const r = await send<{ outcome: string; id: string }>({ type: "panel/upsertAsset", asset: asset.key, accountId, values });
-            if (r.id) loadedAssets.push({ asset: asset.key, id: r.id, sections: rowSections(app, `crm:${asset.slot}${n}`) });
+            if (r.id) loadedAssets.push({ asset: asset.key, id: r.id, row: `crm:${asset.slot}${n}`, sections: rowSections(app, `crm:${asset.slot}${n}`) });
             rows.push({ key: `${label}: ${outcomeText(r.outcome)}`, status: 204, error: null, entityId: null });
           } catch (e) {
             rows.push({ key: label, status: 0, error: String((e as Error).message ?? e), entityId: null });
@@ -465,6 +465,24 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           } catch (e) {
             rows.push({ key: label, status: 0, error: String((e as Error).message ?? e), entityId: null });
           }
+        }
+      }
+      // the risk answers captured from each vehicle / boat / property row
+      // point at that asset's insured item
+      if (loadedAssets.length) {
+        try {
+          const r = await send<{ linked: number; waiting: number; skipped: "no-tables" | "no-column" | null }>({
+            type: "panel/linkRiskAnswers", accountId, items: loadedAssets.map(a => ({ asset: a.asset, id: a.id, row: a.row }))
+          });
+          if (r.skipped === "no-column") rows.push({ key: "Risk answers: not linked to vehicles or properties (no insured item link on risk answers in CRM)", status: 0, error: "skipped", entityId: null });
+          else if (!r.skipped && (r.linked || r.waiting)) {
+            rows.push({
+              key: `Risk answers: ${r.linked} linked to their vehicle or property${r.waiting ? `; ${r.waiting} not yet (insured item still being created, load again in a minute)` : ""}`,
+              status: 204, error: null, entityId: null
+            });
+          }
+        } catch (e) {
+          rows.push({ key: "Risk answers: link to vehicles or properties", status: 0, error: String((e as Error).message ?? e), entityId: null });
         }
       }
       // values tagged for an opportunity / quote / policy timeline land on the

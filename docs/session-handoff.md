@@ -111,6 +111,13 @@ powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
 5. **Quote drivers:** drivers on the EZLynx risk application become contacts.
 6. **Card mapping:** a typed or date box on repeated cards maps every card, like a dropdown. Saved one-row mappings on those pages convert themselves.
 
+## Cloud session, 2026-11-10 (branch `fix/driver-cards-quote-key-risk-items`)
+
+1. **Driver cards:** a one-row person mapping saved on a box every driver card shares (First Name -> Related contact 1, Row 1) now reads every card, one person per card, placed by name. The editor counts repeats by visible label and shared key too.
+2. **Quotes no longer write `iacrm_amsexternalid`:** read-then-write by record id (source key column, then the legacy value read-only, then name on the opportunity). CRM brief: `docs/crm-handoff-quote-source-key.md` (new column `iacrm_sourcequotekey`, data fix, drop the old alternate key).
+3. **Risk answers link to insured items:** after Load writes vehicles / properties, answers captured from each asset row get `iacrm_insureditemid` (link discovered from metadata; skipped with a note when the lookup isn't there).
+4. **Open question for Nathan:** carrier-site pages create a held quote from ANY "Premium" label with a dollar value, mapped or not (`quoteFromCapture`, `portalHeldQuote`). Proposed: only when the premium field is mapped. Waiting on his call.
+
 ## Open items (in priority order)
 
 1. **Live verification.** None of v0.1.59 to v0.1.66 has been run on a live EZLynx page. Nathan tests manually after each publish; expect screenshots of results.

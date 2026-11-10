@@ -5,7 +5,7 @@ import { usDate } from "@/util/usDate";
  * question-knowledge tables for the risk-data layer. */
 import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
 import { noteRecordOf, noteSlotOf, type NoteRecord } from "@/portal/fieldMaps";
-import type { CapturedApplication } from "@/boldpenguin/types";
+import type { CapturedApplication, CapturedAppField } from "@/boldpenguin/types";
 
 /** Fields that describe the insured themselves; data-grid rows (Drivers,
  * Vehicles, Policies lists) are records and never stand in for them. */
@@ -759,6 +759,29 @@ export function accountNameFromCapture(app: CapturedApplication): string {
     clean(`${str(app, "contact", "firstName") ?? ""} ${str(app, "contact", "lastName") ?? ""}`);
 }
 
+/** A captured field's risk-data question: its label and the dictionary
+ * key in iacrm_questionid. Grid rows are records: "Vehicles list Row 2:
+ * VIN" is its own answer, never collapsed into Row 1's VIN. */
+export function knowledgeKeyOf(field: CapturedAppField): { label: string; key: string } {
+  const label = isGridRow(field) ? clean(`${field.section} ${field.group}: ${field.label}`) : clean(field.label);
+  return { label, key: `capture:${canonical(label)}`.slice(0, 100) };
+}
+
+/** The risk-data question keys captured from one asset row ("crm:vehicle2"):
+ * the row's mapped values, plus every other value of the same table row
+ * (same section and row), so the whole vehicle's answers point at its
+ * insured item. */
+export function assetRowQuestionKeys(app: CapturedApplication, row: string): string[] {
+  const mapped = app.fields.filter(f => f.mapped?.startsWith(`${row}.`) && clean(f.value));
+  const rowsOf = new Set(mapped.filter(f => f.group).map(f => `${f.section}\u0000${f.group}`));
+  const keys = app.fields
+    .filter(f => f.section !== "Related contacts" && clean(f.value))
+    .filter(f => mapped.includes(f) || (f.group && rowsOf.has(`${f.section}\u0000${f.group}`)))
+    .map(f => knowledgeKeyOf(f).key)
+    .filter(k => k !== "capture:");
+  return [...new Set(keys)];
+}
+
 /** Upserts every captured field into the knowledge tables via the shared
  * READ-then-write core (`upsertKnowledge`): dictionary keyed by
  * `capture:{canonical label}` in iacrm_questionid, one answer per
@@ -778,11 +801,8 @@ export async function writeApplicationKnowledge(
 
   for (const field of app.fields) {
     if (field.section === "Related contacts") continue; // CRM-sourced context, not risk data
-    // grid rows are records: "Vehicles list Row 2: VIN" is its own answer,
-    // never collapsed into Row 1's VIN
-    const label = isGridRow(field) ? clean(`${field.section} ${field.group}: ${field.label}`) : clean(field.label);
+    const { label, key } = knowledgeKeyOf(field);
     const value = clean(field.value);
-    const key = `capture:${canonical(label)}`.slice(0, 100);
     if (key === "capture:" || !value || seen.has(key)) continue;
     seen.add(key);
     questions.push({

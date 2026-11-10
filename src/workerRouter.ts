@@ -19,7 +19,7 @@ import {
 import { buildQuoteOps, quoteLookups } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
 import { writeCoverageLines } from "@/crm/coverage";
-import { writeQuestionKnowledge } from "@/crm/knowledge";
+import { linkAnswersToInsuredItem, writeQuestionKnowledge } from "@/crm/knowledge";
 import { ASSET_TABLES, CHILD_TABLES, getAllFieldMaps, setAllFieldMaps, PATH_LABEL, NOTE_TARGETS, fieldKeyOf, FIELD_KEY_PARTS, isArrayPath, isCrmTarget, isNoteTarget, isSecureTarget, isConcreteSecureTarget, noteLabelOf, rowTargetOf, securedIfIdentifier } from "@/portal/fieldMaps";
 import {
   getCoverageQuoteNavProp,
@@ -37,7 +37,7 @@ import {
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
 import { slotOf, withSlot } from "@/boldpenguin/people";
-import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge } from "@/crm/appCommit";
+import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge, assetRowQuestionKeys } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAsset, upsertChildRecord, insuredItemOf, upsertPriorCoverage, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -515,6 +515,28 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         const values = await coercedExtras(deps, env, table.key, msg.values);
         if (!Object.keys(values).length) return { ok: true, data: { outcome: "unchanged", id: "" } };
         return { ok: true, data: await deps.upsertAsset(env, table, msg.accountId, values) };
+      }
+
+      case "panel/linkRiskAnswers": {
+        // each loaded vehicle / boat / property: the risk answers captured
+        // from its row point at its insured item
+        const app = await deps.getCapturedApplication();
+        if (!app) return { ok: false, error: "The captured application is no longer available. Capture or ingest it again.", kind: "session" };
+        const env = await deps.getActiveEnvironment();
+        const api = { getKnowledgeNavProps: deps.getKnowledgeNavProps, executeBatch: deps.executeBatch, query: deps.dvQuery };
+        let linked = 0;
+        let waiting = 0;
+        for (const it of msg.items) {
+          const table = ASSET_TABLES.find(a => a.key === it.asset);
+          const keys = assetRowQuestionKeys(app, it.row);
+          if (!table || !keys.length) continue;
+          const itemId = await deps.insuredItemOf(env, table.set, it.id);
+          if (!itemId) { waiting += 1; continue; }
+          const r = await linkAnswersToInsuredItem(env, msg.accountId, keys, itemId, api);
+          if (r.skipped) return { ok: true, data: { linked, waiting, skipped: r.skipped } };
+          linked += r.linked;
+        }
+        return { ok: true, data: { linked, waiting, skipped: null } };
       }
 
       case "panel/upsertChild": {

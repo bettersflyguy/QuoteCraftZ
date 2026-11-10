@@ -1059,6 +1059,9 @@ export interface KnowledgeNavProps {
   accountNav: string;
   /** riskanswer -> carrierquestion bind nav property (schema-cased) */
   questionNav: string;
+  /** riskanswer -> insured item bind nav property (schema-cased), when
+   * the optional iacrm_insureditemid lookup exists */
+  insuredItemNav?: string;
 }
 
 /** Probe: are the question-knowledge tables (iacrm_carrierquestion /
@@ -1066,7 +1069,8 @@ export interface KnowledgeNavProps {
  * properties needed for riskanswer binds, or null while undeployed.
  * Cached positive-only per org. */
 export async function getKnowledgeNavProps(env: CrmEnvironment): Promise<KnowledgeNavProps | null> {
-  const cacheKey = `knowNav:${env.orgUrl}`;
+  // v2: also carries the optional insured item link
+  const cacheKey = `knowNav2:${env.orgUrl}`;
   const cached = await chrome.storage.local.get(cacheKey);
   if (cached[cacheKey] && typeof cached[cacheKey] === "object") return cached[cacheKey] as KnowledgeNavProps;
   try {
@@ -1077,7 +1081,8 @@ export async function getKnowledgeNavProps(env: CrmEnvironment): Promise<Knowled
     const accountNav = value.find(r => r.ReferencedEntity === "account")?.ReferencingEntityNavigationPropertyName;
     const questionNav = value.find(r => r.ReferencedEntity === "iacrm_carrierquestion")?.ReferencingEntityNavigationPropertyName;
     if (!accountNav || !questionNav) return null;
-    const navs = { accountNav, questionNav };
+    const insuredItemNav = value.find(r => r.ReferencedEntity === "iacrm_insureditem")?.ReferencingEntityNavigationPropertyName;
+    const navs: KnowledgeNavProps = { accountNav, questionNav, ...(insuredItemNav ? { insuredItemNav } : {}) };
     await chrome.storage.local.set({ [cacheKey]: navs });
     return navs;
   } catch {
