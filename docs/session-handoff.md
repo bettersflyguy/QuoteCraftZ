@@ -12,7 +12,7 @@ QuoteCraftZ is a Chrome MV3 side-panel extension for Betters Insurance agents.
 - **Load into CRM:** writes it to Dataverse (accounts, contacts, opportunities, quotes, policies, notes, Prior Coverage and assets).
 - **Fill:** fills quote forms from the capture.
 
-- Repo: GitHub `bettersflyguy/QuoteCraftZ`, branch `main`. Latest shipped build: **v0.1.66** (commit f161cee).
+- Repo: GitHub `bettersflyguy/QuoteCraftZ`, branch `main`. Latest shipped build: **v0.1.68** (PR #1 merged to `main` as 1a9cba6, 2026-11-10). v0.1.67 and v0.1.68 were built in the cloud session and installed by Nathan from a zip; the manifest carries the public key, so the extension ID is unchanged.
 - Stack: TypeScript strict, Vite + crxjs, React 18, Fluent UI v9, Vitest (jsdom).
 - Owner: Nathan Betters (agency owner). Wants short, direct, answer-first replies and autonomous execution.
 
@@ -111,16 +111,17 @@ powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
 5. **Quote drivers:** drivers on the EZLynx risk application become contacts.
 6. **Card mapping:** a typed or date box on repeated cards maps every card, like a dropdown. Saved one-row mappings on those pages convert themselves.
 
-## Cloud session, 2026-11-10 (branch `fix/driver-cards-quote-key-risk-items`)
+## Cloud session, 2026-11-10 (v0.1.67 to v0.1.68, PR #1, merged)
 
 1. **Driver cards:** a one-row person mapping saved on a box every driver card shares (First Name -> Related contact 1, Row 1) now reads every card, one person per card, placed by name. The editor counts repeats by visible label and shared key too.
 2. **Quotes no longer write `iacrm_amsexternalid`:** read-then-write by record id (source key column, then the legacy value read-only, then name on the opportunity). CRM brief: `docs/crm-handoff-quote-source-key.md` (new column `iacrm_sourcequotekey`, data fix, drop the old alternate key).
 3. **Risk answers link to insured items:** after Load writes vehicles / properties, answers captured from each asset row get `iacrm_insureditemid` (link discovered from metadata; skipped with a note when the lookup isn't there).
 4. **Carrier-site quotes need a mapped quote premium** (Nathan, 2026-11-10): a portal page holds a quote only when a value is mapped to `crm:quote.iacrm_premium`; other premiums (prior policy, current policy) never make one. An ingest without one drops the quote an earlier version held for that site.
+5. **Questions labelled above their box** (v0.1.68): EZLynx writes long questions (Driver Telematics/Smartride/Right Track Discount) above a label-less dropdown box. `boxLabel` in `portal-ingest.js` now falls back to the question just above the box (only within the box's own wrapper), so a click maps every driver card by label and saved one-spot text mappings read every card too.
 
 ## Open items (in priority order)
 
-1. **Live verification.** None of v0.1.59 to v0.1.66 has been run on a live EZLynx page. Nathan tests manually after each publish; expect screenshots of results.
+1. **Live verification.** None of v0.1.59 to v0.1.68 has been run on a live EZLynx page or DEV Dataverse. Nathan tests manually after each publish; expect screenshots of results.
 2. **Policy Driver / Driving Incident.** Waiting on the CRM session, which has the handoff `docs/crm-handoff-policy-drivers.md`. When its report arrives, build:
    - "Policy drivers (all rows)" and "Driving incidents (all rows)" as list targets: add them to `assetTables.ts` child tables, or as a new kind linked to a contact rather than an asset;
    - Load: one Policy Driver per driver row (contact + account + the line's opportunity + line of business), upserted by contact + opportunity or policy; incidents upserted by contact + type + date;

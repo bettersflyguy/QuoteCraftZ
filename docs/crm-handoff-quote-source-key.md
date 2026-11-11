@@ -9,6 +9,13 @@ From: the QuoteCraftZ session, which has already built the extension side agains
 
 From the next QuoteCraftZ release, the extension **never writes `iacrm_amsexternalid`**. It reads it only to recognize quotes that older versions already loaded.
 
+## Current DEV state (checked read-only with the service principal, 2026-11-11)
+
+- `iacrm_quote.iacrm_sourcequotekey`: **does not exist yet** (step 1 needed).
+- Alternate key **`iacrm_quote_provider_amsexternalid`** on (`iacrm_provider`, `iacrm_amsexternalid`) exists (step 3 removes it).
+- Quotes with `iacrm_amsexternalid` set: **0** in DEV, so step 2 has nothing to migrate in DEV. Check prod before any promotion.
+- `iacrm_riskanswer.iacrm_insureditemid` (lookup to `iacrm_insureditem`, entity set `iacrm_insureditems`, navigation property `iacrm_insureditemid`) **exists**. No change needed; the extension already uses it.
+
 ## 1. New column on Quote (`iacrm_quote`)
 
 | Column | Schema name | Type | Notes |
