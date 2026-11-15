@@ -9,12 +9,14 @@ From: the QuoteCraftZ session, which has already built the extension side agains
 
 From the next QuoteCraftZ release, the extension **never writes `iacrm_amsexternalid`**. It reads it only to recognize quotes that older versions already loaded.
 
-## Current DEV state (checked read-only with the service principal, 2026-11-11)
+## Current DEV state
 
-- `iacrm_quote.iacrm_sourcequotekey`: **does not exist yet** (step 1 needed).
-- Alternate key **`iacrm_quote_provider_amsexternalid`** on (`iacrm_provider`, `iacrm_amsexternalid`) exists (step 3 removes it).
-- Quotes with `iacrm_amsexternalid` set: **0** in DEV, so step 2 has nothing to migrate in DEV. Check prod before any promotion.
-- `iacrm_riskanswer.iacrm_insureditemid` (lookup to `iacrm_insureditem`, entity set `iacrm_insureditems`, navigation property `iacrm_insureditemid`) **exists**. No change needed; the extension already uses it.
+Re-checked read-only with the service principal, 2026-11-15: **steps 1 and 3 are done in DEV.**
+
+- `iacrm_quote.iacrm_sourcequotekey` **exists**: text, max length 200, optional, not secured, valid for create and update. QuoteCraftZ v0.1.68 starts writing it on the next Load with no update.
+- The old alternate key `iacrm_quote_provider_amsexternalid` is **gone**; `iacrm_quote` has no alternate keys.
+- Quotes with `iacrm_amsexternalid` set: **0** in DEV (checked 2026-11-11), so step 2 only matters in prod.
+- `iacrm_riskanswer.iacrm_insureditemid` (lookup to `iacrm_insureditem`, entity set `iacrm_insureditems`, navigation property `iacrm_insureditemid`) **exists**.
 
 ## 1. New column on Quote (`iacrm_quote`)
 
@@ -47,7 +49,7 @@ If an alternate key on (`iacrm_provider`, `iacrm_amsexternalid`) exists on `iacr
 
 ## 5. Security
 
-Same privileges as the other quote columns. The extension's app user needs read and write on `iacrm_sourcequotekey`.
+Same privileges as the other quote columns. QuoteCraftZ writes as the signed-in agent (not a service account), so the agents' security roles need Read and Write on Quote, Append on Risk Answer and Append To on Insured Item.
 
 ## 6. Report back to the QuoteCraftZ session
 
