@@ -124,23 +124,62 @@ describe("the four amount boxes of one accident", () => {
 describe("a mapping saved under the key the boxes shared before", () => {
   const LEGACY = "text:amount";
 
-  it("still resolves on every box, in the panel, the capture and the fill", async () => {
+  it("FAILS CLOSED on a page of differently-labelled boxes: nothing filled, nothing captured, rows flagged, key kept", async () => {
     page(accident("Accident 1", ["5000", "2000", "1000", "700"]));
     const ov = { [LEGACY]: "crm:incident.amountpaid" };
-    // the panel lists the old key as a row of its own, carrying the mapping
-    const rows = g.__bettersPortalScan(null, ov);
-    expect(rows.filter(r => r.key === LEGACY).map(r => r.mapped)).toEqual(["crm:incident.amountpaid"]);
-    const fields = ingest(ov).filter(f => f.mapped === "crm:incident.amountpaid");
-    expect(fields.map(f => f.value)).toEqual(["5000", "2000", "1000", "700"]);
+    // the panel lists the old key as a row of its own, still carrying the mapping, flagged for re-teach
+    const rows = g.__bettersPortalScan(null, ov) as (Row & { needsReteach?: boolean })[];
+    const old = rows.filter(r => r.key === LEGACY);
+    expect(old.map(r => r.mapped)).toEqual(["crm:incident.amountpaid"]);
+    expect(old.map(r => r.needsReteach)).toEqual([true]);
+    // each box row shows no mapping and is flagged too
+    const boxes = rows.filter(r => r.key !== LEGACY);
+    expect(boxes).toHaveLength(4);
+    boxes.forEach(r => { expect(r.mapped).toBe(""); expect(r.needsReteach).toBe(true); expect(r.label).toContain("re-teach"); });
+    // capture routes nothing to any CRM column
+    expect(ingest(ov).filter(f => f.mapped)).toEqual([]);
+    // fill writes nothing
     inputs().forEach(i => { i.value = ""; });
     await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.amountpaid": "123" } }, true, false, ov);
-    expect(inputs().map(i => i.value)).toEqual(["123", "123", "123", "123"]);
+    expect(inputs().map(i => i.value)).toEqual(["", "", "", ""]);
   }, 20000);
 
-  it("a legacy note mapping still turns the four boxes into rows of one table, as it did", () => {
+  it("the residual case: BI taught alone, then all four boxes shown, routes nothing from the shared key", async () => {
+    // BI is the only same-name box in the page when it is taught: its key is the shared key
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main><mat-form-field class="mat-mdc-form-field"><label>BI Amount</label><input name="amount" id="amount" value="5000"></mat-form-field></main>`;
+    expect(inputs()).toHaveLength(1);
+    const taught = g.__bettersControlKey(inputs()[0]!);
+    expect(taught).toBe(LEGACY);
+    const saved = { [taught]: "crm:incident.biamount" };
+    // still works on that page, as today
+    expect(ingest(saved).filter(f => f.mapped).map(f => `${f.mapped}=${f.value}`)).toEqual(["crm:incident.biamount=5000"]);
+    await Promise.resolve();
+    // all four boxes appear
     page(accident("Accident 1", ["5000", "2000", "1000", "700"]));
-    const rows = ingest({ [LEGACY]: "note:contacts[]" }).filter(f => f.mapped?.startsWith("note:"));
-    expect(rows.map(f => f.group).sort()).toEqual(["Row 1", "Row 2", "Row 3", "Row 4"]);
+    expect(ingest(saved).filter(f => f.mapped)).toEqual([]);
+    inputs().forEach(i => { i.value = ""; });
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.biamount": "42" } }, true, false, saved);
+    expect(inputs().map(i => i.value)).toEqual(["", "", "", ""]);
+    const rows = g.__bettersPortalScan(null, saved) as (Row & { needsReteach?: boolean })[];
+    expect(rows.filter(r => r.needsReteach)).toHaveLength(5);
+  }, 20000);
+
+  it("a legacy-only mapping on a page with ONE box still fills and captures, as today", async () => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main><mat-form-field class="mat-mdc-form-field"><label>BI Amount</label><input name="amount" id="amount" value="5000"></mat-form-field></main>`;
+    const ov = { [LEGACY]: "crm:incident.amountpaid" };
+    expect(ingest(ov).filter(f => f.mapped).map(f => `${f.mapped}=${f.value}`)).toEqual(["crm:incident.amountpaid=5000"]);
+    inputs()[0]!.value = "";
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.amountpaid": "9" } }, true, false, ov);
+    expect(inputs()[0]!.value).toBe("9");
+    const rows = g.__bettersPortalScan(null, ov) as (Row & { needsReteach?: boolean })[];
+    expect(rows.map(r => [r.key, r.mapped, r.needsReteach ?? false])).toEqual([[LEGACY, "crm:incident.amountpaid", false]]);
+  }, 20000);
+
+  it("a legacy note mapping is refused on the four boxes too, not turned into rows of one table", () => {
+    page(accident("Accident 1", ["5000", "2000", "1000", "700"]));
+    expect(ingest({ [LEGACY]: "note:contacts[]" }).filter(f => f.mapped?.startsWith("note:"))).toEqual([]);
   });
 
   it("is not read by the choice reader as 'the first of four boxes' (a key that matches several is refused)", async () => {
@@ -155,9 +194,8 @@ describe("a mapping saved under the key the boxes shared before", () => {
     page(accident("Accident 1", ["5000", "2000", "1000", "700"]));
     const saved = { [LEGACY]: "note:contacts[]" };
     expect(save(saved)).toEqual(saved);
-    // and the capture still groups the four boxes as Row 1 to 4 after that Save
-    const rows = ingest(save(saved)).filter(f => f.mapped?.startsWith("note:"));
-    expect(rows.map(f => f.group).sort()).toEqual(["Row 1", "Row 2", "Row 3", "Row 4"]);
+    // and the capture, which refuses it on these four boxes, refuses it the same way after that Save
+    expect(ingest(save(saved)).filter(f => f.mapped?.startsWith("note:"))).toEqual([]);
   });
 
   it("keeps every one of 78 saved mappings, with the same values, through a Save", () => {
@@ -183,8 +221,8 @@ describe("a mapping saved under the key the boxes shared before", () => {
     const ov = { [LEGACY]: "crm:incident.amountpaid", [bi!]: "crm:incident.biamount" };
     expect(g.__bettersPortalScan(null, ov).map(r => r.mapped)).toEqual(
       ["crm:incident.biamount", "", "", "", "crm:incident.amountpaid"]);
-    expect(ingest(ov).filter(f => f.mapped?.startsWith("crm:incident.")).map(f => `${f.mapped}=${f.value}`)).toEqual([
-      "crm:incident.biamount=5000", "crm:incident.amountpaid=2000", "crm:incident.amountpaid=1000", "crm:incident.amountpaid=700"]);
+    // BI uses its own mapping; the other three get nothing from the shared key
+    expect(ingest(ov).filter(f => f.mapped?.startsWith("crm:incident.")).map(f => `${f.mapped}=${f.value}`)).toEqual(["crm:incident.biamount=5000"]);
   });
 
   it("never changes the key of a control that has no shared key (every other saved mapping)", () => {

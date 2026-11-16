@@ -254,17 +254,28 @@
     return own || primaryLabel(element);
   }
   /* where this control's saved mapping lives: the key made from its own
-   * label first (whatever else is on the page), then its current key, then
-   * the legacy key (a mapping saved before the keys were told apart keeps
-   * working, exactly as it did), else its current key */
+   * label first (whatever else is on the page), else its current key. When
+   * the box is the only one of its name on the page its current key IS the
+   * legacy key, so a mapping saved under it keeps working exactly as before. */
   function savedKeyOf(map, element) {
     const key = controlKey(element);
     if (!map) return key;
     const own = labelKeyOf(element);
-    if (own && map[own]) return own;
-    if (map[key]) return key;
+    return own && map[own] ? own : key;
+  }
+  /* FAIL CLOSED. A mapping saved under the shared legacy key cannot say which
+   * of several differently-labelled same-name boxes it was taught on (it may
+   * have been taught on BI alone). On a page where that key covers such boxes,
+   * a box with no mapping of its own gets NOTHING from it: no fill, no
+   * capture, no peek, no choice read. The scan flags the row for re-teach and
+   * keeps the saved key untouched so a Save loses nothing. */
+  function legacyRefused(map, element) {
+    if (!map) return false;
+    const key = controlKey(element);
     const legacy = legacyControlKey(element);
-    return legacy !== key && map[legacy] ? legacy : key;
+    if (key === legacy || !map[legacy]) return false;
+    const own = labelKeyOf(element);
+    return !(own && map[own]) && !map[key];
   }
   /* Every named control in the document (hidden, disabled and collapsed ones
    * too), grouped by legacy key: used only to decide whether a box's name is
@@ -632,6 +643,7 @@
     for (const element of controls) {
       const name = fieldName(element);
       if (!name || PAYMENT_FIELD.test(name)) continue;
+      if (legacyRefused(ov, element)) continue; /* the shared key fills nothing here */
       const savedKey = savedKeyOf(ov, element);
       if (element.type !== "radio" && isSecurePath(ov[savedKey])) {
         if (overwrite || blank(element)) secure.push({ key: savedKey, path: ov[savedKey] });
@@ -898,11 +910,6 @@
     if (groups.length > 1) return null;
     if (groups.length === 1) return groups[0];
     all.forEach(keyFor); /* the exact key missed: the fallbacks need every key, once */
-    /* a key saved before same-id controls were told apart is the legacy key:
-     * it names the control only when EXACTLY ONE control carries it (the rule
-     * above: a key that matches several boxes is never read as the first) */
-    const legacyHits = all.filter((c) => keyFor(c).indexOf("~") >= 0 && legacyControlKey(c) === key);
-    if (legacyHits.length === 1) return legacyHits[0];
     /* a key made from a box's own label still finds the box when it is alone
      * on the page (its current key is then the legacy key) */
     if (key.indexOf("~") >= 0) {
@@ -1076,7 +1083,7 @@
       if (seen.has(key)) continue;
       seen.add(key);
       const legacy = legacyControlKey(element);
-      const inherited = legacy !== key && !ov[key] && typeof ov[legacy] === "string" && Boolean(ov[legacy]);
+      const inherited = legacyRefused(ov, element);
       if (legacy !== key) {
         const hit = legacyShared.get(legacy) || { element, count: 0 };
         hit.count += 1;
@@ -1087,16 +1094,19 @@
       const autoPath = auto && typeof auto.path === "string" && auto.path.indexOf("fields.") !== 0 ? auto.path : null;
       rows.push({
         key,
-        label: inSection(element, shownLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key,
+        label: (inSection(element, shownLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key) +
+          (inherited ? " (re-teach: the old shared mapping is not applied)" : ""),
         fieldLabel: shownLabel(element) || "",
         ...repeatInfo(shownLabel(element) || "", element),
         section: mapper && mapper.sectionOf ? mapper.sectionOf(element).key : "",
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
         autoPath,
-        /* a box that still follows the old shared key shows no mapping of its
-         * own (the old key's row below carries it), so a Save does not copy it */
+        /* a box the old shared key is refused on shows no mapping of its own
+         * (the old key's row below carries it and is flagged), so a Save does
+         * not copy it */
         mapped: inherited ? "" : typeof ov[key] === "string" ? ov[key] : null,
+        ...(inherited ? { needsReteach: true } : {}),
         options: choiceOptions(element)
       });
     }
@@ -1106,7 +1116,8 @@
       const el = hit.element;
       rows.push({
         key: legacy,
-        label: "Every box sharing " + (clean(el.name) || clean(el.id)) + " (saved before the boxes were told apart)",
+        label: "Every box sharing " + (clean(el.name) || clean(el.id)) + " (saved before the boxes were told apart: not applied, re-teach each box under its own label)",
+        needsReteach: true,
         fieldLabel: "",
         section: mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "",
         type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
@@ -1545,9 +1556,6 @@
       if (["hidden", "password", "file", "submit", "button", "reset", "image"].indexOf(type) !== -1 || !visible(el)) return;
       var k = controlKey(el);
       (byKey[k] = byKey[k] || []).push(el);
-      /* a mapping saved under the legacy key still outlines its controls */
-      var lk = legacyControlKey(el);
-      if (lk !== k) (byKey[lk] = byKey[lk] || []).push(el);
       var ok = labelKeyOf(el);
       if (ok && ok !== k) (byKey[ok] = byKey[ok] || []).push(el);
     });
@@ -1669,7 +1677,7 @@
     all.forEach(function (el) {
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
-      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(legacyControlKey(el)) || coveredKeys.has(labelKeyOf(el)))) return;
+      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(labelKeyOf(el)))) return;
       if (isControl && serviceLabels.length && serviceCovers(el)) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
       markPeek(el, "unmapped", "");
