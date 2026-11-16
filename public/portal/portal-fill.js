@@ -612,8 +612,16 @@
     const exact = all.filter((c) => mayHaveKey(c) && keyFor(c) === key);
     /* the same key on two controls (numbered twin cards): refuse, never
      * hand card 2 the value of card 1 */
-    if (exact.length > 1) return null;
-    if (exact.length === 1) return exact[0];
+    /* a radio group shares one key across its buttons: same name in the same
+     * form is ONE control here, read as main did (via its first button) */
+    const groups = [];
+    exact.forEach((c) => {
+      const radio = (c.type || "").toLowerCase() === "radio";
+      if (radio && c.name && groups.some((g) => (g.type || "").toLowerCase() === "radio" && g.name === c.name && g.form === c.form)) return;
+      groups.push(c);
+    });
+    if (groups.length > 1) return null;
+    if (groups.length === 1) return groups[0];
     all.forEach(keyFor); /* the exact key missed: the fallbacks need every key, once */
     /* Past the exact key, a control is returned only when EXACTLY ONE
      * candidate remains: reading a look-alike field (card 1 for card 2, a

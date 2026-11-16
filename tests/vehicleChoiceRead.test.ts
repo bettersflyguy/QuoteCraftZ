@@ -293,4 +293,18 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(await read("select:use", { label: "Use" })).toBeNull();
     expect(await read("select:use")).toBeNull();
   });
+  it("a Yes/No radio group is one control: its checked option is read, not refused as a twin", async () => {
+    document.body.innerHTML = `<fieldset><legend>Garaged</legend>
+      <label><input type="radio" name="garaged" value="y">Yes</label>
+      <label><input type="radio" name="garaged" value="n" checked>No</label></fieldset>`;
+    const r = await read("radio:garaged");
+    expect(r?.current).toBe("No");
+    expect(r?.options).toEqual(["Yes", "No"]);
+  });
+
+  it("two separate same-name radio groups in different forms still read nothing", async () => {
+    document.body.innerHTML = `<form><input type="radio" name="garaged" id="a1"><input type="radio" name="garaged" id="a2" checked></form>
+      <form><input type="radio" name="garaged" id="b1" checked><input type="radio" name="garaged" id="b2"></form>`;
+    expect(await read("radio:garaged")).toBeNull();
+  });
 });
