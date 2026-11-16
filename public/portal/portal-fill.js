@@ -146,7 +146,7 @@
       if (["radio", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
       if (!clean(el.name) && !clean(el.id)) return;
       const k = legacyControlKey(el);
-      if (!byKey.has(k)) byKey.set(k, { els: [], labels: null, cuts: null });
+      if (!byKey.has(k)) byKey.set(k, { els: [], labels: null });
       byKey.get(k).els.push(el);
     });
     c.groups = byKey;
@@ -172,6 +172,16 @@
     if (k === undefined) { k = computeControlKey(element); c.keys.set(element, k); }
     return k;
   }
+  /* the label as written (canonical) up to 40 characters, else its first 30
+   * plus "#" and an 8-hex hash of the whole label */
+  function labelHash(label) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < label.length; i += 1) { h ^= label.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return ("00000000" + h.toString(16)).slice(-8);
+  }
+  function labelPart(label) {
+    return label.length <= 40 ? label : label.slice(0, 30) + "#" + labelHash(label);
+  }
   function computeControlKey(element) {
     const legacy = legacyControlKey(element);
     if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return legacy;
@@ -181,15 +191,19 @@
     if (!own) return legacy;
     if (!group.labels) group.labels = new Set(group.els.map(ownLabelOf).filter(Boolean));
     if (group.labels.size < 2) return legacy;
-    /* the label part is cut at 60 characters to keep keys short, but two
-     * different labels that cut to the same text keep their full label */
-    if (!group.cuts) {
-      group.cuts = new Map();
-      group.labels.forEach((l) => { const cut = l.slice(0, 60); group.cuts.set(cut, (group.cuts.get(cut) || 0) + 1); });
-    }
-    const part = group.cuts.get(own.slice(0, 60)) > 1 ? own : own.slice(0, 60);
     const suffix = sectionSuffix(element);
     const head = suffix ? legacy.slice(0, legacy.length - suffix.length) : legacy;
+    /* the label part comes from THIS box's label alone, never from the other
+     * boxes on the page, so a box keeps its key when look-alikes come and go */
+    let part = labelPart(own);
+    /* the whole key must stay within the 200 characters share-file import
+     * accepts: the label part gives way, never the section suffix */
+    const room = 200 - head.length - 1 - suffix.length;
+    if (part.length > room) {
+      if (room < 1) return legacy;
+      const h = labelHash(own);
+      part = room > h.length ? own.slice(0, room - h.length - 1) + "#" + h : h.slice(0, room);
+    }
     return head + "~" + part + suffix;
   }
   /* the label the mapping editor shows: primaryLabel, except that a control

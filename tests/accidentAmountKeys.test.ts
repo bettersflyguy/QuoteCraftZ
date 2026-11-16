@@ -215,16 +215,41 @@ describe("long labels that start alike stay separate fields", () => {
     expect(fields.map(f => `${f.mapped}=${f.value}`).sort()).toEqual(["crm:incident.a=1", "crm:incident.b=2", "crm:incident.c=3"]);
   });
 
-  it("labels that still agree after the 60-character cut keep their full label, so they stay apart too", () => {
+  it("labels that share their first 60 characters stay apart too", () => {
     const stem = "Bodily Injury Liability Amount Paid On Behalf Of The Named Insured Driver";
     expect(stem.length).toBeGreaterThan(60);
-    const keys = boxes([`${stem} To The Carrier`, `${stem} To A Third Party`]);
-    expect(new Set(keys).size).toBe(2);
+    expect(new Set(boxes([`${stem} To The Carrier`, `${stem} To A Third Party`])).size).toBe(2);
   });
 
-  it("keys stay inside the 200-character import limit for ordinary long labels", () => {
-    const keys = boxes(["A".repeat(90) + " one", "A".repeat(90) + " two ", "B".repeat(90)]);
+  it("a box keeps its key when look-alike boxes are added or removed", async () => {
+    const stem = "Bodily Injury Liability Amount Paid On Behalf Of The Named Insured Driver";
+    const mine = `${stem} To The Carrier`;
+    // each page is read in its own tick, as the extension's separate calls are
+    const first = async (labels: string[]) => { const k = boxes(labels)[0]; await Promise.resolve(); return k; };
+    const alone = await first([mine, "PD Amount"]);
+    expect(await first([mine, `${stem} To A Third Party`, "PD Amount"])).toBe(alone);
+    expect(await first([mine, `${stem} To A Third Party`, `${stem} To The Insured`, "PD Amount"])).toBe(alone);
+    // a short label is kept as written
+    const short = await first(["BI Amount", "PD Amount"]);
+    expect(short).toBe("text:amount~bi amount");
+    expect(await first(["BI Amount", "PD Amount", "MP Amount"])).toBe(short);
+    // a long label is its first 30 characters, "#" and an 8-hex hash of the whole label
+    expect(alone).toMatch(/^text:amount~.{30}#[0-9a-f]{8}$/);
+  });
+
+  it("every key stays within 200 characters, with the longest names, labels and sections", () => {
+    const long = "x".repeat(250);
+    const panel = (title: string, inner: string) =>
+      `<mat-expansion-panel><mat-expansion-panel-header><span><mat-panel-title>${title}</mat-panel-title></span></mat-expansion-panel-header><div>${inner}</div></mat-expansion-panel>`;
+    const field = (label: string, value: string) =>
+      `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input name="${long}" value="${value}"></mat-form-field>`;
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main>${panel("Applicant Info", panel("Very Long Section Title ".repeat(8) + "Address",
+      field("A".repeat(300) + " one", "1") + field("A".repeat(300) + " two", "2") + field("Short", "3")))}</main>`;
+    const keys = inputs().map(i => g.__bettersControlKey(i));
+    expect(new Set(keys).size).toBe(3);
     keys.forEach(k => expect(k.length).toBeLessThanOrEqual(200));
+    expect(keys.some(k => k.includes("~"))).toBe(true);
   });
 });
 
