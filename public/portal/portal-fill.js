@@ -584,33 +584,37 @@
     const all = Array.from(document.querySelectorAll(LABELLED_FIELDS));
     const exact = all.find((c) => controlKey(c) === key);
     if (exact) return exact;
+    /* Past the exact key, a control is returned only when EXACTLY ONE
+     * candidate remains: reading a look-alike field (card 1 for card 2, a
+     * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
+     * known section must match; an ambiguous result is null, not a guess. */
     const parts = splitKey(key);
     const label = hint && hint.label ? mapper.canonical(hint.label) : "";
+    const section = (hint && hint.section) || parts.section || "";
+    const sectionOfEl = (c) => (mapper.sectionOf ? mapper.sectionOf(c).key : "");
     const labelOf = (c) => mapper.canonical(primaryLabel(c) || primaryLabel(choiceHost(c)));
-    const pickOne = (list) => { const shown = list.filter(visible); return (shown.length ? shown : list)[0] || null; };
+    const only = (list) => {
+      const shown = list.filter(visible);
+      const pool = shown.length ? shown : list;
+      return pool.length === 1 ? pool[0] : null;
+    };
+    const inSection = (list) => (section ? list.filter((c) => sectionOfEl(c) === section) : list);
     if (GENERATED_ID.test(parts.base)) {
-      /* "mat-select-12" and "mat-select-13" are different fields that share
-       * one stable shape: the label settles it, and with no label an
-       * ambiguous shape is NOT guessed (reading the wrong field would bind
-       * its choices to this one) */
       const want = stableBase(parts.base);
       let same = all.filter((c) => {
         const k = splitKey(controlKey(c));
-        return GENERATED_ID.test(k.base) && stableBase(k.base) === want && (!parts.section || k.section === parts.section);
+        return GENERATED_ID.test(k.base) && stableBase(k.base) === want;
       });
+      same = inSection(same);
       if (label) same = same.filter((c) => labelOf(c) === label);
-      if (label ? same.length : same.length === 1) return pickOne(same);
+      const hit = only(same);
+      if (hit) return hit;
     }
     if (!label) return null;
-    const named = all.filter((c) => {
+    return only(inSection(all.filter((c) => {
       if (c.type && ["hidden", "submit", "button", "password", "file"].indexOf(c.type) >= 0) return false;
       return labelOf(c) === label;
-    });
-    const shown = named.filter(visible);
-    const pool = shown.length ? shown : named;
-    const section = hint.section || parts.section || "";
-    const inSame = section ? pool.filter((c) => (mapper.sectionOf ? mapper.sectionOf(c).key : "") === section) : [];
-    return (inSame.length ? inSame : pool)[0] || null;
+    })));
   }
 
   async function readChoices(key, labels, hint) {

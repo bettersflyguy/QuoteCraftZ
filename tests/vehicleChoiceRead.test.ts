@@ -92,12 +92,13 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect((await read("text:mat-select-3", { label: "Anti-theft" }))?.options).toEqual(["None", "Alarm"]);
   });
 
-  it("with the same label on two vehicle cards, a changed card suffix still reads a control", async () => {
+  it("a changed card suffix reads nothing, the unchanged one reads its control", async () => {
     document.body.innerHTML = `
       <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Vehicle Details</mat-panel-title></mat-expansion-panel-header>
         <label for="u1">Use</label><select id="u1"><option>Pleasure</option><option>Business</option></select></mat-expansion-panel>`;
     const r = await read("select:u-gone@vehicle details old card", { label: "Use", section: "vehicle details old card" });
-    expect(r?.options).toEqual(["Pleasure", "Business"]);
+    expect(r).toBeNull(); // the saved section is not on the page: not another one's field
+    expect((await read("select:u-gone@vehicle details", { label: "Use", section: "vehicle details" }))?.options).toEqual(["Pleasure", "Business"]);
   });
 
   it("returns null when nothing on the page matches, and still refuses identifier fields", async () => {
@@ -118,5 +119,28 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     document.body.innerHTML = `<label for="x">Use</label><select id="x"><option>One</option></select>
       <label for="y">Use</label><select id="y"><option>Two</option></select>`;
     expect((await read("select:y", { label: "Use" }))?.options).toEqual(["Two"]);
+  });
+
+  it("two vehicle cards with regenerated ids and the same label: no guess (never reads card 1 for card 2)", async () => {
+    document.body.innerHTML = `
+      <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Vehicle 1</mat-panel-title></mat-expansion-panel-header>
+        <label for="mat-select-21">Use</label><select id="mat-select-21"><option selected>Pleasure</option></select></mat-expansion-panel>
+      <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Vehicle 2</mat-panel-title></mat-expansion-panel-header>
+        <label for="mat-select-22">Use</label><select id="mat-select-22"><option selected>Business</option></select></mat-expansion-panel>`;
+    expect(await read("select:mat-select-9", { label: "Use", section: "" })).toBeNull();
+    expect(await read("select:gone-id", { label: "Use" })).toBeNull();
+  });
+
+  it("a known section must match: a Vehicle Type is never read from the Driver Type", async () => {
+    document.body.innerHTML = `
+      <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Driver Info</mat-panel-title></mat-expansion-panel-header>
+        <label for="dt">Type</label><select id="dt"><option selected>Primary</option></select></mat-expansion-panel>
+      <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Other Section</mat-panel-title></mat-expansion-panel-header>
+        <label for="ot">Type</label><select id="ot"><option selected>Other</option></select></mat-expansion-panel>`;
+    // saved under "vehicle details", which is not on this page: no other section stands in
+    expect(await read("select:vtype-old@vehicle details", { label: "Type", section: "vehicle details" })).toBeNull();
+    expect(await read("select:mat-select-5@vehicle details", { label: "Type", section: "vehicle details" })).toBeNull();
+    // the section that does match is read
+    expect((await read("select:vtype-old@driver info", { label: "Type", section: "driver info" }))?.current).toBe("Primary");
   });
 });
