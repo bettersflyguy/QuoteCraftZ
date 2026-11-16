@@ -606,15 +606,16 @@
     const section = (hint && hint.section) || parts.section || "";
     const sectionOfEl = (c) => (mapper.sectionOf ? mapper.sectionOf(c).key : "");
     const labelOf = (c) => mapper.canonical(primaryLabel(c) || primaryLabel(choiceHost(c)));
-    const only = (list) => {
-      const shown = list.filter(visible);
-      const pool = shown.length ? shown : list;
-      return pool.length === 1 ? pool[0] : null;
-    };
-    const inSection = (list) => (section ? list.filter((c) => sectionOfEl(c) === section) : list);
+    /* visibility never decides: a collapsed card 2 must not hand back card 1 */
+    const only = (list) => (list.length === 1 ? list[0] : null);
+    /* the section must agree, an empty one included: an unsectioned key
+     * (a numbered card) never matches a field inside a named section */
+    const inSection = (list) => list.filter((c) => sectionOfEl(c) === section);
     /* the candidates whose label is `label`, by the full lookup, on a short list only */
     const withLabel = (list) => (list.length > FULL_SCAN_LIMIT ? [] : list.filter((c) => labelOf(c) === label));
-    if (GENERATED_ID.test(parts.base)) {
+    /* a generated-id shape alone names no field ("mat-select-12" could be any
+     * of them): it needs a label or a section to say which */
+    if (GENERATED_ID.test(parts.base) && (label || section)) {
       const want = stableBase(parts.base);
       let same = sameTag.filter((c) => {
         const k = splitKey(controlKey(c));

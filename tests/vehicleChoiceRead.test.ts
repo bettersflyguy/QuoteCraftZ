@@ -51,7 +51,7 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(saved.key).toBe("select:mat-select-12");
     document.body.innerHTML = `<label for="mat-select-48">Use</label>
       <select id="mat-select-48"><option value="">Select</option><option>Pleasure</option><option selected>Commute</option><option>Business</option></select>`;
-    expect(await read(saved.key)).toEqual({ current: "Commute", options: ["Pleasure", "Commute", "Business"] });
+    expect(await read(saved.key, { label: "Use" })).toEqual({ current: "Commute", options: ["Pleasure", "Commute", "Business"] });
   });
 
   it("finds a styled dropdown host that is not an input, by its exact key", async () => {
@@ -65,7 +65,7 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
   it("finds a styled dropdown whose generated id changed", async () => {
     document.body.innerHTML = styledDropdown("mat-select-77", "Performance", "Standard", []) + `<div class="cdk-overlay-container"></div>`;
     wireOverlay("mat-select-77", ["Standard", "High Performance", "Sports"]);
-    const r = await read("text:mat-select-5");
+    const r = await read("text:mat-select-5", { label: "Performance" });
     expect(r?.options).toEqual(["Standard", "High Performance", "Sports"]);
   });
 
@@ -156,6 +156,36 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     document.body.innerHTML = `<label for="mat-input-7">Use</label><input type="text" id="mat-input-7" value="Commute">`;
     expect(await read("select:mat-input-3", { label: "Use" })).toBeNull();
     expect((await read("text:mat-input-3", { label: "Use" }))?.current).toBe("Commute");
+  });
+
+  it("visibility never decides: a collapsed card 2 does not hand back card 1", async () => {
+    document.body.innerHTML = `
+      <div id="c1"><label for="mat-select-41">Use</label><select id="mat-select-41"><option selected>Pleasure</option></select></div>
+      <div id="c2"><label for="mat-select-42">Use</label><select id="mat-select-42"><option selected>Business</option></select></div>`;
+    const hidden = document.getElementById("mat-select-42")!;
+    const rect = HTMLElement.prototype.getBoundingClientRect;
+    const hide = function (this: HTMLElement) {
+      return this === hidden || hidden.contains(this) ? { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() { return {}; } } as DOMRect : rect.call(this);
+    };
+    HTMLElement.prototype.getBoundingClientRect = hide;
+    try {
+      expect(await read("select:mat-select-9", { label: "Use" })).toBeNull();
+    } finally { HTMLElement.prototype.getBoundingClientRect = rect; }
+  });
+
+  it("a generated-id key with no label and no section reads nothing, not the one other dropdown left", async () => {
+    document.body.innerHTML = styledDropdown("mat-select-101", "Performance", "Standard", []);
+    expect(await read("text:mat-select-1")).toBeNull();
+    expect(await read("text:mat-select-1", {})).toBeNull();
+  });
+
+  it("an unsectioned key never matches a same-label field inside a named section", async () => {
+    document.body.innerHTML = `
+      <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Driver Info</mat-panel-title></mat-expansion-panel-header>
+        <label for="du">Use</label><select id="du"><option selected>Primary</option></select></mat-expansion-panel>`;
+    expect(await read("select:use-gone", { label: "Use", section: "" })).toBeNull();
+    expect(await read("select:use-gone", { label: "Use" })).toBeNull();
+    expect((await read("select:use-gone@driver info", { label: "Use", section: "driver info" }))?.current).toBe("Primary");
   });
 
   it("a twin labelled only by container text counts: two same-section selects is ambiguous, not the first one (label path)", async () => {
