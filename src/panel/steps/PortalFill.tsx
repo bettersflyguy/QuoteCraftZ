@@ -12,7 +12,8 @@ import { QuotesView } from "../QuotesView";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { isGridRow } from "@/boldpenguin/normalize";
-import { PATH_LABEL, isNoteTarget, isPrimaryTarget, noteLabelOf } from "@/portal/fieldMaps";
+import { recordTables } from "@/boldpenguin/recordTables";
+import { PATH_LABEL, isNoteTarget, noteLabelOf } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -86,21 +87,9 @@ function businessName(app: CapturedApplication | null): string | null {
 interface GridTable { title: string; label?: string; columns: string[]; rows: Record<string, string>[] }
 
 function gridTables(fields: CapturedApplication["fields"]): GridTable[] {
-  const out = new Map<string, { columns: string[]; rows: Map<string, Record<string, string>>; primary: Set<string> }>();
-  for (const f of fields) {
-    if (!isGridRow(f)) continue;
-    const t = out.get(f.section) ?? out.set(f.section, { columns: [], rows: new Map(), primary: new Set() }).get(f.section)!;
-    if (!t.columns.includes(f.label)) t.columns.push(f.label);
-    const row = t.rows.get(f.group) ?? t.rows.set(f.group, {}).get(f.group)!;
-    row[f.label] = usDate(f.value);
-    if (isPrimaryTarget(f.mapped)) t.primary.add(f.group);
-  }
-  // the row that lands on the primary contact / the account's Address 1
-  return [...out.entries()].map(([title, t]) => t.primary.size
-    ? { title, columns: [PRIMARY_COLUMN, ...t.columns], rows: [...t.rows.entries()].map(([g, r]) => ({ [PRIMARY_COLUMN]: t.primary.has(g) ? "Yes" : "", ...r })) }
-    : { title, columns: t.columns, rows: [...t.rows.values()] });
+  // one table per kind of record, a record on one row however it was read (see recordTables)
+  return recordTables(fields);
 }
-const PRIMARY_COLUMN = "Primary";
 
 /** A policy page's table ("Opportunity Policy - Auto", "Prior Auto Policy"):
  * every value from it shows together, wherever it is mapped to. */
@@ -330,8 +319,8 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const policyFields = app ? app.fields.filter(f => isPolicySection(f.section)) : [];
-  const renderGrid = (t: GridTable) => (
-    <div key={t.title}>
+  const renderGrid = (t: GridTable, at = 0) => (
+    <div key={`${at}:${t.title}`}>
       {t.label === "Fields" && <div className={styles.gridTitle}>{t.title}</div>}
       {t.label !== "Notes" && t.label !== "Fields" && <div className={styles.gridTitle}>{t.title} ({t.rows.length} row{t.rows.length === 1 ? "" : "s"})</div>}
       <div className={styles.grid}>
@@ -492,7 +481,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
           </table>
         </div>
       )}
-      {app && view === "data" && gridTables(regular).map(renderGrid)}
+      {app && view === "data" && gridTables(regular).map((t, i) => renderGrid(t, i))}
       {app && view === "data" && [...new Set(policyFields.map(f => f.section))].map(sec => renderGrid({
         title: sec, label: "Fields", columns: ["Field", "Value", "Goes to"],
         rows: policyFields.filter(f => f.section === sec).map(f => ({
@@ -522,7 +511,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
                   title: sec || `${target}:singles`, label: sec ? "Fields" : "Notes", columns: ["Field", "Value"],
                   rows: singles.filter(f => (f.section ?? "") === sec).map(f => ({ Field: f.label, Value: usDate(f.value) }))
                 }))}
-                {gridTables(forRecord).map(renderGrid)}
+                {gridTables(forRecord).map((t, i) => renderGrid(t, i))}
               </div>
             );
           })}
