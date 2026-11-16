@@ -379,6 +379,8 @@
     };
     const results = [];
     const handledRadioGroups = new Set();
+    const formIds = new Map();
+    let radioKeys = null;
     const values = (payload && payload.values) || {};
     /* secured mappings present in THIS frame: the worker fetches only these
      * and sends them back to this frame alone */
@@ -395,17 +397,36 @@
       if (!ov[controlKey(element)] && isSensitiveSource(name)) continue;
       if (element.type === "radio") {
         const fieldset = element.closest("fieldset");
-        const groupKey = element.name ? `name:${element.name}` : fieldset || element;
+        /* a radio group is per form: the same name in two forms is two groups */
+        const formId = element.form ? (formIds.get(element.form) || formIds.set(element.form, formIds.size + 1).get(element.form)) : 0;
+        const groupKey = element.name ? `name:${formId}:${element.name}` : fieldset || element;
         if (handledRadioGroups.has(groupKey)) continue;
         handledRadioGroups.add(groupKey);
         const mapKey = controlKey(element);
         if (ov[mapKey] === "skip") continue;
         const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
-        const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
+        /* a nameless radio is keyed by its label or option text ("radio:no"):
+         * when a radio of ANOTHER group has the same key the mapping cannot say
+         * which question it means, so neither is filled. The key index is built
+         * once, and only when a nameless radio actually has something to fill */
+        if (!element.name) {
+          if (!radioKeys) {
+            radioKeys = new Map();
+            controls.forEach((c) => {
+              if (c.type !== "radio") return;
+              const k = controlKey(c);
+              if (!radioKeys.has(k)) radioKeys.set(k, []);
+              radioKeys.get(k).push(c);
+            });
+          }
+          if ((radioKeys.get(mapKey) || []).some((c) => !sameRadioGroup(c, element))) continue;
+        }
+        const group = controls.filter((control) => control.type === "radio" && sameRadioGroup(control, element));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
         const outcome = await fillControl(target, candidate, overwrite, addrCtx, name);
+        radioKeys = null; /* a fill can relabel other questions: the key index is stale */
         results.push({ label: name, path: candidate.path, status: outcome.status });
         continue;
       }
@@ -419,6 +440,7 @@
         continue;
       }
       const outcome = await fillControl(element, candidate, overwrite, addrCtx, name);
+      radioKeys = null;
       results.push({ label: name, path: candidate.path, status: outcome.status });
     }
 
@@ -496,14 +518,24 @@
   /* the choices a selection control offers, in the page's own wording (the
    * mapping editor binds each one to an exact CRM choice) */
   const PLACEHOLDER_OPTION = /^(select|choose|please|--|- -|none selected)/i;
+  /* is r in the same radio group as el? Named: same name, same form. A
+   * nameless radio groups only with itself or with nameless radios it provably
+   * shares a group with (same fieldset, same form) - never "every radio
+   * outside a fieldset", which spans other questions */
+  function sameRadioGroup(r, el) {
+    if ((r.type || "").toLowerCase() !== "radio") return false;
+    if (r === el) return true;
+    if (el.name) return r.name === el.name && r.form === el.form;
+    const fieldset = el.closest("fieldset");
+    return !r.name && !!fieldset && r.closest("fieldset") === fieldset && r.form === el.form;
+  }
   function choiceOptions(element) {
     let texts = [];
     if (element.tagName === "SELECT") {
       texts = Array.from(element.options).map((o) => clean(o.textContent));
     } else if ((element.type || "").toLowerCase() === "radio") {
-      const fieldset = element.closest("fieldset");
       texts = Array.from(document.querySelectorAll("input[type='radio']"))
-        .filter((r) => (element.name ? r.name === element.name : r.closest("fieldset") === fieldset))
+        .filter((r) => sameRadioGroup(r, element))
         .map((r) => optionName(r));
     } else {
       return undefined;
@@ -581,6 +613,7 @@
   }
   function stableBase(base) { return String(base).replace(/\d+/g, "#"); }
   const NOT_CHOICE_TYPES = ["hidden", "password", "file", "submit", "button", "reset", "image"];
+  function isNotChoice(c) { return NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) >= 0; }
   /* The full per-control label lookup (explicitLabel does a document-wide
    * query per control) is quadratic, so it runs only on a short list. A label
    * index cannot stand in for it: a twin labelled only by container text would
@@ -591,17 +624,43 @@
   function findChoiceControl(key, hint) {
     /* never a password, hidden, file or button control, on any path */
     const all = Array.from(document.querySelectorAll(LABELLED_FIELDS))
-      .filter((c) => NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) < 0);
-    const keys = all.map(controlKey);
-    const at = keys.indexOf(key);
-    if (at >= 0) return all[at];
+      .filter((c) => !isNotChoice(c));
+    /* keys are computed lazily and kept: an exact hit must not pay for every
+     * other control (controlKey can run a document-wide label lookup) */
+    const keyOf = new Map();
+    const keyFor = (c) => {
+      if (!keyOf.has(c)) keyOf.set(c, controlKey(c));
+      return keyOf.get(c);
+    };
+    /* false only when the control's own name/id already shows its key cannot
+     * be `key`; a control keyed by its label (no name/id) is always checked */
+    const mayHaveKey = (c) => {
+      const radio = (c.type || "").toLowerCase() === "radio";
+      const own = clean(c.name) || (radio ? "" : clean(c.id));
+      if (!own) return true;
+      const tag = radio ? "radio" : (c.tagName === "SELECT" ? "select" : (c.type || "text").toLowerCase());
+      return key.indexOf((tag + ":" + own).slice(0, 120)) === 0;
+    };
+    const exact = all.filter((c) => mayHaveKey(c) && keyFor(c) === key);
+    /* the same key on two controls (numbered twin cards): refuse, never
+     * hand card 2 the value of card 1 */
+    /* a radio group shares one key across its buttons: same name in the same
+     * form is ONE control here, read as main did (via its first button) */
+    const groups = [];
+    exact.forEach((c) => {
+      const radio = (c.type || "").toLowerCase() === "radio";
+      if (radio && c.name && groups.some((g) => (g.type || "").toLowerCase() === "radio" && g.name === c.name && g.form === c.form)) return;
+      groups.push(c);
+    });
+    if (groups.length > 1) return null;
+    if (groups.length === 1) return groups[0];
+    all.forEach(keyFor); /* the exact key missed: the fallbacks need every key, once */
     /* Past the exact key, a control is returned only when EXACTLY ONE
      * candidate remains: reading a look-alike field (card 1 for card 2, a
      * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
      * known section must match; an ambiguous result is null, not a guess. */
     const parts = splitKey(key);
     /* the key's tag (select, text, ...) must agree on every fallback path */
-    const keyOf = new Map(all.map((c, i) => [c, keys[i]]));
     const sameTag = all.filter((c) => splitKey(keyOf.get(c)).tag === parts.tag);
     const label = hint && hint.label ? mapper.canonical(hint.label) : "";
     /* the section comes from the KEY only; a hint that names another section
@@ -645,6 +704,8 @@
     }
     if (!el) return null;
     const host = choiceHost(el);
+    /* never a password, hidden, file or button control, on any path */
+    if (isNotChoice(el) || isNotChoice(host)) return null;
     const name = fieldName(host) || fieldName(el) || "";
     if (isSensitiveSource(name) || PAYMENT_FIELD.test(name)) return { current: "", options: [], refused: true };
     if (host.tagName === "SELECT") {
@@ -652,7 +713,7 @@
       return { current: sel ? clean(sel.textContent) : "", options: choiceOptions(host) || [] };
     }
     if ((el.type || "").toLowerCase() === "radio") {
-      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => r.name === el.name);
+      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => sameRadioGroup(r, el));
       const on = group.find((r) => r.checked);
       return { current: on ? optionName(on) : "", options: choiceOptions(el) || [] };
     }

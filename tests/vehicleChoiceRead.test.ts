@@ -255,4 +255,104 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(calls).toBeLessThanOrEqual(1500 + 10);
     expect(calls).toBeGreaterThanOrEqual(1500);
   });
+  /* ---- follow-up to the Security Review of 0bd9058 (comment 6909252679) ---- */
+  it("pick: path never reads a password, hidden, file or button control", async () => {
+    document.body.innerHTML = `<label for="pw">Use</label><input type="password" id="pw" value="hunter2">
+      <input type="hidden" id="hd" value="secret"><input type="file" id="fl"><input type="submit" id="sb" value="Go">`;
+    for (const sel of ["#pw", "#hd", "#fl", "#sb"]) expect(await read("pick:" + sel)).toBeNull();
+  });
+
+  it("label path never reads a password control", async () => {
+    document.body.innerHTML = `<label for="pw">Use</label><input type="password" id="pw" value="hunter2">`;
+    expect(await g.__bettersPortalChoices("", ["Use"])).toBeNull();
+  });
+
+  it("a host that is itself a password control is refused too", async () => {
+    document.body.innerHTML = `<label for="pw">Use</label><input type="password" id="pw" value="hunter2">`;
+    expect(await g.__bettersPortalChoices("", ["Use"])).toBeNull();
+    expect(await read("pick:input[type=password]")).toBeNull();
+  });
+
+  it("an exact key hit does not compute the keys of the other controls", async () => {
+    document.body.innerHTML = Array.from({ length: 200 }, (_, i) => `<div><input type="text" id="f${i}"></div>`).join("")
+      + `<label for="mat-select-use">Use</label><select id="mat-select-use"><option selected>Business</option></select>`;
+    const m = (globalThis as unknown as { BettersPortalMapper: { canonical: (s: string) => string; sectionOf: (e: Element) => { key: string } } }).BettersPortalMapper;
+    const real = m.sectionOf;
+    let calls = 0;
+    m.sectionOf = (e: Element) => { calls += 1; return real(e); };
+    try {
+      expect((await read("select:mat-select-use"))?.current).toBe("Business");
+    } finally { m.sectionOf = real; }
+    expect(calls).toBeLessThanOrEqual(5); // one key for the hit, not 200+
+  });
+
+  it("the same exact key on two controls (twin cards) reads nothing, not card 1", async () => {
+    document.body.innerHTML = `
+      <div><label for="a">Use</label><select id="a" name="use"><option selected>Pleasure</option></select></div>
+      <div><label for="b">Use</label><select id="b" name="use"><option selected>Business</option></select></div>`;
+    expect(await read("select:use", { label: "Use" })).toBeNull();
+    expect(await read("select:use")).toBeNull();
+  });
+  it("a Yes/No radio group is one control: its checked option is read, not refused as a twin", async () => {
+    document.body.innerHTML = `<fieldset><legend>Garaged</legend>
+      <label><input type="radio" name="garaged" value="y">Yes</label>
+      <label><input type="radio" name="garaged" value="n" checked>No</label></fieldset>`;
+    const r = await read("radio:garaged");
+    expect(r?.current).toBe("No");
+    expect(r?.options).toEqual(["Yes", "No"]);
+  });
+
+  it("two separate same-name radio groups in different forms still read nothing", async () => {
+    document.body.innerHTML = `<form><input type="radio" name="garaged" id="a1"><input type="radio" name="garaged" id="a2" checked></form>
+      <form><input type="radio" name="garaged" id="b1" checked><input type="radio" name="garaged" id="b2"></form>`;
+    expect(await read("radio:garaged")).toBeNull();
+  });
+
+  it("a radio group belongs to its own form: same-name groups with different answers are read separately", async () => {
+    document.body.innerHTML = `
+      <form id="p"><fieldset><legend>Primary Garage</legend>
+        <label><input type="radio" name="garaged" value="y">Yes</label><label><input type="radio" name="garaged" value="n">No</label></fieldset></form>
+      <form id="s"><fieldset><legend>Secondary Garage</legend>
+        <label><input type="radio" name="garaged" value="y" checked>Yes</label><label><input type="radio" name="garaged" value="n">No</label></fieldset></form>`;
+    // primary has nothing checked: it must not read the secondary form's "Yes"
+    expect((await read("pick:#p input"))?.current).toBe("");
+    expect((await read("pick:#s input"))?.current).toBe("Yes");
+  });
+
+  it("a radio group's options come from its own form only", async () => {
+    document.body.innerHTML = `
+      <form id="f1"><label><input type="radio" name="g" value="a">A</label><label><input type="radio" name="g" value="b">B</label></form>
+      <form id="f2"><label><input type="radio" name="g" value="a" checked>A</label><label><input type="radio" name="g" value="c">C</label></form>`;
+    const r = await read("pick:#f1 input");
+    expect(r?.current).toBe("");
+    expect(r?.options).toEqual(["A", "B"]);
+  });
+  /* nameless radios: no name means no group beyond the radio itself (or a fieldset it shares) */
+  const NAMELESS = `<form>
+      <input type="radio" id="g1" aria-label="Garaged"><input type="radio" id="g2" aria-label="Garaged No">
+      <input type="radio" id="l1" aria-label="Leased" checked></form>`;
+
+  it("a nameless radio read by key does not take another question's checked answer", async () => {
+    document.body.innerHTML = NAMELESS;
+    expect((await read("radio:garaged"))?.current).toBe("");
+  });
+
+  it("a nameless radio read by label does not take another question's checked answer", async () => {
+    document.body.innerHTML = NAMELESS;
+    expect((await g.__bettersPortalChoices("", ["Garaged"]))?.current).toBe("");
+  });
+
+  it("nameless radios outside a fieldset take their options from themselves, not from radios in other forms", async () => {
+    document.body.innerHTML = `<form><label><input type="radio" id="x1">X</label></form>
+      <form><label><input type="radio">Other</label></form><label><input type="radio">Z</label>`;
+    expect((await read("pick:#x1"))?.options).toEqual(["X"]);
+  });
+
+  it("nameless radios in one fieldset and form are still one group", async () => {
+    document.body.innerHTML = `<form><fieldset><legend>Garaged</legend>
+      <label><input type="radio" id="y">Yes</label><label><input type="radio" id="n" checked>No</label></fieldset></form>`;
+    const r = await read("pick:#y");
+    expect(r?.current).toBe("No");
+    expect(r?.options).toEqual(["Yes", "No"]);
+  });
 });
