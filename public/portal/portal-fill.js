@@ -601,7 +601,8 @@
      * known section must match; an ambiguous result is null, not a guess. */
     const parts = splitKey(key);
     /* the key's tag (select, text, ...) must agree on every fallback path */
-    const sameTag = all.filter((c, i) => splitKey(keys[i]).tag === parts.tag);
+    const keyOf = new Map(all.map((c, i) => [c, keys[i]]));
+    const sameTag = all.filter((c) => splitKey(keyOf.get(c)).tag === parts.tag);
     const label = hint && hint.label ? mapper.canonical(hint.label) : "";
     /* the section comes from the KEY only; a hint that names another section
      * (or none, when the key has one) is a mismatch, not an override */
@@ -622,7 +623,7 @@
     if (GENERATED_ID.test(parts.base)) {
       const want = stableBase(parts.base);
       let same = sameTag.filter((c) => {
-        const k = splitKey(controlKey(c));
+        const k = splitKey(keyOf.get(c));
         return GENERATED_ID.test(k.base) && stableBase(k.base) === want;
       });
       same = inSection(same);
