@@ -487,6 +487,16 @@ describe("the shared key fails closed when the sibling boxes are read-only or di
     expect(routed()).toEqual([]);
   });
 
+  it("an aria-hidden modal (a Bootstrap modal fading out): the capture reads the page, so the boxes are grouped over the page", () => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<div class="modal fade" aria-hidden="true"><input name="other" value="x"></div>
+      <main>${box("BI Amount", "5000")}${box("Collision Amount", "2000")}${box("MP Amount", "1000")}${box("PD Amount", "700")}</main>`;
+    // 600x300: the filler takes it for the open modal (it ignores aria-hidden); the capture rejects it
+    const modal = document.querySelector(".modal") as HTMLElement;
+    modal.getBoundingClientRect = () => ({ left: 100, top: 100, width: 600, height: 300, right: 700, bottom: 400, x: 100, y: 100, toJSON() { return {}; } }) as DOMRect;
+    expect(routed()).toEqual([]);
+  });
+
   it("a one-box legacy page is unchanged: it captures and fills as today", async () => {
     show(box("BI Amount", "5000"));
     expect(routed()).toEqual(["crm:incident.biamount=5000"]);
