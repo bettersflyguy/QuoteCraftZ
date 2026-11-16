@@ -281,14 +281,15 @@ describe("the boxes that count as sharing a key", () => {
   const one = (label: string, extra = "", type = "text") => `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input type="${type}" name="amount" id="amount" ${extra}></mat-form-field>`;
   const first = (...boxes: string[]) => { document.title = "Tracy Dittrich - Accidents"; document.body.innerHTML = `<main>${boxes.join("")}</main>`; return g.__bettersControlKey(inputs()[0]!); };
 
-  it("ignores hidden, disabled and image controls", async () => {
+  it("ignores hidden and image controls, but counts read-only and disabled ones (the capture reads them)", async () => {
     expect(first(one("BI Amount"), one("Collision Amount", 'style="display:none"'))).toBe("text:amount");
-    await Promise.resolve();
-    expect(first(one("BI Amount"), one("Collision Amount", "disabled"))).toBe("text:amount");
     await Promise.resolve();
     expect(first(one("BI Amount"), one("Collision Amount", "", "image"))).toBe("text:amount");
     await Promise.resolve();
-    // while a second visible, enabled text box does count
+    expect(first(one("BI Amount"), one("Collision Amount", "disabled"))).toContain("~");
+    await Promise.resolve();
+    expect(first(one("BI Amount"), one("Collision Amount", "readonly"))).toContain("~");
+    await Promise.resolve();
     expect(first(one("BI Amount"), one("Collision Amount"))).toContain("~");
   });
 
@@ -432,6 +433,43 @@ describe("a fill that relabels another box mid-pass", () => {
       { [bi!]: "crm:incident.bi", [col!]: "crm:incident.col" });
     // the second box is now the PD box: the mapping saved for "Collision Amount" must not fill it
     expect(inputs().map(i => i.value)).toEqual(["1", ""]);
+  }, 20000);
+});
+
+describe("the shared key fails closed when the sibling boxes are read-only or disabled", () => {
+  const LEGACY = "text:amount";
+  const saved = { [LEGACY]: "crm:incident.biamount" };
+  const box = (label: string, value: string, attr = "") =>
+    `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input name="amount" id="amount" value="${value}" ${attr}></mat-form-field>`;
+  const show = (...boxes: string[]) => { document.title = "Tracy Dittrich - Accidents"; document.body.innerHTML = `<main>${boxes.join("")}</main>`; };
+  const routed = () => ingest(saved).filter(f => f.mapped).map(f => `${f.mapped}=${f.value}`);
+
+  it("all four boxes read-only: nothing is captured from the shared key", () => {
+    show(box("BI Amount", "5000", "readonly"), box("Collision Amount", "2000", "readonly"), box("MP Amount", "1000", "readonly"), box("PD Amount", "700", "readonly"));
+    expect(routed()).toEqual([]);
+  });
+
+  it("BI editable, the other three disabled: nothing is captured, and the scan flags BI and the old key", () => {
+    show(box("BI Amount", "5000"), box("Collision Amount", "2000", "disabled"), box("MP Amount", "1000", "disabled"), box("PD Amount", "700", "disabled"));
+    expect(routed()).toEqual([]);
+    const rows = g.__bettersPortalScan(null, saved) as (Row & { needsReteach?: boolean })[];
+    expect(rows.filter(r => r.needsReteach).map(r => r.key).sort()).toHaveLength(2);
+    expect(rows.find(r => r.key === LEGACY)?.mapped).toBe("crm:incident.biamount");
+  });
+
+  it("BI editable, the other three read-only: nothing is captured, and the scan flags BI and the old key", () => {
+    show(box("BI Amount", "5000"), box("Collision Amount", "2000", "readonly"), box("MP Amount", "1000", "readonly"), box("PD Amount", "700", "readonly"));
+    expect(routed()).toEqual([]);
+    const rows = g.__bettersPortalScan(null, saved) as (Row & { needsReteach?: boolean })[];
+    expect(rows.filter(r => r.needsReteach)).toHaveLength(2);
+  });
+
+  it("a one-box legacy page is unchanged: it captures and fills as today", async () => {
+    show(box("BI Amount", "5000"));
+    expect(routed()).toEqual(["crm:incident.biamount=5000"]);
+    inputs()[0]!.value = "";
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.biamount": "9" } }, true, false, saved);
+    expect(inputs()[0]!.value).toBe("9");
   }, 20000);
 });
 

@@ -150,11 +150,16 @@
     const c = tick();
     if (c.bases) return c.bases;
     const byBase = new Map();
-    /* only the controls a scan, capture or fill acts on: visible and enabled,
-     * in the active dialog (or the page), never a radio or an image button */
-    pageControls(activeModal() || document).forEach((el) => {
+    /* every control the capture can READ: visible, of a type that carries a
+     * value, in the active dialog (or the page) - read-only and disabled boxes
+     * included, because the capture reads them even though a fill skips them.
+     * Grouping over fewer controls than the capture reads would let a box whose
+     * siblings are read-only keep the shared key and fail open. Never a radio
+     * or an image button. */
+    const root = activeModal() || document;
+    Array.from(root.querySelectorAll("input, select, textarea")).filter(visible).forEach((el) => {
       const type = (el.type || "").toLowerCase();
-      if (["radio", "image"].indexOf(type) >= 0) return;
+      if (["radio", "image", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
       if (!clean(el.name) && !clean(el.id)) return;
       const k = keyBase(el);
       if (!byBase.has(k)) byBase.set(k, []);
