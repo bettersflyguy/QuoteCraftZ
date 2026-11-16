@@ -121,7 +121,7 @@
   let pinned = 0;
   function tick() {
     if (tickCache) return tickCache;
-    const c = { legacy: new Map(), own: new Map(), keys: new Map(), ownKeys: new Map(), groups: null, docGroups: null, repeat: null };
+    const c = { legacy: new Map(), own: new Map(), keys: new Map(), ownKeys: new Map(), groups: null, bases: null, docGroups: null, repeat: null };
     tickCache = c;
     Promise.resolve().then(() => { if (!pinned && tickCache === c) tickCache = null; });
     return c;
@@ -140,22 +140,40 @@
    * legacy key plus "~<its label>". Controls with the same label (the same
    * field on each card) and controls whose key came from a label keep the
    * legacy key. */
-  function sharedGroups() {
+  /* name/id part of a control's legacy key, without its section: a cheap
+   * attribute read, so grouping candidates never runs the section lookup */
+  function keyBase(el) {
+    const tag = el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase();
+    return (tag + ":" + (clean(el.name) || clean(el.id))).slice(0, 120);
+  }
+  function sharedBases() {
     const c = tick();
-    if (c.groups) return c.groups;
-    const byKey = new Map();
+    if (c.bases) return c.bases;
+    const byBase = new Map();
     /* only the controls a scan, capture or fill acts on: visible and enabled,
      * in the active dialog (or the page), never a radio or an image button */
     pageControls(activeModal() || document).forEach((el) => {
       const type = (el.type || "").toLowerCase();
       if (["radio", "image"].indexOf(type) >= 0) return;
       if (!clean(el.name) && !clean(el.id)) return;
-      const k = legacyControlKey(el);
-      if (!byKey.has(k)) byKey.set(k, { els: [], labels: null });
-      byKey.get(k).els.push(el);
+      const k = keyBase(el);
+      if (!byBase.has(k)) byBase.set(k, []);
+      byBase.get(k).push(el);
     });
-    c.groups = byKey;
-    return byKey;
+    c.bases = byBase;
+    return byBase;
+  }
+  /* the controls that share this control's legacy key (same base AND same
+   * section), found without computing the section of any other base */
+  function sharedGroup(element, legacy) {
+    const c = tick();
+    if (!c.groups) c.groups = new Map();
+    if (c.groups.has(legacy)) return c.groups.get(legacy);
+    const candidates = sharedBases().get(keyBase(element)) || [];
+    const group = candidates.length < 2 ? null
+      : { els: candidates.filter((el) => legacyControlKey(el) === legacy), labels: null };
+    c.groups.set(legacy, group);
+    return group;
   }
   /* the control's own label: the box's label first (it stays right when an
    * id is duplicated), then the label the key logic already trusts */
@@ -191,7 +209,7 @@
     const legacy = legacyControlKey(element);
     if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return legacy;
     if (!mapper) return legacy;
-    const group = sharedGroups().get(legacy);
+    const group = sharedGroup(element, legacy);
     if (!group || group.els.length < 2 || group.els.indexOf(element) < 0) return legacy;
     if (!ownLabelOf(element)) return legacy;
     if (!group.labels) group.labels = new Set(group.els.map(ownLabelOf).filter(Boolean));
@@ -564,8 +582,33 @@
     /* keys are computed once for the whole pass (it awaits between controls) */
     tickCache = null;
     pinned += 1;
+    /* a fill can relabel other questions (an Angular re-render after a change
+     * event), so after each control the cached keys are dropped IF anything
+     * that can change a key moved: label text, label/id/name attributes. Value,
+     * style and data attributes (which every fill sets) do not count, so an
+     * ordinary pass stays linear. */
+    let moved = false;
+    const watcher = typeof MutationObserver === "function" ? new MutationObserver(() => { moved = true; }) : null;
+    if (watcher) {
+      watcher.observe(document, { subtree: true, childList: true, characterData: true, attributes: true,
+        attributeFilter: ["aria-label", "aria-labelledby", "for", "id", "name", "type", "placeholder", "data-label"] });
+    }
+    keysMoved = () => {
+      if (!watcher) return true;
+      /* the callback runs as a microtask (a change that already happened has set
+       * the flag); records still queued are read directly */
+      const any = moved || watcher.takeRecords().length > 0;
+      moved = false;
+      return any;
+    };
     try { return await fillPass(payload, overwrite, autoAdvance, overrides); }
-    finally { pinned -= 1; tickCache = null; }
+    finally { if (watcher) watcher.disconnect(); keysMoved = () => false; pinned -= 1; tickCache = null; }
+  }
+  let keysMoved = () => false;
+  /* after a fill: the radio key index and, when the page moved, the key cache */
+  function afterFillControl(dropRadioKeys) {
+    if (keysMoved()) tickCache = null;
+    return dropRadioKeys;
   }
   async function fillPass(payload, overwrite, autoAdvance, overrides) {
     const ov = overrides || {};
@@ -579,6 +622,8 @@
     };
     const results = [];
     const handledRadioGroups = new Set();
+    const formIds = new Map();
+    let radioKeys = null;
     const values = (payload && payload.values) || {};
     /* secured mappings present in THIS frame: the worker fetches only these
      * and sends them back to this frame alone */
@@ -596,17 +641,36 @@
       if (!ov[savedKey] && isSensitiveSource(name)) continue;
       if (element.type === "radio") {
         const fieldset = element.closest("fieldset");
-        const groupKey = element.name ? `name:${element.name}` : fieldset || element;
+        /* a radio group is per form: the same name in two forms is two groups */
+        const formId = element.form ? (formIds.get(element.form) || formIds.set(element.form, formIds.size + 1).get(element.form)) : 0;
+        const groupKey = element.name ? `name:${formId}:${element.name}` : fieldset || element;
         if (handledRadioGroups.has(groupKey)) continue;
         handledRadioGroups.add(groupKey);
         const mapKey = savedKey;
         if (ov[mapKey] === "skip") continue;
         const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
-        const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
+        /* a nameless radio is keyed by its label or option text ("radio:no"):
+         * when a radio of ANOTHER group has the same key the mapping cannot say
+         * which question it means, so neither is filled. The key index is built
+         * once, and only when a nameless radio actually has something to fill */
+        if (!element.name) {
+          if (!radioKeys) {
+            radioKeys = new Map();
+            controls.forEach((c) => {
+              if (c.type !== "radio") return;
+              const k = controlKey(c);
+              if (!radioKeys.has(k)) radioKeys.set(k, []);
+              radioKeys.get(k).push(c);
+            });
+          }
+          if ((radioKeys.get(mapKey) || []).some((c) => !sameRadioGroup(c, element))) continue;
+        }
+        const group = controls.filter((control) => control.type === "radio" && sameRadioGroup(control, element));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
         const outcome = await fillControl(target, candidate, overwrite, addrCtx, name);
+        radioKeys = afterFillControl(null); /* a fill can relabel other questions: the key indexes are stale */
         results.push({ label: name, path: candidate.path, status: outcome.status });
         continue;
       }
@@ -620,6 +684,7 @@
         continue;
       }
       const outcome = await fillControl(element, candidate, overwrite, addrCtx, name);
+      radioKeys = afterFillControl(null);
       results.push({ label: name, path: candidate.path, status: outcome.status });
     }
 
@@ -696,14 +761,24 @@
   /* the choices a selection control offers, in the page's own wording (the
    * mapping editor binds each one to an exact CRM choice) */
   const PLACEHOLDER_OPTION = /^(select|choose|please|--|- -|none selected)/i;
+  /* is r in the same radio group as el? Named: same name, same form. A
+   * nameless radio groups only with itself or with nameless radios it provably
+   * shares a group with (same fieldset, same form) - never "every radio
+   * outside a fieldset", which spans other questions */
+  function sameRadioGroup(r, el) {
+    if ((r.type || "").toLowerCase() !== "radio") return false;
+    if (r === el) return true;
+    if (el.name) return r.name === el.name && r.form === el.form;
+    const fieldset = el.closest("fieldset");
+    return !r.name && !!fieldset && r.closest("fieldset") === fieldset && r.form === el.form;
+  }
   function choiceOptions(element) {
     let texts = [];
     if (element.tagName === "SELECT") {
       texts = Array.from(element.options).map((o) => clean(o.textContent));
     } else if ((element.type || "").toLowerCase() === "radio") {
-      const fieldset = element.closest("fieldset");
       texts = Array.from(document.querySelectorAll("input[type='radio']"))
-        .filter((r) => (element.name ? r.name === element.name : r.closest("fieldset") === fieldset))
+        .filter((r) => sameRadioGroup(r, element))
         .map((r) => optionName(r));
     } else {
       return undefined;
@@ -781,6 +856,7 @@
   }
   function stableBase(base) { return String(base).replace(/\d+/g, "#"); }
   const NOT_CHOICE_TYPES = ["hidden", "password", "file", "submit", "button", "reset", "image"];
+  function isNotChoice(c) { return NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) >= 0; }
   /* The full per-control label lookup (explicitLabel does a document-wide
    * query per control) is quadratic, so it runs only on a short list. A label
    * index cannot stand in for it: a twin labelled only by container text would
@@ -791,14 +867,41 @@
   function findChoiceControl(key, hint) {
     /* never a password, hidden, file or button control, on any path */
     const all = Array.from(document.querySelectorAll(LABELLED_FIELDS))
-      .filter((c) => NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) < 0);
-    const keys = all.map(controlKey);
-    const at = keys.indexOf(key);
-    if (at >= 0) return all[at];
+      .filter((c) => !isNotChoice(c));
+    /* keys are computed lazily and kept: an exact hit must not pay for every
+     * other control (controlKey can run a document-wide label lookup) */
+    const keyOf = new Map();
+    const keyFor = (c) => {
+      if (!keyOf.has(c)) keyOf.set(c, controlKey(c));
+      return keyOf.get(c);
+    };
+    /* false only when the control's own name/id already shows its key cannot
+     * be `key`; a control keyed by its label (no name/id) is always checked */
+    const mayHaveKey = (c) => {
+      const radio = (c.type || "").toLowerCase() === "radio";
+      const own = clean(c.name) || (radio ? "" : clean(c.id));
+      if (!own) return true;
+      const tag = radio ? "radio" : (c.tagName === "SELECT" ? "select" : (c.type || "text").toLowerCase());
+      return key.indexOf((tag + ":" + own).slice(0, 120)) === 0;
+    };
+    const exact = all.filter((c) => mayHaveKey(c) && keyFor(c) === key);
+    /* the same key on two controls (numbered twin cards): refuse, never
+     * hand card 2 the value of card 1 */
+    /* a radio group shares one key across its buttons: same name in the same
+     * form is ONE control here, read as main did (via its first button) */
+    const groups = [];
+    exact.forEach((c) => {
+      const radio = (c.type || "").toLowerCase() === "radio";
+      if (radio && c.name && groups.some((g) => (g.type || "").toLowerCase() === "radio" && g.name === c.name && g.form === c.form)) return;
+      groups.push(c);
+    });
+    if (groups.length > 1) return null;
+    if (groups.length === 1) return groups[0];
+    all.forEach(keyFor); /* the exact key missed: the fallbacks need every key, once */
     /* a key saved before same-id controls were told apart is the legacy key:
      * it names the control only when EXACTLY ONE control carries it (the rule
-     * below: a key that matches several boxes is never read as the first) */
-    const legacyHits = all.filter((c, i) => keys[i].indexOf("~") >= 0 && legacyControlKey(c) === key);
+     * above: a key that matches several boxes is never read as the first) */
+    const legacyHits = all.filter((c) => keyFor(c).indexOf("~") >= 0 && legacyControlKey(c) === key);
     if (legacyHits.length === 1) return legacyHits[0];
     /* a key made from a box's own label still finds the box when it is alone
      * on the page (its current key is then the legacy key) */
@@ -812,7 +915,6 @@
      * known section must match; an ambiguous result is null, not a guess. */
     const parts = splitKey(key);
     /* the key's tag (select, text, ...) must agree on every fallback path */
-    const keyOf = new Map(all.map((c, i) => [c, keys[i]]));
     const sameTag = all.filter((c) => splitKey(keyOf.get(c)).tag === parts.tag);
     const label = hint && hint.label ? mapper.canonical(hint.label) : "";
     /* the section comes from the KEY only; a hint that names another section
@@ -856,6 +958,8 @@
     }
     if (!el) return null;
     const host = choiceHost(el);
+    /* never a password, hidden, file or button control, on any path */
+    if (isNotChoice(el) || isNotChoice(host)) return null;
     const name = fieldName(host) || fieldName(el) || "";
     if (isSensitiveSource(name) || PAYMENT_FIELD.test(name)) return { current: "", options: [], refused: true };
     if (host.tagName === "SELECT") {
@@ -863,7 +967,7 @@
       return { current: sel ? clean(sel.textContent) : "", options: choiceOptions(host) || [] };
     }
     if ((el.type || "").toLowerCase() === "radio") {
-      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => r.name === el.name);
+      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => sameRadioGroup(r, el));
       const on = group.find((r) => r.checked);
       return { current: on ? optionName(on) : "", options: choiceOptions(el) || [] };
     }

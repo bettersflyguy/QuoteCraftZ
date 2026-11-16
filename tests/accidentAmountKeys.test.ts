@@ -381,6 +381,22 @@ describe("picking a box the scan would not list", () => {
   });
 });
 
+describe("a fill that relabels another box mid-pass", () => {
+  it("the next box is keyed by its NEW label, not from the cache the pass started with", async () => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main>
+      <mat-form-field class="mat-mdc-form-field"><label>BI Amount</label><input name="amount" id="amount"></mat-form-field>
+      <mat-form-field class="mat-mdc-form-field"><label id="second">Collision Amount</label><input name="amount" id="amount"></mat-form-field></main>`;
+    const [bi, col] = inputs().map(i => g.__bettersControlKey(i));
+    // filling BI makes the page re-render the second box's label as "PD Amount"
+    inputs()[0]!.addEventListener("change", () => { document.getElementById("second")!.textContent = "PD Amount"; });
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.bi": "1", "crm:incident.col": "2" } }, true, false,
+      { [bi!]: "crm:incident.bi", [col!]: "crm:incident.col" });
+    // the second box is now the PD box: the mapping saved for "Collision Amount" must not fill it
+    expect(inputs().map(i => i.value)).toEqual(["1", ""]);
+  }, 20000);
+});
+
 describe("long labels that start alike stay separate fields", () => {
   const boxes = (labels: string[]) => {
     document.title = "Tracy Dittrich - Accidents";
