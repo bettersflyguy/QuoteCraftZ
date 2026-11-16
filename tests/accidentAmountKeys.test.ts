@@ -198,6 +198,36 @@ describe("a mapping saved under the key the boxes shared before", () => {
   });
 });
 
+describe("long labels that start alike stay separate fields", () => {
+  const boxes = (labels: string[]) => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main>${labels.map((l, i) =>
+      `<mat-form-field class="mat-mdc-form-field"><label>${l}</label><input name="amount" id="amount" value="${i + 1}"></mat-form-field>`).join("")}</main>`;
+    return inputs().map(i => g.__bettersControlKey(i));
+  };
+
+  it("three boxes whose labels share their first 30 characters get three keys, and each maps on its own", () => {
+    const labels = ["Bodily Injury Liability Amount Paid By Carrier", "Bodily Injury Liability Amount Paid By Insured", "Bodily Injury Liability Amount Paid By Other Party"];
+    const keys = boxes(labels);
+    expect(new Set(keys).size).toBe(3);
+    const fields = ingest({ [keys[0]!]: "crm:incident.a", [keys[1]!]: "crm:incident.b", [keys[2]!]: "crm:incident.c" })
+      .filter(f => f.mapped?.startsWith("crm:incident."));
+    expect(fields.map(f => `${f.mapped}=${f.value}`).sort()).toEqual(["crm:incident.a=1", "crm:incident.b=2", "crm:incident.c=3"]);
+  });
+
+  it("labels that still agree after the 60-character cut keep their full label, so they stay apart too", () => {
+    const stem = "Bodily Injury Liability Amount Paid On Behalf Of The Named Insured Driver";
+    expect(stem.length).toBeGreaterThan(60);
+    const keys = boxes([`${stem} To The Carrier`, `${stem} To A Third Party`]);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it("keys stay inside the 200-character import limit for ordinary long labels", () => {
+    const keys = boxes(["A".repeat(90) + " one", "A".repeat(90) + " two ", "B".repeat(90)]);
+    keys.forEach(k => expect(k.length).toBeLessThanOrEqual(200));
+  });
+});
+
 describe("computing the keys stays linear (counted, not timed)", () => {
   const N = 60;
   const grid = () => {

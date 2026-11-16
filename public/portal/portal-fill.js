@@ -146,7 +146,7 @@
       if (["radio", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
       if (!clean(el.name) && !clean(el.id)) return;
       const k = legacyControlKey(el);
-      if (!byKey.has(k)) byKey.set(k, { els: [], labels: null });
+      if (!byKey.has(k)) byKey.set(k, { els: [], labels: null, cuts: null });
       byKey.get(k).els.push(el);
     });
     c.groups = byKey;
@@ -163,7 +163,7 @@
   function ownLabelOf(element) {
     const c = tick();
     let v = c.own.get(element);
-    if (v === undefined) { v = mapper.canonical(ownLabelText(element) || primaryLabel(element) || "").slice(0, 30); c.own.set(element, v); }
+    if (v === undefined) { v = mapper.canonical(ownLabelText(element) || primaryLabel(element) || ""); c.own.set(element, v); }
     return v;
   }
   function controlKey(element) {
@@ -181,9 +181,16 @@
     if (!own) return legacy;
     if (!group.labels) group.labels = new Set(group.els.map(ownLabelOf).filter(Boolean));
     if (group.labels.size < 2) return legacy;
+    /* the label part is cut at 60 characters to keep keys short, but two
+     * different labels that cut to the same text keep their full label */
+    if (!group.cuts) {
+      group.cuts = new Map();
+      group.labels.forEach((l) => { const cut = l.slice(0, 60); group.cuts.set(cut, (group.cuts.get(cut) || 0) + 1); });
+    }
+    const part = group.cuts.get(own.slice(0, 60)) > 1 ? own : own.slice(0, 60);
     const suffix = sectionSuffix(element);
     const head = suffix ? legacy.slice(0, legacy.length - suffix.length) : legacy;
-    return head + "~" + own + suffix;
+    return head + "~" + part + suffix;
   }
   /* the label the mapping editor shows: primaryLabel, except that a control
    * told apart from same-id twins is named by its own box, never by a label
