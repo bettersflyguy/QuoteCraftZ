@@ -239,4 +239,20 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(await read("select:mat-select-0")).not.toBeNull(); // exact key still reads
     expect(Date.now() - t0).toBeLessThan(5000); // 47-100 s with the per-control label lookup on every control
   }, 30000);
+
+  it("reuses the keys it already computed: one controlKey per control on 1,500 label-less same-tag controls", async () => {
+    // a label-less, id-less input keys on its label, which costs one mapper.canonical per controlKey
+    document.body.innerHTML = Array.from({ length: 1500 }, () => `<div><input type="text"></div>`).join("");
+    const m = (globalThis as unknown as { BettersPortalMapper: { canonical: (s: string) => string } }).BettersPortalMapper;
+    const real = m.canonical;
+    let calls = 0;
+    m.canonical = (s: string) => { calls += 1; return real(s); };
+    try {
+      expect(await read("text:mat-input-gone", { label: "Use" })).toBeNull();
+    } finally { m.canonical = real; }
+    // one key per control for the exact match, plus a few for the hint; recomputing keys in the
+    // generated-id branch doubled this to about 3,000
+    expect(calls).toBeLessThanOrEqual(1500 + 10);
+    expect(calls).toBeGreaterThanOrEqual(1500);
+  });
 });
