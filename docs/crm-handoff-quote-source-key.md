@@ -13,7 +13,7 @@ From the next QuoteCraftZ release, the extension **never writes `iacrm_amsextern
 
 Re-checked read-only with the service principal, 2026-11-15: **steps 1 and 3 are done in DEV.**
 
-- `iacrm_quote.iacrm_sourcequotekey` **exists**: text, max length **2000** (D-3680-5; ships), optional, not secured, valid for create and update. QuoteCraftZ v0.1.68 starts writing it on the next Load with no update.
+- `iacrm_quote.iacrm_sourcequotekey` **exists**: text, max length: dev has 2000 (captured out-of-band, awaiting owner confirmation); Git has 200. Optional, not secured, valid for create and update. QuoteCraftZ v0.1.68 starts writing it on the next Load with no update.
 - The old alternate key `iacrm_quote_provider_amsexternalid` was **removed in CRM release 1.3.0.302**; `iacrm_quote` has no alternate keys.
 - Quotes with `iacrm_amsexternalid` set: **0** in DEV (checked 2026-11-11), so step 2 only matters in prod.
 - `iacrm_riskanswer.iacrm_insureditemid` (lookup to `iacrm_insureditem`, entity set `iacrm_insureditems`, navigation property `iacrm_insureditemid`) **exists**.
@@ -22,7 +22,7 @@ Re-checked read-only with the service principal, 2026-11-15: **steps 1 and 3 are
 
 | Column | Schema name | Type | Notes |
 |---|---|---|---|
-| Source Quote Key | iacrm_SourceQuoteKey | Text 2000, optional, searchable | Logical name **`iacrm_sourcequotekey`** (the extension uses exactly this name) |
+| Source Quote Key | iacrm_SourceQuoteKey | Text, optional, searchable. Length: dev has 2000 (captured out-of-band, awaiting owner confirmation); Git has 200 | Logical name **`iacrm_sourcequotekey`** (the extension uses exactly this name) |
 
 Values the extension writes:
 - EZLynx quotes: `ezlynx:<quote id>:<req or altN>`
