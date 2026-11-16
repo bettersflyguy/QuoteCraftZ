@@ -379,6 +379,7 @@
     };
     const results = [];
     const handledRadioGroups = new Set();
+    const formIds = new Map();
     const values = (payload && payload.values) || {};
     /* secured mappings present in THIS frame: the worker fetches only these
      * and sends them back to this frame alone */
@@ -395,14 +396,20 @@
       if (!ov[controlKey(element)] && isSensitiveSource(name)) continue;
       if (element.type === "radio") {
         const fieldset = element.closest("fieldset");
-        const groupKey = element.name ? `name:${element.name}` : fieldset || element;
+        /* a radio group is per form: the same name in two forms is two groups */
+        const formId = element.form ? (formIds.get(element.form) || formIds.set(element.form, formIds.size + 1).get(element.form)) : 0;
+        const groupKey = element.name ? `name:${formId}:${element.name}` : fieldset || element;
         if (handledRadioGroups.has(groupKey)) continue;
         handledRadioGroups.add(groupKey);
         const mapKey = controlKey(element);
         if (ov[mapKey] === "skip") continue;
+        /* a nameless radio is keyed by its label or option text ("radio:no"):
+         * when a radio of ANOTHER group has the same key the mapping cannot say
+         * which question it means, so neither is filled */
+        if (!element.name && controls.some((c) => c.type === "radio" && !sameRadioGroup(c, element) && controlKey(c) === mapKey)) continue;
         const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
-        const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : sameRadioGroup(control, element)));
+        const group = controls.filter((control) => control.type === "radio" && sameRadioGroup(control, element));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
         const outcome = await fillControl(target, candidate, overwrite, addrCtx, name);

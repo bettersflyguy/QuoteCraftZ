@@ -184,6 +184,36 @@ describe("page filler", () => {
   }, 10000);
 });
 
+describe("page filler: radio groups", () => {
+  const fillRadios = (values: Record<string, string>, ov: Record<string, string>) =>
+    (g["__bettersPortalFill"] as (p: unknown, o: boolean, a: boolean, ov: unknown) => Promise<Record<string, unknown>>)(
+      { normalized: {}, fields: [], values }, false, false, ov);
+  const checked = () => Array.from(document.querySelectorAll<HTMLInputElement>("input[type=radio]")).filter((r) => r.checked).map((r) => r.id);
+
+  it("two nameless Yes/No questions outside a fieldset: a mapping on radio:no checks neither", async () => {
+    document.body.innerHTML = `<form>
+      <label><input type="radio" id="a-yes">Yes</label><label><input type="radio" id="a-no">No</label>
+      <label><input type="radio" id="b-yes">Yes</label><label><input type="radio" id="b-no">No</label></form>`;
+    await fillRadios({ "crm:q.answer": "No" }, { "radio:no": "crm:q.answer" });
+    expect(checked()).toEqual([]);
+  }, 10000);
+
+  it("a Yes/No pair in a fieldset is filled", async () => {
+    document.body.innerHTML = `<form><fieldset><legend>Garaged</legend>
+      <label><input type="radio" id="y">Yes</label><label><input type="radio" id="n">No</label></fieldset></form>`;
+    const key = (g["__bettersPortalScan"] as (p: unknown, o: unknown) => { key: string }[])(null, {}).find((r) => r.key.startsWith("radio:"))!.key;
+    await fillRadios({ "crm:q.garaged": "No" }, { [key]: "crm:q.garaged" });
+    expect(checked()).toEqual(["n"]);
+  }, 10000);
+
+  it("a named group is filled, and a same-name group in another form is its own group", async () => {
+    document.body.innerHTML = `<form><label><input type="radio" name="garaged" id="f1y">Yes</label><label><input type="radio" name="garaged" id="f1n">No</label></form>
+      <form><label><input type="radio" name="garaged" id="f2y">Yes</label><label><input type="radio" name="garaged" id="f2n">No</label></form>`;
+    await fillRadios({ "crm:q.garaged": "No" }, { "radio:garaged": "crm:q.garaged" });
+    expect(checked()).toEqual(["f1n", "f2n"]);
+  }, 10000);
+});
+
 describe("page ingester", () => {
   it("routes mapped controls, sends secured values apart, never captures identifier data", () => {
     document.body.innerHTML = `<main>
