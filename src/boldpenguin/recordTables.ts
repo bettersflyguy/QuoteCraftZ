@@ -204,9 +204,20 @@ function headings(keys: string[], labels: Map<string, string>, reserved: string[
   });
 }
 
+/** Page text has no length limit, and the tables key their maps by it: very long
+ * strings make those lookups collide and stall the panel. Section titles
+ * and labels are cut to this many characters, keeping the start and the
+ * end (the end is what names a list), before anything is grouped. */
+const MAX_TEXT = 1000;
+const clamp = (text: string): string =>
+  text.length <= MAX_TEXT ? text : `${text.slice(0, MAX_TEXT / 2)}...${text.slice(-(MAX_TEXT / 2 - 3))}`;
+
 /** The tables for a set of captured fields. Fields that are not grid rows are
  * ignored: the caller shows them as single values. */
-export function recordTables(fields: CapturedAppField[]): RecordTable[] {
+export function recordTables(input: CapturedAppField[]): RecordTable[] {
+  // (a row name must be "Row N" to be a grid row, so it cannot be long)
+  const fields = input.map(f => f.section.length > MAX_TEXT || f.label.length > MAX_TEXT
+    ? { ...f, section: clamp(f.section), label: clamp(f.label) } : f);
   const records = new Map<string, Rec>();
   const labels = new Map<string, Map<string, string>>(); // table id -> column key -> first label seen
   const columnOrder = new Map<string, string[]>();

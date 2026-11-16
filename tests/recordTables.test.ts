@@ -253,13 +253,22 @@ describe("a list that points at records is its own table whatever it is called (
     expect(Date.now() - start).toBeLessThan(500);
   });
 
-  it.each([["drivers ("], ["drivers (a"], ["drivers ((("], ["Drivers (2) "]])("hostile title %s repeated 90 KB long with 40 fields stays fast", unit => {
-    const title = unit.repeat(Math.ceil(90000 / unit.length)) + "x";
-    const fields = Array.from({ length: 40 }, (_, i) => f(title, `Row ${i + 1}`, "First Name", `P${i}`, `crm:contact${i + 2}.firstname`));
+  const long = (unit: string) => unit.repeat(Math.ceil(90000 / unit.length)) + "x";
+  it.each([["drivers ("], ["drivers (a"], ["drivers ((("], ["Drivers (2) "], ["x"], [" - "], ["/// "], ["------"]])("hostile title %s, 90 KB, 400 rows, stays fast", unit => {
+    const title = long(unit);
+    const fields = Array.from({ length: 400 }, (_, i) => f(title, `Row ${i + 1}`, "First Name", `P${i}`, `crm:contact${i + 2}.firstname`));
     const start = Date.now();
     const tables = recordTables(fields);
     expect(Date.now() - start).toBeLessThan(1000);
-    expect(tables.flatMap(t => t.rows)).toHaveLength(40);
+    expect(tables.flatMap(t => t.rows)).toHaveLength(400);
+  });
+
+  it("long labels are cut too, and the end of a title still names its list", () => {
+    const fields = Array.from({ length: 400 }, (_, i) => f("A".repeat(90000) + " Drivers", `Row ${i + 1}`, "B".repeat(90000), `P${i}`, `crm:contact${i + 2}.firstname`));
+    const start = Date.now();
+    const tables = recordTables(fields);
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(tables.map(t => t.title)).toEqual(["Contacts"]);
   });
 
   it("a Prior Address list still merges into Addresses, in the same column for every address", () => {
