@@ -31,9 +31,12 @@
   const OWN_BOX = "mat-form-field, .mat-form-field, .mat-mdc-form-field, .k-floating-label-container, .form-group, .form-field, .field";
   function explicitLabel(element) {
     if (!element.id) return "";
-    const labels = Array.from(document.querySelectorAll(`label[for="${CSS.escape(element.id)}"]`));
-    const box = labels.length > 1 ? element.closest(OWN_BOX) : null;
-    const label = (box && labels.find((l) => box.contains(l))) || labels[0];
+    const selector = `label[for="${CSS.escape(element.id)}"]`;
+    /* the label inside this control's own box first (one lookup scoped to the
+     * box, never a scan of every label that shares the id), else the first
+     * label on the page, as before */
+    const box = element.closest(OWN_BOX);
+    const label = (box && box.querySelector(selector)) || document.querySelector(selector);
     return clean(label && (label.innerText || label.textContent));
   }
 
@@ -118,7 +121,7 @@
   let pinned = 0;
   function tick() {
     if (tickCache) return tickCache;
-    const c = { legacy: new Map(), own: new Map(), keys: new Map(), ownKeys: new Map(), groups: null };
+    const c = { legacy: new Map(), own: new Map(), keys: new Map(), ownKeys: new Map(), groups: null, docGroups: null, repeat: null };
     tickCache = c;
     Promise.resolve().then(() => { if (!pinned && tickCache === c) tickCache = null; });
     return c;
@@ -245,11 +248,49 @@
     const legacy = legacyControlKey(element);
     return legacy !== key && map[legacy] ? legacy : key;
   }
-  /* the key a row (the scan's, the picker's) is listed and saved under: the
-   * box's own-label key when it holds a mapping, else its current key */
+  /* Every named control in the document (hidden, disabled and collapsed ones
+   * too), grouped by legacy key: used only to decide whether a box's name is
+   * shared with other boxes with different labels, wherever they are. */
+  function documentGroups() {
+    const c = tick();
+    if (c.docGroups) return c.docGroups;
+    const byKey = new Map();
+    Array.from(document.querySelectorAll("input, select, textarea")).forEach((el) => {
+      const type = (el.type || "").toLowerCase();
+      if (["radio", "image", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
+      if (!clean(el.name) && !clean(el.id)) return;
+      const k = legacyControlKey(el);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(el);
+    });
+    c.docGroups = byKey;
+    return byKey;
+  }
+  function nameIsShared(element) {
+    const group = documentGroups().get(legacyControlKey(element));
+    return Boolean(group && group.length > 1 && new Set(group.map(ownLabelOf).filter(Boolean)).size > 1);
+  }
+  /* The key a row (the scan's, the picker's) is listed and saved under.
+   * - A mapping on the box's own-label key: that key.
+   * - A mapping saved before the keys were told apart, under the box's current
+   *   key: that key, untouched (it keeps resolving exactly as it did).
+   * - Nothing mapped yet, and the box's name is shared with boxes that have
+   *   other labels anywhere in the page (shown or not), or the site's map
+   *   already holds an own-label key on that name: the box's OWN-LABEL key, so
+   *   a mapping taught with only some of the boxes on screen never reaches the
+   *   others.
+   * - Otherwise its current key, as before. */
   function rowKeyOf(map, element) {
+    const key = controlKey(element);
     const own = labelKeyOf(element);
-    return own && map && map[own] ? own : controlKey(element);
+    if (!own) return key;
+    if (map && map[own]) return own;
+    const legacy = legacyControlKey(element);
+    if (map && (map[key] || map[legacy])) return key;
+    if (nameIsShared(element)) return own;
+    const stem = own.slice(0, own.indexOf("~") + 1);
+    if (map && Object.keys(map).some((k) => k.indexOf(stem) === 0)) return own;
+    return key;
   }
   /* "Other Address: City" for a sub-section's field, else the label */
   function inSection(element, label) {
@@ -862,34 +903,53 @@
    * cards, one per driver), the sub-section of each, and the page step
    * ("Tracy Dittrich - Drivers" -> "drivers"): a list mapping on one card's
    * control then covers every card, like a dropdown's label mapping */
+  const REPEAT_BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container";
+  const normText = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  /* the ingester's box label also finds a question written above the box */
+  function repeatBoxText(b) {
+    const viaIngest = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(b) : "";
+    const lab = b.querySelector("label, mat-label, .k-label");
+    return normText(viaIngest || (lab ? lab.textContent : ""));
+  }
+  /* what every row of one scan needs, read once per tick instead of once per
+   * row: the page's controls grouped by key, and its top-level boxes with
+   * their label text */
+  function repeatContext() {
+    const c = tick();
+    if (c.repeat) return c.repeat;
+    const byKey = new Map();
+    pageControls(activeModal() || document).forEach((ct) => {
+      const k = controlKey(ct);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(ct);
+    });
+    const boxes = [];
+    document.querySelectorAll(REPEAT_BOX).forEach((b) => {
+      if (b.parentElement && b.parentElement.closest(REPEAT_BOX)) return;
+      boxes.push({ box: b, text: repeatBoxText(b) });
+    });
+    c.repeat = { byKey, boxes };
+    return c.repeat;
+  }
   function repeatInfo(label, element) {
-    const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container";
     const sectionKey = (el) => (mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "");
+    const ctx = repeatContext();
     /* the box's own visible label too: a box's accessible name ("Applicant
      * first name") can differ from the label every card shows */
-    const ownBox = element && element.closest ? element.closest(BOX) : null;
-    /* the ingester's box label also finds a question written above the box */
-    const boxText = (b) => {
-      const viaIngest = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(b) : "";
-      const lab = b.querySelector("label, mat-label, .k-label");
-      return norm(viaIngest || (lab ? lab.textContent : ""));
-    };
-    const names = [norm(label), ownBox ? boxText(ownBox) : ""].filter(Boolean);
+    const ownBox = element && element.closest ? element.closest(REPEAT_BOX) : null;
+    const names = [normText(label), ownBox ? repeatBoxText(ownBox) : ""].filter(Boolean);
     let repeatSections = [];
-    document.querySelectorAll(BOX).forEach((b) => {
-      if (b.parentElement && b.parentElement.closest(BOX)) return;
-      const t = boxText(b);
-      if (t && names.indexOf(t) >= 0) repeatSections.push(sectionKey(b));
+    ctx.boxes.forEach((entry) => {
+      if (entry.text && names.indexOf(entry.text) >= 0) repeatSections.push(sectionKey(entry.box));
     });
     /* boxes sharing this control's key are the same field on every card */
     if (element) {
-      const key = controlKey(element);
-      const twins = pageControls(activeModal() || document).filter((c) => c === element || controlKey(c) === key);
+      const same = ctx.byKey.get(controlKey(element)) || [];
+      const twins = same.indexOf(element) >= 0 ? same : same.concat([element]);
       if (twins.length > repeatSections.length) repeatSections = twins.map(sectionKey);
     }
     const parts = String(document.title || "").split(" - ");
-    return { repeats: repeatSections.length, repeatSections, page: parts.length > 1 ? norm(parts[parts.length - 1]).slice(0, 40) : "" };
+    return { repeats: repeatSections.length, repeatSections, page: parts.length > 1 ? normText(parts[parts.length - 1]).slice(0, 40) : "" };
   }
 
   /* mapping editor's view of this frame: every fillable control with its key,

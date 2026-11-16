@@ -82,10 +82,12 @@
     const aria = control.getAttribute("aria-label") || control.getAttribute("data-label");
     if (aria) return aria;
     if (control.id) {
-      const claimed = Array.from(document.querySelectorAll(`label[for="${CSS.escape(control.id)}"]`));
-      /* one id shared by several inputs: the label inside this control's own box names it */
-      const box = claimed.length > 1 ? control.closest(FORM_FIELD) : null;
-      const explicit = (box && claimed.find((l) => box.contains(l))) || claimed[0];
+      const selector = `label[for="${CSS.escape(control.id)}"]`;
+      /* one id shared by several inputs: the label inside this control's own
+       * box names it (one lookup scoped to the box, not a scan of every label
+       * that shares the id); else the first label on the page, as before */
+      const box = control.closest(FORM_FIELD);
+      const explicit = (box && box.querySelector(selector)) || document.querySelector(selector);
       if (explicit) return text(explicit);
     }
     if (control.labels && control.labels.length) {

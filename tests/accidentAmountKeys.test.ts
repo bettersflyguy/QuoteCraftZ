@@ -301,6 +301,73 @@ describe("picking a box in the panel", () => {
   });
 });
 
+describe("teaching a box while only some of the same-name boxes are on screen", () => {
+  const box = (label: string, value: string, hidden = false) =>
+    `<mat-form-field class="mat-mdc-form-field" ${hidden ? 'style="display:none"' : ""}><label>${label}</label><input name="amount" id="amount" value="${value}"></mat-form-field>`;
+  const show = (...boxes: string[]) => { document.title = "Tracy Dittrich - Accidents"; document.body.innerHTML = `<main>${boxes.join("")}</main>`; };
+  const pickAt = (ov: unknown, el: Element) => {
+    const api = globalThis as unknown as { __bettersPortalPick: (t: number, o: unknown) => Promise<{ key: string }> };
+    const pending = api.__bettersPortalPick(5000, ov);
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
+    return pending;
+  };
+
+  it("BI picked while the other three are collapsed is keyed by its own label, so showing all four later cross-writes nothing", async () => {
+    show(box("BI Amount", "5000"), box("Collision Amount", "2000", true), box("MP Amount", "1000", true), box("PD Amount", "700", true));
+    const row = await pickAt({}, inputs()[0]!);
+    expect(row.key).toBe("text:amount~bi amount");
+    const saved = { [row.key]: "crm:incident.biamount" };
+    await Promise.resolve();
+    show(box("BI Amount", "5000"), box("Collision Amount", "2000"), box("MP Amount", "1000"), box("PD Amount", "700"));
+    expect(ingest(saved).filter(f => f.mapped?.startsWith("crm:incident.")).map(f => `${f.mapped}=${f.value}`)).toEqual(["crm:incident.biamount=5000"]);
+    inputs().forEach(i => { i.value = ""; });
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.biamount": "42" } }, true, false, saved);
+    expect(inputs().map(i => i.value)).toEqual(["42", "", "", ""]);
+  }, 20000);
+
+  it("a site whose map already holds an own-label key on that name keys the next box by its own label", async () => {
+    show(box("Collision Amount", "2000"));
+    const row = await pickAt({ "text:amount~bi amount": "crm:incident.biamount" }, inputs()[0]!);
+    expect(row.key).toBe("text:amount~collision amount");
+  });
+
+  it("a legacy-only mapping still fills a single box", async () => {
+    show(box("BI Amount", "5000"));
+    inputs()[0]!.value = "";
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.amountpaid": "9" } }, true, false, { "text:amount": "crm:incident.amountpaid" });
+    expect(inputs()[0]!.value).toBe("9");
+  });
+});
+
+describe("label lookups stay linear on a page of same-id boxes (counted, not timed)", () => {
+  const N = 300;
+  const grid = () => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main>${Array.from({ length: N }, (_, i) =>
+      `<mat-form-field class="mat-mdc-form-field"><label for="amount">Amount ${i}</label><input name="amount" id="amount" value="${i}"></mat-form-field>`).join("")}</main>`;
+  };
+  const countDocumentQueries = (run: () => void) => {
+    const realAll = Document.prototype.querySelectorAll;
+    const realOne = Document.prototype.querySelector;
+    let calls = 0;
+    Document.prototype.querySelectorAll = function (this: Document, sel: string) { calls += 1; return realAll.call(this, sel); } as typeof realAll;
+    Document.prototype.querySelector = function (this: Document, sel: string) { calls += 1; return realOne.call(this, sel); } as typeof realOne;
+    try { run(); } finally { Document.prototype.querySelectorAll = realAll; Document.prototype.querySelector = realOne; }
+    return calls;
+  };
+
+  it("a scan", () => {
+    grid();
+    // a document-wide query per control would be 300 or more
+    expect(countDocumentQueries(() => { g.__bettersPortalScan(null, {}); })).toBeLessThanOrEqual(N / 2);
+  });
+
+  it("a capture", () => {
+    grid();
+    expect(countDocumentQueries(() => { ingest({ "text:amount": "crm:incident.amountpaid" }); })).toBeLessThanOrEqual(N / 2);
+  });
+});
+
 describe("long labels that start alike stay separate fields", () => {
   const boxes = (labels: string[]) => {
     document.title = "Tracy Dittrich - Accidents";
