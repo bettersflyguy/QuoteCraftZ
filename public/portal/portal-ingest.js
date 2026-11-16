@@ -82,7 +82,12 @@
     const aria = control.getAttribute("aria-label") || control.getAttribute("data-label");
     if (aria) return aria;
     if (control.id) {
-      const explicit = document.querySelector(`label[for="${CSS.escape(control.id)}"]`);
+      const selector = `label[for="${CSS.escape(control.id)}"]`;
+      /* one id shared by several inputs: the label inside this control's own
+       * box names it (one lookup scoped to the box, not a scan of every label
+       * that shares the id); else the first label on the page, as before */
+      const box = control.closest(FORM_FIELD);
+      const explicit = (box && box.querySelector(selector)) || document.querySelector(selector);
       if (explicit) return text(explicit);
     }
     if (control.labels && control.labels.length) {
@@ -629,7 +634,12 @@
     const root = modal || document.querySelector("main") || document;
     const fields = [];
     const map = controlMap || {};
-    const keyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
+    const baseKeyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
+    /* the key the control's saved mapping lives under: its own key, or the
+     * legacy key a mapping saved before same-id controls were told apart
+     * still uses (then the controls it covers group together, as before) */
+    const keyOf = baseKeyOf && typeof globalThis.__bettersSavedKey === "function"
+      ? (control) => globalThis.__bettersSavedKey(map, control) : baseKeyOf;
     const noteControls = [];
     const personControls = [];
 
@@ -1164,6 +1174,9 @@
     return box ? boxLabel(box) : "";
   };
   globalThis.__bettersCaptureElements = captureElements;
+  /* the root a capture reads (the open dialog, else main, else the page): the
+   * filler groups same-name boxes over the same root */
+  globalThis.__bettersCaptureRoot = captureRoot;
   /* `controls`: the page's saved control mappings. `secure` comes back
    * separately and is never merged into the capture by the worker. */
   globalThis.__bettersPortalIngest = (taught, controls) => {

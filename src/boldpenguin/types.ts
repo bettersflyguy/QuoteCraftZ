@@ -94,6 +94,9 @@ export interface PortalScanRow {
   mapped: string | null;
   /** A selection control's choices in the page's wording. */
   options?: string[];
+  /** The old shared-key mapping is not applied to this box (or this row is that
+   * old key): the owner maps each box again under its own label. */
+  needsReteach?: boolean;
   /** Picked fields: the field's own label (label may add its section). */
   fieldLabel?: string;
   /** Picked fields: the sub-section key ("other address"), "" outside one. */
