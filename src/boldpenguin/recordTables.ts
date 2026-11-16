@@ -206,11 +206,24 @@ function headings(keys: string[], labels: Map<string, string>, reserved: string[
 
 /** Page text has no length limit, and the tables key their maps by it: very long
  * strings make those lookups collide and stall the panel. Section titles
- * and labels are cut to this many characters, keeping the start and the
- * end (the end is what names a list), before anything is grouped. */
+ * and labels are cut to about this many characters, keeping the start and the
+ * end (the end is what names a list) and a tag of the whole text, so two long texts
+ * that differ only in the middle stay two, before anything is grouped. */
 const MAX_TEXT = 1000;
+/** Two 32-bit FNV-1a passes with different seeds, over the whole text: cheap, and
+ * two texts that differ anywhere get different tags in practice. */
+function tag(text: string): string {
+  let a = 0x811c9dc5, b = 0x9e3779b1;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193);
+    b = Math.imul(b ^ c, 0x85ebca6b) + i | 0;
+  }
+  return `${text.length.toString(36)}-${(a >>> 0).toString(36)}${(b >>> 0).toString(36)}`;
+}
+/** Short enough to key a Map, and never the same for two different long texts. The tag sits in the middle so the end still names the list. */
 const clamp = (text: string): string =>
-  text.length <= MAX_TEXT ? text : `${text.slice(0, MAX_TEXT / 2)}...${text.slice(-(MAX_TEXT / 2 - 3))}`;
+  text.length <= MAX_TEXT ? text : `${text.slice(0, MAX_TEXT / 2 - 20)}...${tag(text)}...${text.slice(-(MAX_TEXT / 2 - 20))}`;
 
 /** The tables for a set of captured fields. Fields that are not grid rows are
  * ignored: the caller shows them as single values. */

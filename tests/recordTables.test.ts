@@ -263,6 +263,27 @@ describe("a list that points at records is its own table whatever it is called (
     expect(tables.flatMap(t => t.rows)).toHaveLength(400);
   });
 
+  it("two long titles that differ only in the middle stay two tables", () => {
+    const a = "A".repeat(3000) + "1" + "Z".repeat(3000) + " Drivers", b = "A".repeat(3000) + "2" + "Z".repeat(3000) + " Drivers";
+    const fields = [
+      f(a, "Row 1", "First Name", "Tracy", "crm:contact2.firstname"), f(a, "Row 1", "Occupation", "Teacher", undefined, "table"),
+      f(b, "Row 1", "Notes", "Other table", undefined, "table"), f(b, "Row 1", "Occupation", "Pilot", undefined, "table")
+    ];
+    const tables = recordTables(fields);
+    expect(tables).toHaveLength(2);
+    const contacts = tables.find(t => t.title === "Contacts");
+    expect(contacts?.rows).toEqual([{ "First name": "Tracy", Occupation: "Teacher" }]);
+    const other = tables.find(t => t !== contacts)!;
+    expect(other.rows).toEqual([{ Notes: "Other table", Occupation: "Pilot" }]);
+  });
+
+  it("two long labels that differ only in the middle stay two columns", () => {
+    const l1 = "L".repeat(3000) + "1" + "R".repeat(3000), l2 = "L".repeat(3000) + "2" + "R".repeat(3000);
+    const t = recordTables([f("Prior Policies", "Row 1", l1, "one"), f("Prior Policies", "Row 1", l2, "two")])[0]!;
+    expect(t.columns).toHaveLength(2);
+    expect(t.rows[0] && Object.values(t.rows[0]).sort()).toEqual(["one", "two"]);
+  });
+
   it("long labels are cut too, and the end of a title still names its list", () => {
     const fields = Array.from({ length: 400 }, (_, i) => f("A".repeat(90000) + " Drivers", `Row ${i + 1}`, "B".repeat(90000), `P${i}`, `crm:contact${i + 2}.firstname`));
     const start = Date.now();
