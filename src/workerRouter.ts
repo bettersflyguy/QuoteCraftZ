@@ -792,8 +792,9 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         await chrome.scripting.executeScript({ target: { tabId: msg.tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
         const frames = await chrome.scripting.executeScript({
           target: { tabId: msg.tabId, allFrames: true },
-          func: (k: string, l: string[]) => (globalThis as { __bettersPortalChoices?: (k: string, l: string[]) => unknown }).__bettersPortalChoices?.(k, l) ?? null,
-          args: [msg.key ?? "", msg.labels ?? []]
+          func: (k: string, l: string[], h: { label?: string; section?: string } | null) =>
+            (globalThis as { __bettersPortalChoices?: (k: string, l: string[], h: unknown) => unknown }).__bettersPortalChoices?.(k, l, h) ?? null,
+          args: [msg.key ?? "", msg.labels ?? [], msg.hint ?? null]
         });
         const hit = frames.map(fr => fr.result as { current: string; options: string[]; refused?: boolean } | null).find(r => r !== null) ?? null;
         return { ok: true, data: hit };

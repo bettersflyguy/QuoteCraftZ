@@ -100,7 +100,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   /** Held capture fields: their values are known source wordings for a choice. */
   capturedFields?: { value: string; mapped?: string }[];
   /** Reads one field's current value and options from the page. */
-  onReadChoices?: (key: string) => Promise<ChoicesRead | null>;
+  onReadChoices?: (key: string, hint?: { label?: string; section?: string }) => Promise<ChoicesRead | null>;
   draft: Record<string, string>;
   setDraft: (updater: (d: Record<string, string>) => Record<string, string>) => void;
   captured: CapturedTarget[];
@@ -414,7 +414,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
               sources={choiceSources}
               value={choices?.[choiceKey] ?? {}}
               onChange={next => setChoices?.(c => ({ ...c, [choiceKey]: next }))}
-              onRead={onReadChoices ? () => onReadChoices(r.key) : undefined}
+              onRead={onReadChoices ? () => onReadChoices(r.key, { label: r.fieldLabel || r.label, section: r.section }) : undefined}
             />
           )}
           </Fragment>

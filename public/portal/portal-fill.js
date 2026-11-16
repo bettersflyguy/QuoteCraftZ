@@ -567,12 +567,58 @@
     return out;
   }
 
-  async function readChoices(key, labels) {
+  /* A saved key can stop matching its control: Angular and Kendo hand out
+   * generated ids ("mat-select-12", "mat-input-3", ":r4:") that change every
+   * time the page renders, and a styled dropdown may be a host element
+   * rather than an input. Reading choices is read-only, so after an exact
+   * match fails the control is found again by the key's stable part, then
+   * by the label (and sub-section) the mapping editor saw it under. */
+  function splitKey(key) {
+    const at = key.indexOf("@");
+    const head = at < 0 ? key : key.slice(0, at);
+    const colon = head.indexOf(":");
+    return { tag: colon < 0 ? "" : head.slice(0, colon), base: colon < 0 ? head : head.slice(colon + 1), section: at < 0 ? "" : key.slice(at + 1) };
+  }
+  function stableBase(base) { return String(base).replace(/\d+/g, "#"); }
+  function findChoiceControl(key, hint) {
+    const all = Array.from(document.querySelectorAll(LABELLED_FIELDS));
+    const exact = all.find((c) => controlKey(c) === key);
+    if (exact) return exact;
+    const parts = splitKey(key);
+    const label = hint && hint.label ? mapper.canonical(hint.label) : "";
+    const labelOf = (c) => mapper.canonical(primaryLabel(c) || primaryLabel(choiceHost(c)));
+    const pickOne = (list) => { const shown = list.filter(visible); return (shown.length ? shown : list)[0] || null; };
+    if (GENERATED_ID.test(parts.base)) {
+      /* "mat-select-12" and "mat-select-13" are different fields that share
+       * one stable shape: the label settles it, and with no label an
+       * ambiguous shape is NOT guessed (reading the wrong field would bind
+       * its choices to this one) */
+      const want = stableBase(parts.base);
+      let same = all.filter((c) => {
+        const k = splitKey(controlKey(c));
+        return GENERATED_ID.test(k.base) && stableBase(k.base) === want && (!parts.section || k.section === parts.section);
+      });
+      if (label) same = same.filter((c) => labelOf(c) === label);
+      if (label ? same.length : same.length === 1) return pickOne(same);
+    }
+    if (!label) return null;
+    const named = all.filter((c) => {
+      if (c.type && ["hidden", "submit", "button", "password", "file"].indexOf(c.type) >= 0) return false;
+      return labelOf(c) === label;
+    });
+    const shown = named.filter(visible);
+    const pool = shown.length ? shown : named;
+    const section = hint.section || parts.section || "";
+    const inSame = section ? pool.filter((c) => (mapper.sectionOf ? mapper.sectionOf(c).key : "") === section) : [];
+    return (inSame.length ? inSame : pool)[0] || null;
+  }
+
+  async function readChoices(key, labels, hint) {
     let el = null;
     if (key && key.indexOf("pick:") === 0) {
       try { el = document.querySelector(key.slice(5)); } catch (_e) { el = null; }
     } else if (key) {
-      el = Array.from(document.querySelectorAll("input, select, textarea")).find((c) => controlKey(c) === key) || null;
+      el = findChoiceControl(key, hint);
     } else {
       el = fieldByLabels(labels);
     }
@@ -1247,8 +1293,8 @@
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalFillSecure = (values, overwrite, overrides) => fillSecure(values, Boolean(overwrite), overrides || {});
   globalThis.__bettersPortalAdvance = () => advance(activeModal() || document);
-  globalThis.__bettersPortalChoices = (key, labels) =>
-    (typeof key === "string" && key) || Array.isArray(labels) ? readChoices(typeof key === "string" ? key : "", labels) : null;
+  globalThis.__bettersPortalChoices = (key, labels, hint) =>
+    (typeof key === "string" && key) || Array.isArray(labels) ? readChoices(typeof key === "string" ? key : "", labels, hint || null) : null;
   /* shared with the ingester, so a control's saved mapping routes its value
    * on capture exactly as it does on fill */
   globalThis.__bettersControlKey = controlKey;
