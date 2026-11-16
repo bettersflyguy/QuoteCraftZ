@@ -13,8 +13,8 @@ From the next QuoteCraftZ release, the extension **never writes `iacrm_amsextern
 
 Re-checked read-only with the service principal, 2026-11-15: **steps 1 and 3 are done in DEV.**
 
-- `iacrm_quote.iacrm_sourcequotekey` **exists**: text, max length 200, optional, not secured, valid for create and update. QuoteCraftZ v0.1.68 starts writing it on the next Load with no update.
-- The old alternate key `iacrm_quote_provider_amsexternalid` is **gone**; `iacrm_quote` has no alternate keys.
+- `iacrm_quote.iacrm_sourcequotekey` **exists**: text, max length **2000** (D-3680-5; ships), optional, not secured, valid for create and update. QuoteCraftZ v0.1.68 starts writing it on the next Load with no update.
+- The old alternate key `iacrm_quote_provider_amsexternalid` was **removed in CRM release 1.3.0.302**; `iacrm_quote` has no alternate keys.
 - Quotes with `iacrm_amsexternalid` set: **0** in DEV (checked 2026-11-11), so step 2 only matters in prod.
 - `iacrm_riskanswer.iacrm_insureditemid` (lookup to `iacrm_insureditem`, entity set `iacrm_insureditems`, navigation property `iacrm_insureditemid`) **exists**.
 
@@ -22,7 +22,7 @@ Re-checked read-only with the service principal, 2026-11-15: **steps 1 and 3 are
 
 | Column | Schema name | Type | Notes |
 |---|---|---|---|
-| Source Quote Key | iacrm_SourceQuoteKey | Text 200, optional, searchable | Logical name **`iacrm_sourcequotekey`** (the extension uses exactly this name) |
+| Source Quote Key | iacrm_SourceQuoteKey | Text 2000, optional, searchable | Logical name **`iacrm_sourcequotekey`** (the extension uses exactly this name) |
 
 Values the extension writes:
 - EZLynx quotes: `ezlynx:<quote id>:<req or altN>`
@@ -40,7 +40,7 @@ Do it in that order: the extension finds a quote by the source key first, then t
 
 ## 3. Remove the old alternate key
 
-If an alternate key on (`iacrm_provider`, `iacrm_amsexternalid`) exists on `iacrm_quote`, remove it after step 2. Nothing in QuoteCraftZ addresses quotes through it any more.
+**Done:** removed in CRM release 1.3.0.302, so nothing remains to do. (If an alternate key on (`iacrm_provider`, `iacrm_amsexternalid`) ever reappears on `iacrm_quote`, remove it after step 2.) Nothing in QuoteCraftZ addresses quotes through it any more.
 
 ## 4. AMS isolation
 

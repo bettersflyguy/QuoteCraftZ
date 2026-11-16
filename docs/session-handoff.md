@@ -114,7 +114,7 @@ powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
 ## Cloud session, 2026-11-10 (v0.1.67 to v0.1.68, PR #1, merged)
 
 1. **Driver cards:** a one-row person mapping saved on a box every driver card shares (First Name -> Related contact 1, Row 1) now reads every card, one person per card, placed by name. The editor counts repeats by visible label and shared key too.
-2. **Quotes no longer write `iacrm_amsexternalid`:** read-then-write by record id (source key column, then the legacy value read-only, then name on the opportunity). CRM brief: `docs/crm-handoff-quote-source-key.md` (new column `iacrm_sourcequotekey`, data fix, drop the old alternate key).
+2. **Quotes no longer write `iacrm_amsexternalid`:** read-then-write by record id (source key column, then the legacy value read-only, then name on the opportunity). CRM brief: `docs/crm-handoff-quote-source-key.md` (new column `iacrm_sourcequotekey`, 2000 characters, shipped; the old alternate key was removed in CRM release 1.3.0.302).
 3. **Risk answers link to insured items:** after Load writes vehicles / properties, answers captured from each asset row get `iacrm_insureditemid` (link discovered from metadata; skipped with a note when the lookup isn't there).
 4. **Carrier-site quotes need a mapped quote premium** (Nathan, 2026-11-10): a portal page holds a quote only when a value is mapped to `crm:quote.iacrm_premium`; other premiums (prior policy, current policy) never make one. An ingest without one drops the quote an earlier version held for that site.
 5. **Questions labelled above their box** (v0.1.68): EZLynx writes long questions (Driver Telematics/Smartride/Right Track Discount) above a label-less dropdown box. `boxLabel` in `portal-ingest.js` now falls back to the question just above the box (only within the box's own wrapper), so a click maps every driver card by label and saved one-spot text mappings read every card too.
@@ -129,6 +129,12 @@ powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
 3. **Fill from CRM on driver cards** still goes by card order (card 1 is filled from the first related contact, not the primary). Nathan was offered name-matched fill; not yet requested.
 4. **Not covered yet:** linking a property to the opportunity (N:N `iacrm_property_opportunity`) and a vehicle's primary driver lookup. Offered, not requested.
 5. **Styled-dropdown fill** stays deferred.
+
+## CRM and extension tracking (ADO)
+
+- All 22 vehicle rating fields already exist in the CRM (ADO 3705). Nothing is outstanding for them.
+- Open CRM items the extension depends on: 3704, 3706, 3707, 3709, 3711 and 3713.
+- Extension defects: 3708, 3710, 3712 and 3714.
 
 ## Working style that worked
 
