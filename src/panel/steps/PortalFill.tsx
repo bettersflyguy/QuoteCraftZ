@@ -12,7 +12,8 @@ import { QuotesView } from "../QuotesView";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { isGridRow } from "@/boldpenguin/normalize";
-import { PATH_LABEL, isNoteTarget, isPrimaryTarget, noteLabelOf } from "@/portal/fieldMaps";
+import { recordTables } from "@/boldpenguin/recordTables";
+import { PATH_LABEL, isNoteTarget, noteLabelOf } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -86,21 +87,9 @@ function businessName(app: CapturedApplication | null): string | null {
 interface GridTable { title: string; label?: string; columns: string[]; rows: Record<string, string>[] }
 
 function gridTables(fields: CapturedApplication["fields"]): GridTable[] {
-  const out = new Map<string, { columns: string[]; rows: Map<string, Record<string, string>>; primary: Set<string> }>();
-  for (const f of fields) {
-    if (!isGridRow(f)) continue;
-    const t = out.get(f.section) ?? out.set(f.section, { columns: [], rows: new Map(), primary: new Set() }).get(f.section)!;
-    if (!t.columns.includes(f.label)) t.columns.push(f.label);
-    const row = t.rows.get(f.group) ?? t.rows.set(f.group, {}).get(f.group)!;
-    row[f.label] = usDate(f.value);
-    if (isPrimaryTarget(f.mapped)) t.primary.add(f.group);
-  }
-  // the row that lands on the primary contact / the account's Address 1
-  return [...out.entries()].map(([title, t]) => t.primary.size
-    ? { title, columns: [PRIMARY_COLUMN, ...t.columns], rows: [...t.rows.entries()].map(([g, r]) => ({ [PRIMARY_COLUMN]: t.primary.has(g) ? "Yes" : "", ...r })) }
-    : { title, columns: t.columns, rows: [...t.rows.values()] });
+  // one table per kind of record, a record on one row however it was read (see recordTables)
+  return recordTables(fields);
 }
-const PRIMARY_COLUMN = "Primary";
 
 /** A policy page's table ("Opportunity Policy - Auto", "Prior Auto Policy"):
  * every value from it shows together, wherever it is mapped to. */

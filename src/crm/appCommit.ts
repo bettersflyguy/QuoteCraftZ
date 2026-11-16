@@ -4,6 +4,7 @@ import { usDate } from "@/util/usDate";
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
 import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
+import { recordTables } from "@/boldpenguin/recordTables";
 import { noteRecordOf, noteSlotOf, type NoteRecord } from "@/portal/fieldMaps";
 import type { CapturedApplication, CapturedAppField } from "@/boldpenguin/types";
 
@@ -649,13 +650,10 @@ function noteHtml(title: string, app: CapturedApplication, fields: CapturedAppli
       parts.push(TABLE + "<tr><th>Field</th><th>Value</th></tr>" +
         singles.map(f => `<tr><td>${html(f.label)}</td><td>${html(usDate(f.value))}</td></tr>`).join("") + "</table>");
     }
-    const rows = inSection.filter(isGridRow);
-    if (rows.length) {
-      const columns = [...new Set(rows.map(f => f.label))];
-      const byRow = new Map<string, Record<string, string>>();
-      for (const f of rows) byRow.set(f.group ?? "", { ...(byRow.get(f.group ?? "") ?? {}), [f.label]: usDate(f.value) });
-      parts.push(TABLE + "<tr>" + columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
-        [...byRow.values()].map(r => "<tr>" + columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
+    // list rows: columns told apart by label alone (see recordTables), one table per section
+    for (const t of recordTables(inSection.filter(isGridRow))) {
+      parts.push(TABLE + "<tr>" + t.columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
+        t.rows.map(r => "<tr>" + t.columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
         "</table>");
     }
   }

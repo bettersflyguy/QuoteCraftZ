@@ -1,0 +1,296 @@
+/** One table per kind of record, built from captured grid fields (group
+ * "Row N"). The Intake grid, the Excel export and the timeline note all use
+ * this, so a record shows as ONE row however many pages or sources it was
+ * read from.
+ *
+ * Rules (ADO 3714):
+ *  - A field mapped to a record slot ("contact2.firstName",
+ *    "crm:contact2.birthdate", "crm:vehicle1.iacrm_acquireddate") belongs to
+ *    that record: its row is the slot, its column is the CRM field. The
+ *    section it was read under ("Contacts", "Auto: Drivers", "Auto: Vehicles")
+ *    and the label the page used ("First Name", "DOB") do not matter.
+ *  - Two slots that are provably the same record (the same person, the same
+ *    VIN or year/make/model) and do not disagree on any value become one row.
+ *  - A record that holds nothing that says which record it is (a purchase date
+ *    with no vehicle, a date of birth with no name) is never put on another
+ *    row: its values show in an "Unmatched" table.
+ *  - A field with no record slot that was read in the same table row as
+ *    fields of one record is another column of that record.
+ *  - Any other field with no record slot keeps its own column in its own
+ *    section's table, so nothing is lost. Columns there are told apart by label alone,
+ *    ignoring case and punctuation ("First name" and "First Name" are one
+ *    column; "BI Amount" and "Collision Amount" stay two).
+ *  - Nothing is added up or overwritten: two different values for one cell show
+ *    side by side. */
+import { ROW_TABLES } from "@/portal/assetTables";
+import { usDate } from "@/util/usDate";
+import { canonical, clean, isGridRow } from "./normalize";
+import { samePerson } from "./people";
+import type { CapturedAppField } from "./types";
+
+export interface RecordTable {
+  title: string;
+  columns: string[];
+  rows: Record<string, string>[];
+  /** The "Primary" column marks the row that lands on the primary contact / Address 1. */
+  hasPrimary: boolean;
+}
+
+export const PRIMARY_COLUMN = "Primary";
+export const UNMATCHED_TITLE = "Unmatched";
+const UNMATCHED_COLUMNS = ["Record", "Field", "Value", "Read under"];
+const JOIN = " / ";
+
+/** Slot record name -> the table title. */
+const KIND_TITLE: Record<string, string> = {
+  contact: "Contacts",
+  address: "Addresses",
+  policy: "Policies",
+  ...Object.fromEntries(ROW_TABLES.map(a => [a.slot, a.label.replace(/ \(all rows\)$/, "")]))
+};
+const SINGULAR: Record<string, string> = {
+  contact: "Contact",
+  address: "Address",
+  policy: "Policy",
+  ...Object.fromEntries(ROW_TABLES.map(a => [a.slot, (a as { singular?: string }).singular ?? a.slot]))
+};
+
+/** Columns that say WHICH record a row is. A kind without an entry has no
+ * identity to check, so none of its rows are ever unmatched. */
+const IDENTITY: Record<string, readonly string[]> = {
+  contact: ["firstname", "lastname", "fullname"],
+  vehicle: ["vin", "year", "make", "model"],
+  address: ["line1", "street1", "street", "addressline1", "city", "postalcode", "zip"]
+};
+
+/** The same column written two ways. Keys are after punctuation and the
+ * "iacrm" prefix are gone. */
+const COLUMN_ALIAS: Record<string, string> = {
+  dob: "dateofbirth", birthdate: "dateofbirth", birthday: "dateofbirth",
+  firstname: "firstname", first: "firstname", givenname: "firstname",
+  lastname: "lastname", last: "lastname", surname: "lastname", familyname: "lastname",
+  modelyear: "year", vehicleyear: "year", vehiclemake: "make", vehiclemodel: "model", vehiclevin: "vin",
+  purchasedate: "acquireddate", dateacquired: "acquireddate", datepurchased: "acquireddate", acquired: "acquireddate",
+  emailaddress1: "email", emailaddress: "email",
+  mobilephone: "mobilephone", telephone1: "phone"
+};
+
+/** Heading for a column whose label varies between sources. */
+const COLUMN_HEADING: Record<string, string> = {
+  firstname: "First name", lastname: "Last name", dateofbirth: "Date of birth", acquireddate: "Purchase date",
+  vin: "VIN", year: "Year", make: "Make", model: "Model"
+};
+
+export function columnKey(raw: string): string {
+  const k = canonical(raw).replace(/[^a-z0-9]/g, "").replace(/^iacrm/, "");
+  return COLUMN_ALIAS[k] ?? k;
+}
+
+interface RecordRef { kind: string; slot: number; column: string }
+
+const SLOT = new RegExp(`^(?:crm:|secure:)?(contact|address|policy|${ROW_TABLES.map(a => a.slot).join("|")})(\\d+)\\.(.+)$`);
+const PRIMARY = /^(?:contact|crm:primarycontact|secure:primarycontact)\.(.+)$/;
+
+/** The record a mapped path writes to, and the column on it. Timeline-note
+ * targets and everything that is not a numbered record return null. */
+export function recordRefOf(mapped: string | undefined): RecordRef | null {
+  if (!mapped || mapped.startsWith("note:")) return null;
+  const primary = PRIMARY.exec(mapped);
+  if (primary) return { kind: "contact", slot: 1, column: columnKey(primary[1]!) };
+  const m = SLOT.exec(mapped);
+  if (!m) return null;
+  return { kind: m[1]!, slot: Number(m[2]), column: columnKey(m[3]!) };
+}
+
+interface Rec {
+  kind: string;
+  slot: number;
+  cells: Map<string, string[]>;
+  /** For the unmatched table: what each value was read under. */
+  reads: { column: string; label: string; value: string; section: string }[];
+}
+
+const same = (a: string, b: string) => canonical(a) === canonical(b);
+
+function add(list: string[], value: string) {
+  if (!list.some(v => same(v, value))) list.push(value);
+}
+
+const first = (r: Rec, key: string) => r.cells.get(key)?.[0] ?? "";
+
+function identityOf(r: Rec): { has: boolean; person?: Parameters<typeof samePerson>[0]; vehicle?: string } {
+  const keys = IDENTITY[r.kind];
+  if (!keys) return { has: true };
+  const has = keys.some(k => clean(first(r, k)));
+  if (r.kind === "contact") {
+    const letters = (s: string) => canonical(s).replace(/[^a-z]/g, "");
+    let fn = first(r, "firstname"), ln = first(r, "lastname");
+    if (!fn && !ln) {
+      const full = first(r, "fullname");
+      if (full.includes(",")) { const [l, f] = full.split(","); ln = clean(l); fn = clean(f).split(" ")[0] ?? ""; }
+      else { const p = full.split(" ").filter(Boolean); fn = p[0] ?? ""; ln = p.length > 1 ? p[p.length - 1]! : ""; }
+    }
+    if (!fn && !ln) return { has };
+    return { has, person: { first: letters(fn), last: letters(ln), dob: first(r, "dateofbirth").replace(/\D/g, ""), email: first(r, "email").toLowerCase() } };
+  }
+  if (r.kind === "vehicle") {
+    const vin = clean(first(r, "vin")).toUpperCase();
+    if (vin) return { has, vehicle: `vin:${vin}` };
+    const ymm = ["year", "make", "model"].map(k => canonical(first(r, k)));
+    return { has, ...(ymm.every(Boolean) ? { vehicle: `ymm:${ymm.join("|")}` } : {}) };
+  }
+  return { has };
+}
+
+const sameRecord = (a: Rec, b: Rec): boolean => {
+  if (a.kind !== b.kind) return false;
+  const x = identityOf(a), y = identityOf(b);
+  if (x.person && y.person) return samePerson(x.person, y.person);
+  return Boolean(x.vehicle && y.vehicle && x.vehicle === y.vehicle);
+};
+
+/** Two records may be one row only when they agree wherever both have a value. */
+const agree = (a: Rec, b: Rec): boolean => {
+  for (const [key, values] of a.cells) {
+    const other = b.cells.get(key);
+    if (other && !values.some(v => other.some(o => same(v, o)))) return false;
+  }
+  return true;
+};
+
+function absorb(into: Rec, from: Rec) {
+  for (const [key, values] of from.cells) {
+    const list = into.cells.get(key) ?? into.cells.set(key, []).get(key)!;
+    for (const v of values) add(list, v);
+  }
+  into.reads.push(...from.reads);
+}
+
+interface Built { id: string; title: string; columns: string[]; keys: string[]; rows: { primary: boolean; slot: number; cells: Map<string, string[]> }[]; hasPrimary: boolean }
+
+/** A column heading unique within its table. */
+function headings(keys: string[], labels: Map<string, string>): string[] {
+  const used = new Set<string>();
+  return keys.map(k => {
+    let h = COLUMN_HEADING[k] ?? labels.get(k) ?? k;
+    if (used.has(h)) h = `${h} (${k})`;
+    used.add(h);
+    return h;
+  });
+}
+
+/** The tables for a set of captured fields. Fields that are not grid rows are
+ * ignored: the caller shows them as single values. */
+export function recordTables(fields: CapturedAppField[]): RecordTable[] {
+  const records = new Map<string, Rec>();
+  const labels = new Map<string, Map<string, string>>(); // table id -> column key -> first label seen
+  const columnOrder = new Map<string, string[]>();
+  const tableOrder: string[] = [];
+  const title = new Map<string, string>();
+  const plain = new Map<string, Map<string, Map<string, string[]>>>(); // section -> row -> column -> values
+  const note = (id: string, key: string, label: string) => {
+    const l = labels.get(id) ?? labels.set(id, new Map()).get(id)!;
+    if (!l.has(key)) l.set(key, label);
+    const o = columnOrder.get(id) ?? columnOrder.set(id, []).get(id)!;
+    if (!o.includes(key)) o.push(key);
+  };
+  const seen = (id: string, t: string) => { if (!tableOrder.includes(id)) { tableOrder.push(id); title.set(id, t); } };
+
+  // a row read from one table that writes to exactly one record: the fields
+  // beside the mapped ones (unmapped, or mapped to something that is not a
+  // record) are that record's other columns, not a table of their own
+  const rowRecords = new Map<string, Set<string>>();
+  for (const f of fields) {
+    const ref = isGridRow(f) ? recordRefOf(f.mapped) : null;
+    if (!ref) continue;
+    const row = `${f.section}\u0000${f.group}`;
+    (rowRecords.get(row) ?? rowRecords.set(row, new Set()).get(row)!).add(`${ref.kind}:${ref.slot}`);
+  }
+  for (const f of fields) {
+    if (!isGridRow(f)) continue;
+    const value = usDate(f.value);
+    if (!clean(value)) continue;
+    let ref = recordRefOf(f.mapped);
+    if (!ref && !f.mapped?.startsWith("note:")) {
+      const owners = rowRecords.get(`${f.section}\u0000${f.group}`);
+      if (owners?.size === 1) {
+        const [kind, slot] = [...owners][0]!.split(":");
+        ref = { kind: kind!, slot: Number(slot), column: columnKey(f.label) || canonical(f.label) };
+      }
+    }
+    if (ref) {
+      const id = `record:${ref.kind}`;
+      seen(id, KIND_TITLE[ref.kind] ?? ref.kind);
+      note(id, ref.column, f.label);
+      const key = `${ref.kind}:${ref.slot}`;
+      const rec = records.get(key) ?? records.set(key, { kind: ref.kind, slot: ref.slot, cells: new Map(), reads: [] }).get(key)!;
+      add(rec.cells.get(ref.column) ?? rec.cells.set(ref.column, []).get(ref.column)!, value);
+      rec.reads.push({ column: ref.column, label: f.label, value, section: f.section });
+      continue;
+    }
+    const id = `section:${f.section}`;
+    seen(id, f.section);
+    const key = columnKey(f.label) || canonical(f.label);
+    note(id, key, f.label);
+    const rows = plain.get(f.section) ?? plain.set(f.section, new Map()).get(f.section)!;
+    const row = rows.get(f.group) ?? rows.set(f.group, new Map()).get(f.group)!;
+    add(row.get(key) ?? row.set(key, []).get(key)!, value);
+  }
+
+  // slots that are provably one record become one row (lowest slot keeps the row)
+  const ordered = [...records.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.slot - b.slot);
+  const gone = new Set<Rec>();
+  for (const a of ordered) {
+    if (gone.has(a)) continue;
+    for (const b of ordered) {
+      if (b === a || gone.has(b) || b.slot < a.slot || b.kind !== a.kind) continue;
+      if (b.slot !== a.slot && sameRecord(a, b) && agree(a, b)) { absorb(a, b); gone.add(b); }
+    }
+  }
+  const kept = ordered.filter(r => !gone.has(r));
+  const anchored = kept.filter(r => identityOf(r).has);
+  const orphans = kept.filter(r => !identityOf(r).has);
+
+  const built: Built[] = [];
+  for (const id of tableOrder) {
+    if (id.startsWith("record:")) {
+      const kind = id.slice("record:".length);
+      const rows = anchored.filter(r => r.kind === kind).sort((a, b) => a.slot - b.slot);
+      if (!rows.length) continue;
+      const keys = (columnOrder.get(id) ?? []).filter(k => rows.some(r => r.cells.has(k)));
+      built.push({
+        id, title: title.get(id)!, keys, columns: headings(keys, labels.get(id) ?? new Map()), hasPrimary: false,
+        rows: rows.map(r => ({ primary: r.slot === 1 && (kind === "contact" || kind === "address"), slot: r.slot, cells: r.cells }))
+      });
+    } else {
+      const section = id.slice("section:".length);
+      const rows = [...(plain.get(section) ?? new Map<string, Map<string, string[]>>()).values()];
+      const keys = columnOrder.get(id) ?? [];
+      built.push({ id, title: title.get(id)!, keys, columns: headings(keys, labels.get(id) ?? new Map()), hasPrimary: false, rows: rows.map(cells => ({ primary: false, slot: 0, cells })) });
+    }
+  }
+
+  const out: RecordTable[] = built.map(t => {
+    const hasPrimary = t.rows.some(r => r.primary);
+    const columns = hasPrimary ? [PRIMARY_COLUMN, ...t.columns] : t.columns;
+    return {
+      title: t.title, columns, hasPrimary,
+      rows: t.rows.map(r => {
+        const row: Record<string, string> = hasPrimary ? { [PRIMARY_COLUMN]: r.primary ? "Yes" : "" } : {};
+        t.keys.forEach((k, i) => { row[t.columns[i]!] = (r.cells.get(k) ?? []).join(JOIN); });
+        return row;
+      })
+    };
+  });
+
+  if (orphans.length) {
+    out.push({
+      title: UNMATCHED_TITLE, columns: UNMATCHED_COLUMNS, hasPrimary: false,
+      rows: orphans.flatMap(r => r.reads.map(read => ({
+        Record: r.kind === "contact" && r.slot === 1 ? "Primary contact" : `${SINGULAR[r.kind] ?? r.kind} ${r.slot}`,
+        Field: read.label, Value: read.value, "Read under": read.section
+      })))
+    });
+  }
+  return out;
+}
