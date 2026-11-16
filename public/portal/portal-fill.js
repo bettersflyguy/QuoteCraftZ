@@ -118,7 +118,7 @@
   let pinned = 0;
   function tick() {
     if (tickCache) return tickCache;
-    const c = { legacy: new Map(), own: new Map(), keys: new Map(), groups: null };
+    const c = { legacy: new Map(), own: new Map(), keys: new Map(), ownKeys: new Map(), groups: null };
     tickCache = c;
     Promise.resolve().then(() => { if (!pinned && tickCache === c) tickCache = null; });
     return c;
@@ -141,9 +141,11 @@
     const c = tick();
     if (c.groups) return c.groups;
     const byKey = new Map();
-    Array.from(document.querySelectorAll("input, select, textarea")).forEach((el) => {
+    /* only the controls a scan, capture or fill acts on: visible and enabled,
+     * in the active dialog (or the page), never a radio or an image button */
+    pageControls(activeModal() || document).forEach((el) => {
       const type = (el.type || "").toLowerCase();
-      if (["radio", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
+      if (["radio", "image"].indexOf(type) >= 0) return;
       if (!clean(el.name) && !clean(el.id)) return;
       const k = legacyControlKey(el);
       if (!byKey.has(k)) byKey.set(k, { els: [], labels: null });
@@ -187,20 +189,35 @@
     if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return legacy;
     const group = sharedGroups().get(legacy);
     if (!group || group.els.length < 2 || group.els.indexOf(element) < 0) return legacy;
-    const own = ownLabelOf(element);
-    if (!own) return legacy;
+    if (!ownLabelOf(element)) return legacy;
     if (!group.labels) group.labels = new Set(group.els.map(ownLabelOf).filter(Boolean));
     if (group.labels.size < 2) return legacy;
+    return labelKeyOf(element) || legacy;
+  }
+  /* The key this box takes when it is told apart from same-name boxes: its
+   * legacy key plus "~<its own label>". It depends on the box alone, never on
+   * what else is on the page, so a mapping saved under it still finds the box
+   * when the box is shown by itself. Null for a box that has no name or id (its
+   * legacy key is already its label), a radio, or no label. */
+  function labelKeyOf(element) {
+    const c = tick();
+    let k = c.ownKeys.get(element);
+    if (k === undefined) { k = computeLabelKey(element); c.ownKeys.set(element, k); }
+    return k;
+  }
+  function computeLabelKey(element) {
+    if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return null;
+    const own = ownLabelOf(element);
+    if (!own) return null;
+    const legacy = legacyControlKey(element);
     const suffix = sectionSuffix(element);
     const head = suffix ? legacy.slice(0, legacy.length - suffix.length) : legacy;
-    /* the label part comes from THIS box's label alone, never from the other
-     * boxes on the page, so a box keeps its key when look-alikes come and go */
     let part = labelPart(own);
     /* the whole key must stay within the 200 characters share-file import
      * accepts: the label part gives way, never the section suffix */
     const room = 200 - head.length - 1 - suffix.length;
     if (part.length > room) {
-      if (room < 1) return legacy;
+      if (room < 1) return null;
       const h = labelHash(own);
       part = room > h.length ? own.slice(0, room - h.length - 1) + "#" + h : h.slice(0, room);
     }
@@ -213,14 +230,18 @@
     const own = controlKey(element) !== legacyControlKey(element) ? ownLabelText(element) : "";
     return own || primaryLabel(element);
   }
-  /* where this control's saved mapping lives: its own key when it has a
-   * mapping there, else the legacy key (a mapping saved before the keys were
-   * told apart keeps working, exactly as it did), else its own key */
+  /* where this control's saved mapping lives: the key made from its own
+   * label first (whatever else is on the page), then its current key, then
+   * the legacy key (a mapping saved before the keys were told apart keeps
+   * working, exactly as it did), else its current key */
   function savedKeyOf(map, element) {
     const key = controlKey(element);
-    if (map && map[key]) return key;
+    if (!map) return key;
+    const own = labelKeyOf(element);
+    if (own && map[own]) return own;
+    if (map[key]) return key;
     const legacy = legacyControlKey(element);
-    return map && legacy !== key && map[legacy] ? legacy : key;
+    return legacy !== key && map[legacy] ? legacy : key;
   }
   /* "Other Address: City" for a sub-section's field, else the label */
   function inSection(element, label) {
@@ -730,6 +751,12 @@
      * below: a key that matches several boxes is never read as the first) */
     const legacyHits = all.filter((c, i) => keys[i].indexOf("~") >= 0 && legacyControlKey(c) === key);
     if (legacyHits.length === 1) return legacyHits[0];
+    /* a key made from a box's own label still finds the box when it is alone
+     * on the page (its current key is then the legacy key) */
+    if (key.indexOf("~") >= 0) {
+      const ownHits = all.filter((c) => labelKeyOf(c) === key);
+      if (ownHits.length === 1) return ownHits[0];
+    }
     /* Past the exact key, a control is returned only when EXACTLY ONE
      * candidate remains: reading a look-alike field (card 1 for card 2, a
      * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
@@ -870,7 +897,11 @@
     for (const element of pageControls(activeModal() || document)) {
       const name = fieldName(element);
       if (!name) continue;
-      const key = controlKey(element);
+      /* a box whose own-label key holds a mapping is listed under it even when
+       * it is alone on the page and its current key is the legacy key, so a
+       * Save keeps that mapping */
+      const ownKey = labelKeyOf(element);
+      const key = ownKey && ov[ownKey] ? ownKey : controlKey(element);
       if (seen.has(key)) continue;
       seen.add(key);
       const legacy = legacyControlKey(element);
@@ -1345,6 +1376,8 @@
       /* a mapping saved under the legacy key still outlines its controls */
       var lk = legacyControlKey(el);
       if (lk !== k) (byKey[lk] = byKey[lk] || []).push(el);
+      var ok = labelKeyOf(el);
+      if (ok && ok !== k) (byKey[ok] = byKey[ok] || []).push(el);
     });
     var shown = 0;
     var missing = 0;
@@ -1464,7 +1497,7 @@
     all.forEach(function (el) {
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
-      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(legacyControlKey(el)))) return;
+      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(legacyControlKey(el)) || coveredKeys.has(labelKeyOf(el)))) return;
       if (isControl && serviceLabels.length && serviceCovers(el)) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
       markPeek(el, "unmapped", "");

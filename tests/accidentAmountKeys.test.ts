@@ -198,6 +198,73 @@ describe("a mapping saved under the key the boxes shared before", () => {
   });
 });
 
+describe("a mapping on a box's own-label key follows the box whatever else is on the page", () => {
+  const LEGACY = "text:amount";
+  const one = (label: string, value: string, extra = "") => `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input name="amount" id="amount" value="${value}" ${extra}></mat-form-field>`;
+  const show = (...boxes: string[]) => { document.title = "Tracy Dittrich - Accidents"; document.body.innerHTML = `<main>${boxes.join("")}</main>`; };
+  const tick = () => Promise.resolve();
+
+  it("A: BI mapped beside Collision, then shown alone: the mapping still applies and survives a Save", async () => {
+    show(one("BI Amount", "5000"), one("Collision Amount", "2000"));
+    const [bi] = inputs().map(i => g.__bettersControlKey(i));
+    const saved = { [bi!]: "crm:incident.biamount" };
+    await tick();
+    show(one("BI Amount", "5000"));
+    expect(g.__bettersControlKey(inputs()[0]!)).toBe(LEGACY);
+    expect(ingest(saved).filter(f => f.mapped?.startsWith("crm:incident.")).map(f => `${f.mapped}=${f.value}`)).toEqual(["crm:incident.biamount=5000"]);
+    expect(g.__bettersPortalScan(null, saved).filter(r => r.key === bi).map(r => r.mapped)).toEqual(["crm:incident.biamount"]);
+    expect(save(saved)).toEqual(saved);
+    inputs()[0]!.value = "";
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.biamount": "42" } }, true, false, saved);
+    expect(inputs()[0]!.value).toBe("42");
+  }, 20000);
+
+  it("B: a legacy mapping (BI alone) plus a Collision mapping: Collision shown alone goes to the Collision field", async () => {
+    show(one("BI Amount", "5000"), one("Collision Amount", "2000"));
+    const [, col] = inputs().map(i => g.__bettersControlKey(i));
+    const saved = { [LEGACY]: "crm:incident.biamount", [col!]: "crm:incident.collisionamount" };
+    await tick();
+    show(one("Collision Amount", "2000"));
+    expect(ingest(saved).filter(f => f.mapped?.startsWith("crm:incident.")).map(f => `${f.mapped}=${f.value}`)).toEqual(["crm:incident.collisionamount=2000"]);
+    // both keys survive a Save
+    expect(save(saved)).toEqual(saved);
+  });
+
+  it("the choice reader finds a box by its own-label key when it is alone", async () => {
+    show(one("BI Amount", "5000"), one("Collision Amount", "2000"));
+    const [bi] = inputs().map(i => g.__bettersControlKey(i));
+    await tick();
+    show(one("BI Amount", "5000"));
+    expect((await g.__bettersPortalChoices(bi!, []))?.current).toBe("5000");
+  });
+});
+
+describe("the boxes that count as sharing a key", () => {
+  const one = (label: string, extra = "", type = "text") => `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input type="${type}" name="amount" id="amount" ${extra}></mat-form-field>`;
+  const first = (...boxes: string[]) => { document.title = "Tracy Dittrich - Accidents"; document.body.innerHTML = `<main>${boxes.join("")}</main>`; return g.__bettersControlKey(inputs()[0]!); };
+
+  it("ignores hidden, disabled and image controls", async () => {
+    expect(first(one("BI Amount"), one("Collision Amount", 'style="display:none"'))).toBe("text:amount");
+    await Promise.resolve();
+    expect(first(one("BI Amount"), one("Collision Amount", "disabled"))).toBe("text:amount");
+    await Promise.resolve();
+    expect(first(one("BI Amount"), one("Collision Amount", "", "image"))).toBe("text:amount");
+    await Promise.resolve();
+    // while a second visible, enabled text box does count
+    expect(first(one("BI Amount"), one("Collision Amount"))).toContain("~");
+  });
+
+  it("ignores controls outside the open dialog", async () => {
+    await Promise.resolve();
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main>${one("Collision Amount")}</main><div role="dialog">${one("BI Amount")}</div>`;
+    // a dialog only owns the page when it is dialog-sized
+    const dialog = document.querySelector("[role='dialog']") as HTMLElement;
+    dialog.getBoundingClientRect = () => ({ left: 100, top: 100, width: 800, height: 600, right: 900, bottom: 700, x: 100, y: 100, toJSON() { return {}; } }) as DOMRect;
+    expect(g.__bettersControlKey(document.querySelectorAll("input")[1]!)).toBe("text:amount");
+  });
+});
+
 describe("long labels that start alike stay separate fields", () => {
   const boxes = (labels: string[]) => {
     document.title = "Tracy Dittrich - Accidents";
