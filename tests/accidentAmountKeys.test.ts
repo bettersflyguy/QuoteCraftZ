@@ -464,6 +464,19 @@ describe("the shared key fails closed when the sibling boxes are read-only or di
     expect(rows.filter(r => r.needsReteach)).toHaveLength(2);
   });
 
+  it("siblings inside a display:none container (a hidden tab pane) are still grouped: nothing is captured from the shared key", () => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main>${box("BI Amount", "5000")}
+      <div style="display:none">${box("Collision Amount", "2000")}${box("MP Amount", "1000")}${box("PD Amount", "700")}</div></main>`;
+    // real layout gives a box inside a display:none container no size: fill's visible() rejects it
+    // while the capture, which looks only at the box's own style, still reads it
+    Array.from(document.querySelectorAll<HTMLInputElement>("div[style] input")).forEach((el) => {
+      el.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() { return {}; } }) as DOMRect;
+    });
+    expect(inputs()).toHaveLength(4);
+    expect(routed()).toEqual([]);
+  });
+
   it("a one-box legacy page is unchanged: it captures and fills as today", async () => {
     show(box("BI Amount", "5000"));
     expect(routed()).toEqual(["crm:incident.biamount=5000"]);

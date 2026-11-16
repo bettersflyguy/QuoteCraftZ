@@ -140,6 +140,17 @@
    * legacy key plus "~<its label>". Controls with the same label (the same
    * field on each card) and controls whose key came from a label keep the
    * legacy key. */
+  /* the capture's own visibility test (portal-ingest isVisible): the box's own
+   * display and visibility, and no [hidden] / [aria-hidden] ancestor. It needs
+   * no layout, so a box inside a display:none container (a hidden tab pane)
+   * passes it although fill's visible() (a non-zero rect) rejects it. Grouping
+   * counts a box when EITHER test accepts it, so every box the capture reads is
+   * also grouped. */
+  function captureVisible(element) {
+    if (!element || element.closest("[hidden], [aria-hidden='true']")) return false;
+    const style = getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }
   /* name/id part of a control's legacy key, without its section: a cheap
    * attribute read, so grouping candidates never runs the section lookup */
   function keyBase(el) {
@@ -157,7 +168,7 @@
      * siblings are read-only keep the shared key and fail open. Never a radio
      * or an image button. */
     const root = activeModal() || document;
-    Array.from(root.querySelectorAll("input, select, textarea")).filter(visible).forEach((el) => {
+    Array.from(root.querySelectorAll("input, select, textarea")).filter((el) => visible(el) || captureVisible(el)).forEach((el) => {
       const type = (el.type || "").toLowerCase();
       if (["radio", "image", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
       if (!clean(el.name) && !clean(el.id)) return;
