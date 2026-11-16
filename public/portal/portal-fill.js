@@ -581,6 +581,7 @@
   }
   function stableBase(base) { return String(base).replace(/\d+/g, "#"); }
   const NOT_CHOICE_TYPES = ["hidden", "password", "file", "submit", "button", "reset", "image"];
+  function isNotChoice(c) { return NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) >= 0; }
   /* The full per-control label lookup (explicitLabel does a document-wide
    * query per control) is quadratic, so it runs only on a short list. A label
    * index cannot stand in for it: a twin labelled only by container text would
@@ -591,17 +592,35 @@
   function findChoiceControl(key, hint) {
     /* never a password, hidden, file or button control, on any path */
     const all = Array.from(document.querySelectorAll(LABELLED_FIELDS))
-      .filter((c) => NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) < 0);
-    const keys = all.map(controlKey);
-    const at = keys.indexOf(key);
-    if (at >= 0) return all[at];
+      .filter((c) => !isNotChoice(c));
+    /* keys are computed lazily and kept: an exact hit must not pay for every
+     * other control (controlKey can run a document-wide label lookup) */
+    const keyOf = new Map();
+    const keyFor = (c) => {
+      if (!keyOf.has(c)) keyOf.set(c, controlKey(c));
+      return keyOf.get(c);
+    };
+    /* false only when the control's own name/id already shows its key cannot
+     * be `key`; a control keyed by its label (no name/id) is always checked */
+    const mayHaveKey = (c) => {
+      const radio = (c.type || "").toLowerCase() === "radio";
+      const own = clean(c.name) || (radio ? "" : clean(c.id));
+      if (!own) return true;
+      const tag = radio ? "radio" : (c.tagName === "SELECT" ? "select" : (c.type || "text").toLowerCase());
+      return key.indexOf((tag + ":" + own).slice(0, 120)) === 0;
+    };
+    const exact = all.filter((c) => mayHaveKey(c) && keyFor(c) === key);
+    /* the same key on two controls (numbered twin cards): refuse, never
+     * hand card 2 the value of card 1 */
+    if (exact.length > 1) return null;
+    if (exact.length === 1) return exact[0];
+    all.forEach(keyFor); /* the exact key missed: the fallbacks need every key, once */
     /* Past the exact key, a control is returned only when EXACTLY ONE
      * candidate remains: reading a look-alike field (card 1 for card 2, a
      * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
      * known section must match; an ambiguous result is null, not a guess. */
     const parts = splitKey(key);
     /* the key's tag (select, text, ...) must agree on every fallback path */
-    const keyOf = new Map(all.map((c, i) => [c, keys[i]]));
     const sameTag = all.filter((c) => splitKey(keyOf.get(c)).tag === parts.tag);
     const label = hint && hint.label ? mapper.canonical(hint.label) : "";
     /* the section comes from the KEY only; a hint that names another section
@@ -645,6 +664,8 @@
     }
     if (!el) return null;
     const host = choiceHost(el);
+    /* never a password, hidden, file or button control, on any path */
+    if (isNotChoice(el) || isNotChoice(host)) return null;
     const name = fieldName(host) || fieldName(el) || "";
     if (isSensitiveSource(name) || PAYMENT_FIELD.test(name)) return { current: "", options: [], refused: true };
     if (host.tagName === "SELECT") {

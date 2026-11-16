@@ -255,4 +255,42 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(calls).toBeLessThanOrEqual(1500 + 10);
     expect(calls).toBeGreaterThanOrEqual(1500);
   });
+  /* ---- follow-up to the Security Review of 0bd9058 (comment 6909252679) ---- */
+  it("pick: path never reads a password, hidden, file or button control", async () => {
+    document.body.innerHTML = `<label for="pw">Use</label><input type="password" id="pw" value="hunter2">
+      <input type="hidden" id="hd" value="secret"><input type="file" id="fl"><input type="submit" id="sb" value="Go">`;
+    for (const sel of ["#pw", "#hd", "#fl", "#sb"]) expect(await read("pick:" + sel)).toBeNull();
+  });
+
+  it("label path never reads a password control", async () => {
+    document.body.innerHTML = `<label for="pw">Use</label><input type="password" id="pw" value="hunter2">`;
+    expect(await g.__bettersPortalChoices("", ["Use"])).toBeNull();
+  });
+
+  it("a host that is itself a password control is refused too", async () => {
+    document.body.innerHTML = `<label for="pw">Use</label><input type="password" id="pw" value="hunter2">`;
+    expect(await g.__bettersPortalChoices("", ["Use"])).toBeNull();
+    expect(await read("pick:input[type=password]")).toBeNull();
+  });
+
+  it("an exact key hit does not compute the keys of the other controls", async () => {
+    document.body.innerHTML = Array.from({ length: 200 }, (_, i) => `<div><input type="text" id="f${i}"></div>`).join("")
+      + `<label for="mat-select-use">Use</label><select id="mat-select-use"><option selected>Business</option></select>`;
+    const m = (globalThis as unknown as { BettersPortalMapper: { canonical: (s: string) => string; sectionOf: (e: Element) => { key: string } } }).BettersPortalMapper;
+    const real = m.sectionOf;
+    let calls = 0;
+    m.sectionOf = (e: Element) => { calls += 1; return real(e); };
+    try {
+      expect((await read("select:mat-select-use"))?.current).toBe("Business");
+    } finally { m.sectionOf = real; }
+    expect(calls).toBeLessThanOrEqual(5); // one key for the hit, not 200+
+  });
+
+  it("the same exact key on two controls (twin cards) reads nothing, not card 1", async () => {
+    document.body.innerHTML = `
+      <div><label for="a">Use</label><select id="a" name="use"><option selected>Pleasure</option></select></div>
+      <div><label for="b">Use</label><select id="b" name="use"><option selected>Business</option></select></div>`;
+    expect(await read("select:use", { label: "Use" })).toBeNull();
+    expect(await read("select:use")).toBeNull();
+  });
 });
