@@ -247,7 +247,7 @@ export function MappingsManager() {
           capturedFields={app?.fields}
           onReadChoices={scanTabId === null
             ? undefined
-            : key => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: scanTabId, key })}
+            : (key, hint) => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: scanTabId, key, hint })}
           busy={busy === "save"}
           onSave={saveScan}
           onCancel={() => { setScan(null); setDsTabId(null); }}

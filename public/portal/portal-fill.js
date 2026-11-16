@@ -567,12 +567,79 @@
     return out;
   }
 
-  async function readChoices(key, labels) {
+  /* A saved key can stop matching its control: Angular and Kendo hand out
+   * generated ids ("mat-select-12", "mat-input-3", ":r4:") that change every
+   * time the page renders, and a styled dropdown may be a host element
+   * rather than an input. Reading choices is read-only, so after an exact
+   * match fails the control is found again by the key's stable part, then
+   * by the label (and sub-section) the mapping editor saw it under. */
+  function splitKey(key) {
+    const at = key.indexOf("@");
+    const head = at < 0 ? key : key.slice(0, at);
+    const colon = head.indexOf(":");
+    return { tag: colon < 0 ? "" : head.slice(0, colon), base: colon < 0 ? head : head.slice(colon + 1), section: at < 0 ? "" : key.slice(at + 1) };
+  }
+  function stableBase(base) { return String(base).replace(/\d+/g, "#"); }
+  const NOT_CHOICE_TYPES = ["hidden", "password", "file", "submit", "button", "reset", "image"];
+  /* The full per-control label lookup (explicitLabel does a document-wide
+   * query per control) is quadratic, so it runs only on a short list. A label
+   * index cannot stand in for it: a twin labelled only by container text would
+   * be missed and the first match returned. Above the limit the answer is
+   * null, never a guess. */
+  const FULL_SCAN_LIMIT = 300;
+
+  function findChoiceControl(key, hint) {
+    /* never a password, hidden, file or button control, on any path */
+    const all = Array.from(document.querySelectorAll(LABELLED_FIELDS))
+      .filter((c) => NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) < 0);
+    const keys = all.map(controlKey);
+    const at = keys.indexOf(key);
+    if (at >= 0) return all[at];
+    /* Past the exact key, a control is returned only when EXACTLY ONE
+     * candidate remains: reading a look-alike field (card 1 for card 2, a
+     * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
+     * known section must match; an ambiguous result is null, not a guess. */
+    const parts = splitKey(key);
+    /* the key's tag (select, text, ...) must agree on every fallback path */
+    const keyOf = new Map(all.map((c, i) => [c, keys[i]]));
+    const sameTag = all.filter((c) => splitKey(keyOf.get(c)).tag === parts.tag);
+    const label = hint && hint.label ? mapper.canonical(hint.label) : "";
+    /* the section comes from the KEY only; a hint that names another section
+     * (or none, when the key has one) is a mismatch, not an override */
+    const section = parts.section;
+    if (hint && typeof hint.section === "string" && hint.section !== section) return null;
+    const sectionOfEl = (c) => (mapper.sectionOf ? mapper.sectionOf(c).key : "");
+    const labelOf = (c) => mapper.canonical(primaryLabel(c) || primaryLabel(choiceHost(c)));
+    /* visibility never decides: a collapsed card 2 must not hand back card 1 */
+    const only = (list) => (list.length === 1 ? list[0] : null);
+    /* the section must agree, an empty one included: an unsectioned key
+     * (a numbered card) never matches a field inside a named section */
+    const inSection = (list) => list.filter((c) => sectionOfEl(c) === section);
+    /* the candidates whose label is `label`, by the full lookup, on a short list only */
+    const withLabel = (list) => (list.length > FULL_SCAN_LIMIT ? [] : list.filter((c) => labelOf(c) === label));
+    /* a generated-id shape or a section alone names no field ("mat-select-12"
+     * could be any dropdown left in the section): both fallbacks need the label */
+    if (!label) return null;
+    if (GENERATED_ID.test(parts.base)) {
+      const want = stableBase(parts.base);
+      let same = sameTag.filter((c) => {
+        const k = splitKey(keyOf.get(c));
+        return GENERATED_ID.test(k.base) && stableBase(k.base) === want;
+      });
+      same = inSection(same);
+      same = withLabel(same);
+      const hit = only(same);
+      if (hit) return hit;
+    }
+    return only(withLabel(inSection(sameTag)));
+  }
+
+  async function readChoices(key, labels, hint) {
     let el = null;
     if (key && key.indexOf("pick:") === 0) {
       try { el = document.querySelector(key.slice(5)); } catch (_e) { el = null; }
     } else if (key) {
-      el = Array.from(document.querySelectorAll("input, select, textarea")).find((c) => controlKey(c) === key) || null;
+      el = findChoiceControl(key, hint);
     } else {
       el = fieldByLabels(labels);
     }
@@ -1247,8 +1314,8 @@
   globalThis.__bettersPortalFill = (payload, overwrite, autoAdvance, overrides) => fill(payload, Boolean(overwrite), Boolean(autoAdvance), overrides || {});
   globalThis.__bettersPortalFillSecure = (values, overwrite, overrides) => fillSecure(values, Boolean(overwrite), overrides || {});
   globalThis.__bettersPortalAdvance = () => advance(activeModal() || document);
-  globalThis.__bettersPortalChoices = (key, labels) =>
-    (typeof key === "string" && key) || Array.isArray(labels) ? readChoices(typeof key === "string" ? key : "", labels) : null;
+  globalThis.__bettersPortalChoices = (key, labels, hint) =>
+    (typeof key === "string" && key) || Array.isArray(labels) ? readChoices(typeof key === "string" ? key : "", labels, hint || null) : null;
   /* shared with the ingester, so a control's saved mapping routes its value
    * on capture exactly as it does on fill */
   globalThis.__bettersControlKey = controlKey;
