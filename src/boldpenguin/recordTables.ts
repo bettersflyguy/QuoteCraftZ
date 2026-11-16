@@ -10,7 +10,8 @@
  *    section it was read under ("Contacts", "Auto: Drivers", "Auto: Vehicles")
  *    and the label the page used ("First Name", "DOB") do not matter.
  *  - Two slots that are provably the same record (the same person, the same
- *    VIN or year/make/model) and do not disagree on any value become one row.
+ *    VIN or year/make/model) read in different tables, and that do not disagree
+ *    on any value, become one row. Two rows of one table never merge.
  *  - A record that holds nothing that says which record it is (a purchase date
  *    with no vehicle, a date of birth with no name) is never put on another
  *    row: its values show in an "Unmatched" table.
@@ -91,10 +92,16 @@ const COLUMN_HEADING: Record<string, string> = {
   vin: "VIN", year: "Year", make: "Make", model: "Model"
 };
 
+/** A constant table's own entry only: page text such as "constructor" or
+ * "__proto__" must never reach Object.prototype. */
+function lookup<T>(table: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
 export function columnKey(raw: string): string {
   const k = canonical(String(raw).replace(/#/g, " number ").replace(/%/g, " percent ").replace(/\$/g, " dollar "))
     .replace(/[^a-z0-9]/g, "").replace(/^iacrm/, "");
-  return COLUMN_ALIAS[k] ?? k;
+  return lookup(COLUMN_ALIAS, k) ?? k;
 }
 
 interface RecordRef { kind: string; slot: number; column: string }
@@ -130,7 +137,7 @@ function add(list: string[], value: string) {
 const first = (r: Rec, key: string) => r.cells.get(key)?.[0] ?? "";
 
 function identityOf(r: Rec): { has: boolean; person?: Parameters<typeof samePerson>[0]; vehicle?: string } {
-  const keys = IDENTITY[r.kind];
+  const keys = lookup(IDENTITY, r.kind);
   if (!keys) return { has: true };
   const has = keys.some(k => clean(first(r, k)));
   if (r.kind === "contact") {
@@ -155,6 +162,8 @@ function identityOf(r: Rec): { has: boolean; person?: Parameters<typeof samePers
 
 const sameRecord = (a: Rec, b: Rec): boolean => {
   if (a.kind !== b.kind) return false;
+  // two rows of one table are two records, even with the same name or make
+  if (a.reads.some(x => b.reads.some(y => x.section === y.section))) return false;
   const x = identityOf(a), y = identityOf(b);
   if (x.person && y.person) return samePerson(x.person, y.person);
   return Boolean(x.vehicle && y.vehicle && x.vehicle === y.vehicle);
@@ -183,7 +192,7 @@ interface Built { id: string; title: string; columns: string[]; keys: string[]; 
 function headings(keys: string[], labels: Map<string, string>): string[] {
   const used = new Set<string>([PRIMARY_COLUMN]);
   return keys.map(k => {
-    let h = COLUMN_HEADING[k] ?? labels.get(k) ?? k;
+    let h = lookup(COLUMN_HEADING, k) ?? labels.get(k) ?? k;
     if (used.has(h)) h = `${h} (${k})`;
     used.add(h);
     return h;
@@ -232,7 +241,7 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
   const isRecordList = (section: string, kind: string): boolean => {
     const recs = sectionRows.get(section);
     if (!recs || [...recs.values()].some(groups => groups.size > 1)) return false;
-    return fromService.has(section) || (LIST_TITLE[kind]?.test(section) ?? false);
+    return fromService.has(section) || (lookup(LIST_TITLE, kind)?.test(section) ?? false);
   };
   for (const f of fields) {
     if (!isGridRow(f)) continue;
@@ -251,7 +260,7 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
     }
     if (ref) {
       const id = `record:${ref.kind}`;
-      seen(id, KIND_TITLE[ref.kind] ?? ref.kind);
+      seen(id, lookup(KIND_TITLE, ref.kind) ?? ref.kind);
       note(id, ref.column, f.label);
       const key = `${ref.kind}:${ref.slot}`;
       const rec = records.get(key) ?? records.set(key, { kind: ref.kind, slot: ref.slot, cells: new Map(), reads: [] }).get(key)!;
@@ -308,11 +317,11 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
     const columns = hasPrimary ? [PRIMARY_COLUMN, ...t.columns] : t.columns;
     return {
       title: t.title, columns, hasPrimary,
-      rows: t.rows.map(r => {
-        const row: Record<string, string> = hasPrimary ? { [PRIMARY_COLUMN]: r.primary ? "Yes" : "" } : {};
-        t.keys.forEach((k, i) => { row[t.columns[i]!] = (r.cells.get(k) ?? []).join(JOIN); });
-        return row;
-      })
+      // own data properties (a label of "__proto__" is a column like any other)
+      rows: t.rows.map(r => Object.fromEntries([
+        ...(hasPrimary ? [[PRIMARY_COLUMN, r.primary ? "Yes" : ""]] : []),
+        ...t.keys.map((k, i) => [t.columns[i]!, (r.cells.get(k) ?? []).join(JOIN)])
+      ]) as Record<string, string>)
     };
   });
 
@@ -320,7 +329,7 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
     out.push({
       title: UNMATCHED_TITLE, columns: UNMATCHED_COLUMNS, hasPrimary: false,
       rows: orphans.flatMap(r => r.reads.map(read => ({
-        Record: r.kind === "contact" && r.slot === 1 ? "Primary contact" : `${SINGULAR[r.kind] ?? r.kind} ${r.slot}`,
+        Record: r.kind === "contact" && r.slot === 1 ? "Primary contact" : `${lookup(SINGULAR, r.kind) ?? r.kind} ${r.slot}`,
         Field: read.label, Value: read.value, "Read under": read.section
       })))
     });

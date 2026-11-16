@@ -217,6 +217,37 @@ describe("a list that only points at a record stays its own table (review of 832
   });
 });
 
+describe("page text cannot break the tables (security review of 83270cd)", () => {
+  const odd = ["__proto__", "constructor", "toString", "hasOwnProperty"];
+
+  it.each(odd)("a label of %s is a column like any other, in a record table and a plain one", label => {
+    const fields = [f("Vehicles", "Row 1", "Make", "Ford", "vehicle1.make"), f("Vehicles", "Row 1", label, "x1", "vehicle1.vin"),
+      f("Other", "Row 1", label, "x2")];
+    const tables = recordTables(fields);
+    for (const t of tables) for (const r of t.rows) for (const c of t.columns) expect(typeof r[c]).toBe("string");
+    expect(Object.getPrototypeOf(tables[0]!.rows[0]!)).toBe(Object.prototype);
+    expect(tables.find(t => t.title === "Other")!.rows[0]![tables.find(t => t.title === "Other")!.columns[0]!]).toBe("x2");
+  });
+
+  it("the timeline note and the workbook still build with such labels", () => {
+    const fields = odd.map((label, i) => f("Grid", "Row 1", label, `v${i}`, "note:opportunity"));
+    const app = { fields, normalized: {}, capturedAt: 0, source: { system: "EZLynx", title: "" } } as unknown as CapturedApplication;
+    const html = buildTimelineNote(app, "opportunity")!.html;
+    for (const label of odd) expect(html).toContain(`<th>${label}</th>`);
+    expect(captureSheets(app).some(s => s.name.includes("Grid"))).toBe(true);
+  });
+
+  it("two vehicles of one table with the same year, make and model are two rows", () => {
+    const row = (g: string, slot: number) => ["Year", "Make", "Model"].map((l, i) => f("Vehicles", g, l, ["2019", "Ford", "F150"][i]!, `vehicle${slot}.${l.toLowerCase()}`));
+    expect(table([...row("Row 1", 1), ...row("Row 2", 2)], "Vehicles").rows).toHaveLength(2);
+  });
+
+  it("two contacts of one table with the same name are two rows", () => {
+    const fields = [...dataService(2, 2, "Alex", "Dittrich", ""), ...dataService(3, 3, "Alex", "Dittrich", "")];
+    expect(table(fields, "Contacts").rows).toHaveLength(2);
+  });
+});
+
 describe("the export and the note use the same rules", () => {
   const fields = [
     ...dataService(1, 1, "Tracy", "Dittrich", "03/11/1972"), ...dataService(2, 2, "Alexander", "Dittrich", "06/02/2005"),
