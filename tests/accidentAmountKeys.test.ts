@@ -436,19 +436,31 @@ describe("long labels that start alike stay separate fields", () => {
     expect(alone).toMatch(/^text:amount~.{30}#[0-9a-f]{8}$/);
   });
 
-  it("every key stays within 200 characters, with the longest names, labels and sections", () => {
-    const long = "x".repeat(250);
-    const panel = (title: string, inner: string) =>
-      `<mat-expansion-panel><mat-expansion-panel-header><span><mat-panel-title>${title}</mat-panel-title></span></mat-expansion-panel-header><div>${inner}</div></mat-expansion-panel>`;
+  it("every key stays within 200 characters, and the cap is what holds it there", () => {
+    // a 250-character name (legacy head 120), a 40-character section title (suffix 41) and
+    // 40-character labels (kept as written): 120 + 1 + 40 + 41 = 202 without the cap
+    const name = "x".repeat(250);
+    const title = "Prior Accident Claim Information Section";
+    const labelA = "Bodily Injury Liability Amount Paid Ca";
+    const labelB = "Bodily Injury Liability Amount Paid In";
+    expect([title.length, labelA.length, labelB.length]).toEqual([40, 38, 38]);
+    const label40a = `${labelA}rr`;
+    const label40b = `${labelB}sd`;
+    expect([label40a.length, label40b.length]).toEqual([40, 40]);
+    const panel = (t: string, inner: string) =>
+      `<mat-expansion-panel><mat-expansion-panel-header><span><mat-panel-title>${t}</mat-panel-title></span></mat-expansion-panel-header><div>${inner}</div></mat-expansion-panel>`;
     const field = (label: string, value: string) =>
-      `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input name="${long}" value="${value}"></mat-form-field>`;
+      `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input name="${name}" value="${value}"></mat-form-field>`;
     document.title = "Tracy Dittrich - Accidents";
-    document.body.innerHTML = `<main>${panel("Applicant Info", panel("Very Long Section Title ".repeat(8) + "Address",
-      field("A".repeat(300) + " one", "1") + field("A".repeat(300) + " two", "2") + field("Short", "3")))}</main>`;
+    document.body.innerHTML = `<main>${panel("Applicant Info", panel(title, field(label40a, "1") + field(label40b, "2") + field("Short", "3")))}</main>`;
     const keys = inputs().map(i => g.__bettersControlKey(i));
     expect(new Set(keys).size).toBe(3);
+    expect(keys.every(k => k.includes("~"))).toBe(true);
     keys.forEach(k => expect(k.length).toBeLessThanOrEqual(200));
-    expect(keys.some(k => k.includes("~"))).toBe(true);
+    // the two 40-character labels reach the cap exactly; with no cap they would be 202
+    expect(keys[0]!.length).toBe(200);
+    expect(keys[1]!.length).toBe(200);
+    expect(keys[0]).toMatch(/#[0-9a-f]{8}@/);
   });
 });
 
