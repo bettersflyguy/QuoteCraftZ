@@ -581,25 +581,11 @@
   }
   function stableBase(base) { return String(base).replace(/\d+/g, "#"); }
   const NOT_CHOICE_TYPES = ["hidden", "password", "file", "submit", "button", "reset", "image"];
-  /* the controls whose visible label could be `wanted` (canonical), found in
-   * ONE pass over the labels and aria attributes. Running the full per-control
-   * label lookup on every control is quadratic on a big page; this index
-   * leaves only a handful for the full check. */
-  function labelledBy(all, wanted) {
-    const hits = new Set();
-    const text = (n) => mapper.canonical(clean(n && (n.innerText || n.textContent)));
-    document.querySelectorAll("label").forEach((l) => {
-      if (text(l) !== wanted) return;
-      if (l.htmlFor) { const t = document.getElementById(l.htmlFor); if (t) hits.add(t); }
-      l.querySelectorAll("input, select, textarea, [role='combobox'], mat-select").forEach((t) => hits.add(t));
-    });
-    document.querySelectorAll("[aria-label], [aria-labelledby]").forEach((t) => {
-      if (mapper.canonical(clean(t.getAttribute("aria-label"))) === wanted) hits.add(t);
-      const ids = clean(t.getAttribute("aria-labelledby")).split(/\s+/).filter(Boolean);
-      if (ids.length && mapper.canonical(ids.map((id) => text(document.getElementById(id))).join(" ")) === wanted) hits.add(t);
-    });
-    return all.filter((c) => hits.has(c) || hits.has(choiceHost(c)));
-  }
+  /* The full per-control label lookup (explicitLabel does a document-wide
+   * query per control) is quadratic, so it runs only on a short list. A label
+   * index cannot stand in for it: a twin labelled only by container text would
+   * be missed and the first match returned. Above the limit the answer is
+   * null, never a guess. */
   const FULL_SCAN_LIMIT = 300;
 
   function findChoiceControl(key, hint) {
@@ -626,26 +612,21 @@
       return pool.length === 1 ? pool[0] : null;
     };
     const inSection = (list) => (section ? list.filter((c) => sectionOfEl(c) === section) : list);
-    /* the candidates whose label is `label`: the one-pass index first, the
-     * full per-control lookup only on those (or, when the page marks no label
-     * at all, on a small page) */
-    const withLabel = (list) => {
-      let pool = labelledBy(list, label);
-      if (!pool.length && list.length <= FULL_SCAN_LIMIT) pool = list;
-      return pool.filter((c) => labelOf(c) === label);
-    };
+    /* the candidates whose label is `label`, by the full lookup, on a short list only */
+    const withLabel = (list) => (list.length > FULL_SCAN_LIMIT ? [] : list.filter((c) => labelOf(c) === label));
     if (GENERATED_ID.test(parts.base)) {
       const want = stableBase(parts.base);
       let same = sameTag.filter((c) => {
         const k = splitKey(controlKey(c));
         return GENERATED_ID.test(k.base) && stableBase(k.base) === want;
       });
+      same = inSection(same);
       if (label) same = withLabel(same);
-      const hit = only(inSection(same));
+      const hit = only(same);
       if (hit) return hit;
     }
     if (!label) return null;
-    return only(inSection(withLabel(sameTag)));
+    return only(withLabel(inSection(sameTag)));
   }
 
   async function readChoices(key, labels, hint) {

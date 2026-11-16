@@ -158,18 +158,35 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect((await read("text:mat-input-3", { label: "Use" }))?.current).toBe("Commute");
   });
 
-  it("stays fast on a page with 1,500 controls (the label lookup is not quadratic)", async () => {
+  it("a twin labelled only by container text counts: two same-section selects is ambiguous, not the first one (label path)", async () => {
+    document.body.innerHTML = `
+      <div><label for="use-a">Use</label><select id="use-a"><option>One</option></select></div>
+      <div><span>Use</span><select id="use-b"><option>Two</option></select></div>`;
+    expect(await read("select:use-gone", { label: "Use" })).toBeNull();
+  });
+
+  it("a twin labelled only by container text counts on the generated-id path too", async () => {
+    document.body.innerHTML = `
+      <div><label for="mat-select-31">Use</label><select id="mat-select-31"><option>One</option></select></div>
+      <div><span>Use</span><select id="mat-select-32"><option>Two</option></select></div>`;
+    expect(await read("select:mat-select-9", { label: "Use" })).toBeNull();
+  });
+
+  it("a lone control labelled only by container text is still found", async () => {
+    document.body.innerHTML = `<div><span>Use</span><select id="mat-select-32"><option>Two</option></select></div>`;
+    expect((await read("select:mat-select-9", { label: "Use" }))?.current).toBe("Two");
+  });
+
+  it("on a page with 1,500 controls it stays fast and answers null rather than guess past 300 candidates", async () => {
     let h = "";
     for (let i = 0; i < 1500; i++) h += `<div><label for="mat-select-${i}">Field ${i}</label><select id="mat-select-${i}"><option>a</option></select></div>`;
     h += `<label for="mat-select-use">Use</label><select id="mat-select-use"><option selected>Business</option></select>`;
     document.body.innerHTML = h;
     const t0 = Date.now();
-    const found = await read("select:mat-select-gone", { label: "Use" });
-    const missing = await read("select:other-gone", { label: "Nothing here" });
-    const noLabel = await read("select:mat-select-9999");
-    expect(found?.current).toBe("Business");
-    expect(missing).toBeNull();
-    expect(noLabel).toBeNull();
-    expect(Date.now() - t0).toBeLessThan(5000); // 47-100 s before the single-pass label index
+    expect(await read("select:mat-select-gone", { label: "Use" })).toBeNull();
+    expect(await read("select:other-gone", { label: "Nothing here" })).toBeNull();
+    expect(await read("select:mat-select-9999")).toBeNull();
+    expect(await read("select:mat-select-0")).not.toBeNull(); // exact key still reads
+    expect(Date.now() - t0).toBeLessThan(5000); // 47-100 s with the per-control label lookup on every control
   }, 30000);
 });
