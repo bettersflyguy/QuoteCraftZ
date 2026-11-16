@@ -402,7 +402,7 @@
         if (ov[mapKey] === "skip") continue;
         const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
-        const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : control.closest("fieldset") === fieldset));
+        const group = controls.filter((control) => control.type === "radio" && (element.name ? control.name === element.name : sameRadioGroup(control, element)));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
         const outcome = await fillControl(target, candidate, overwrite, addrCtx, name);
@@ -496,14 +496,24 @@
   /* the choices a selection control offers, in the page's own wording (the
    * mapping editor binds each one to an exact CRM choice) */
   const PLACEHOLDER_OPTION = /^(select|choose|please|--|- -|none selected)/i;
+  /* is r in the same radio group as el? Named: same name, same form. A
+   * nameless radio groups only with itself or with nameless radios it provably
+   * shares a group with (same fieldset, same form) - never "every radio
+   * outside a fieldset", which spans other questions */
+  function sameRadioGroup(r, el) {
+    if ((r.type || "").toLowerCase() !== "radio") return false;
+    if (r === el) return true;
+    if (el.name) return r.name === el.name && r.form === el.form;
+    const fieldset = el.closest("fieldset");
+    return !r.name && !!fieldset && r.closest("fieldset") === fieldset && r.form === el.form;
+  }
   function choiceOptions(element) {
     let texts = [];
     if (element.tagName === "SELECT") {
       texts = Array.from(element.options).map((o) => clean(o.textContent));
     } else if ((element.type || "").toLowerCase() === "radio") {
-      const fieldset = element.closest("fieldset");
       texts = Array.from(document.querySelectorAll("input[type='radio']"))
-        .filter((r) => (element.name ? r.name === element.name && r.form === element.form : r.closest("fieldset") === fieldset))
+        .filter((r) => sameRadioGroup(r, element))
         .map((r) => optionName(r));
     } else {
       return undefined;
@@ -681,7 +691,7 @@
       return { current: sel ? clean(sel.textContent) : "", options: choiceOptions(host) || [] };
     }
     if ((el.type || "").toLowerCase() === "radio") {
-      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => r.name === el.name && r.form === el.form);
+      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => sameRadioGroup(r, el));
       const on = group.find((r) => r.checked);
       return { current: on ? optionName(on) : "", options: choiceOptions(el) || [] };
     }

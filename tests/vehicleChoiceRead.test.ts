@@ -327,4 +327,32 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(r?.current).toBe("");
     expect(r?.options).toEqual(["A", "B"]);
   });
+  /* nameless radios: no name means no group beyond the radio itself (or a fieldset it shares) */
+  const NAMELESS = `<form>
+      <input type="radio" id="g1" aria-label="Garaged"><input type="radio" id="g2" aria-label="Garaged No">
+      <input type="radio" id="l1" aria-label="Leased" checked></form>`;
+
+  it("a nameless radio read by key does not take another question's checked answer", async () => {
+    document.body.innerHTML = NAMELESS;
+    expect((await read("radio:garaged"))?.current).toBe("");
+  });
+
+  it("a nameless radio read by label does not take another question's checked answer", async () => {
+    document.body.innerHTML = NAMELESS;
+    expect((await g.__bettersPortalChoices("", ["Garaged"]))?.current).toBe("");
+  });
+
+  it("nameless radios outside a fieldset take their options from themselves, not from radios in other forms", async () => {
+    document.body.innerHTML = `<form><label><input type="radio" id="x1">X</label></form>
+      <form><label><input type="radio">Other</label></form><label><input type="radio">Z</label>`;
+    expect((await read("pick:#x1"))?.options).toEqual(["X"]);
+  });
+
+  it("nameless radios in one fieldset and form are still one group", async () => {
+    document.body.innerHTML = `<form><fieldset><legend>Garaged</legend>
+      <label><input type="radio" id="y">Yes</label><label><input type="radio" id="n" checked>No</label></fieldset></form>`;
+    const r = await read("pick:#y");
+    expect(r?.current).toBe("No");
+    expect(r?.options).toEqual(["Yes", "No"]);
+  });
 });
