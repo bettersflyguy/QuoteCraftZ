@@ -77,7 +77,11 @@ const COLUMN_ALIAS: Record<string, string> = {
 };
 
 /** Section titles that name a kind's own list: the record word ends the title, give or take a count, a parenthetical or punctuation ("Auto: Drivers", "Drivers (2)"), so "Auto: Driver Tickets" is not one. The tail is written so it cannot backtrack badly. */
-const TITLE_TAIL = String.raw`[\s\d:#.\-\u2013]*(?:\([^)]*\)[\s\d:#.\-\u2013]*)*$`;
+/** Page titles have no length limit and only their end says what the list is. */
+const TITLE_END = 200;
+const titleEnd = (title: string, pattern: RegExp | undefined): boolean => Boolean(pattern?.test(title.slice(-TITLE_END)));
+
+const TITLE_TAIL = String.raw`[\s\d:#.\-\u2013]*(?:\([^()]*\)[\s\d:#.\-\u2013]*)*$`;
 const LIST_TITLE: Record<string, RegExp> = {
   contact: new RegExp(String.raw`\b(contacts?|drivers?|people|persons?|insureds?|applicants?)\b` + TITLE_TAIL, "i"),
   vehicle: new RegExp(String.raw`\b(vehicles?|autos?)\b` + TITLE_TAIL, "i"),
@@ -247,12 +251,21 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
    * two rows, no row holds two records), and it says so by its title or by
    * being the data service's. A list of something else that only points at a
    * record (accidents, violations, tickets) is never it, whatever it is called. */
+  const listCache = new Map<string, boolean>();
   const isRecordList = (section: string, kind: string): boolean => {
+    const cacheKey = `${kind}\u0000${section}`;
+    const hit = listCache.get(cacheKey);
+    if (hit !== undefined) return hit;
+    const answer = isRecordListUncached(section, kind);
+    listCache.set(cacheKey, answer);
+    return answer;
+  };
+  const isRecordListUncached = (section: string, kind: string): boolean => {
     const recs = sectionRows.get(section);
     if (!recs || [...recs.values()].some(groups => groups.size > 1)) return false;
     if ([...(sectionGroups.get(section) ?? [])].some(g => (rowRecords.get(`${section}\u0000${g}`)?.size ?? 0) > 1)) return false;
-    if (CHILD_LIST.test(section)) return false;
-    return fromService.has(section) || (lookup(LIST_TITLE, kind)?.test(section) ?? false);
+    if (titleEnd(section, CHILD_LIST)) return false;
+    return fromService.has(section) || titleEnd(section, lookup(LIST_TITLE, kind));
   };
   /** A mapped field stays in its list's row when that list is not the
    * record's own and the row holds anything besides that record's fields
@@ -261,7 +274,7 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
   const staysInList = (f: CapturedAppField, ref: RecordRef): boolean => {
     if (isRecordList(f.section, ref.kind)) return false;
     const record = `${ref.kind}:${ref.slot}`;
-    if ((sectionRows.get(f.section)?.get(record)?.size ?? 0) > 1 || CHILD_LIST.test(f.section)) return true;
+    if ((sectionRows.get(f.section)?.get(record)?.size ?? 0) > 1 || titleEnd(f.section, CHILD_LIST)) return true;
     return (rowFields.get(rowKey(f)) ?? []).some(x => {
       const other = recordRefOf(x.mapped);
       return other?.kind !== ref.kind || other.slot !== ref.slot;

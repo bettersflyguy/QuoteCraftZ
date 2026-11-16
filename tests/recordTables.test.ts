@@ -253,6 +253,15 @@ describe("a list that points at records is its own table whatever it is called (
     expect(Date.now() - start).toBeLessThan(500);
   });
 
+  it.each([["drivers ("], ["drivers (a"], ["drivers ((("], ["Drivers (2) "]])("hostile title %s repeated 90 KB long with 40 fields stays fast", unit => {
+    const title = unit.repeat(Math.ceil(90000 / unit.length)) + "x";
+    const fields = Array.from({ length: 40 }, (_, i) => f(title, `Row ${i + 1}`, "First Name", `P${i}`, `crm:contact${i + 2}.firstname`));
+    const start = Date.now();
+    const tables = recordTables(fields);
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(tables.flatMap(t => t.rows)).toHaveLength(40);
+  });
+
   it("a Prior Address list still merges into Addresses, in the same column for every address", () => {
     const fields = [
       f("Addresses", "Row 1", "Street", "1 Main", "crm:address1.line1"),
