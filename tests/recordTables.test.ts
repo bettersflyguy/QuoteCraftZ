@@ -175,6 +175,48 @@ describe("fields without a record slot lose nothing", () => {
   });
 });
 
+describe("a list that only points at a record stays its own table (review of 83270cd)", () => {
+  const accident = (g: string, driver: string, amounts: number[]) => [
+    f("Auto: Accidents", g, "Driver", driver, "crm:contact2.fullname"),
+    ...["BI Amount", "Collision Amount", "MP Amount", "Other Amount"].map((label, i) => f("Auto: Accidents", g, label, String(amounts[i]), undefined, "table"))
+  ];
+
+  it("two accidents for one driver keep their own rows and every amount, even when an amount repeats", () => {
+    const fields = [...dataService(1, 1, "Tracy", "Dittrich", "03/11/1972"), ...dataService(2, 2, "Alexander", "Dittrich", "06/02/2005"),
+      ...accident("Row 1", "Alexander Dittrich", [1000, 2000, 300, 40]), ...accident("Row 2", "Alexander Dittrich", [1000, 500, 300, 10])];
+    const tables = recordTables(fields);
+    expect(tables.map(t => t.title)).toEqual(["Contacts", "Auto: Accidents"]);
+    expect(table(fields, "Contacts").columns).toEqual(["Primary", "First name", "Last name", "Date of birth"]);
+    const acc = table(fields, "Auto: Accidents");
+    expect(acc.columns).toEqual(["Driver", "BI Amount", "Collision Amount", "MP Amount", "Other Amount"]);
+    expect(acc.rows).toEqual([
+      { Driver: "Alexander Dittrich", "BI Amount": "1000", "Collision Amount": "2000", "MP Amount": "300", "Other Amount": "40" },
+      { Driver: "Alexander Dittrich", "BI Amount": "1000", "Collision Amount": "500", "MP Amount": "300", "Other Amount": "10" }
+    ]);
+  });
+
+  it("a single accident is not folded into the driver either", () => {
+    const fields = [...dataService(2, 2, "Alexander", "Dittrich", "06/02/2005"), ...accident("Row 1", "Alexander Dittrich", [1000, 2000, 300, 40])];
+    expect(recordTables(fields).map(t => t.title)).toEqual(["Contacts", "Auto: Accidents"]);
+  });
+
+  it("the unmatched table lists a fragment read twice once", () => {
+    const frag = f("Auto: Vehicles", "Row 3", "Purchase Date", "2022-01-02", "crm:vehicle3.iacrm_acquireddate");
+    const tables = recordTables([f("Vehicles", "Row 1", "Make", "Ford", "vehicle1.make"), frag, { ...frag }]);
+    expect(tables.find(t => t.title === UNMATCHED_TITLE)!.rows).toHaveLength(1);
+  });
+
+  it("labels that differ by a symbol that means something stay two columns", () => {
+    const fields = [f("Prior Policies", "Row 1", "Policy", "Auto"), f("Prior Policies", "Row 1", "Policy #", "123")];
+    expect(table(fields, "Prior Policies").rows).toEqual([{ Policy: "Auto", "Policy #": "123" }]);
+  });
+
+  it("a source column named Primary never overwrites the Primary flag", () => {
+    const fields = [...dataService(1, 1, "Tracy", "Dittrich", "03/11/1972"), f("Contacts", "Row 1", "Primary", "No", undefined, "dataservice")];
+    expect(table(fields, "Contacts").rows[0]).toMatchObject({ Primary: "Yes", "Primary (primary)": "No" });
+  });
+});
+
 describe("the export and the note use the same rules", () => {
   const fields = [
     ...dataService(1, 1, "Tracy", "Dittrich", "03/11/1972"), ...dataService(2, 2, "Alexander", "Dittrich", "06/02/2005"),

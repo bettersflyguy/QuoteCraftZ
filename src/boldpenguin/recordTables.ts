@@ -75,6 +75,16 @@ const COLUMN_ALIAS: Record<string, string> = {
   mobilephone: "mobilephone", telephone1: "phone"
 };
 
+/** Section titles that name a kind's own list. */
+const LIST_TITLE: Record<string, RegExp> = {
+  contact: /\b(contacts?|drivers?|people|persons?|insureds?|applicants?)\b/i,
+  vehicle: /\b(vehicles?|autos?)\b/i,
+  address: /\baddress(es)?\b/i
+};
+
+/** Lists of things that happen to or belong to a record, never the record's own list. */
+const CHILD_LIST = /\b(accidents?|violations?|claims?|losses|loss|incidents?|prior|coverages?|policy|policies)\b/i;
+
 /** Heading for a column whose label varies between sources. */
 const COLUMN_HEADING: Record<string, string> = {
   firstname: "First name", lastname: "Last name", dateofbirth: "Date of birth", acquireddate: "Purchase date",
@@ -82,7 +92,8 @@ const COLUMN_HEADING: Record<string, string> = {
 };
 
 export function columnKey(raw: string): string {
-  const k = canonical(raw).replace(/[^a-z0-9]/g, "").replace(/^iacrm/, "");
+  const k = canonical(String(raw).replace(/#/g, " number ").replace(/%/g, " percent ").replace(/\$/g, " dollar "))
+    .replace(/[^a-z0-9]/g, "").replace(/^iacrm/, "");
   return COLUMN_ALIAS[k] ?? k;
 }
 
@@ -163,14 +174,14 @@ function absorb(into: Rec, from: Rec) {
     const list = into.cells.get(key) ?? into.cells.set(key, []).get(key)!;
     for (const v of values) add(list, v);
   }
-  into.reads.push(...from.reads);
+  for (const r of from.reads) if (!into.reads.some(x => x.column === r.column && x.label === r.label && x.value === r.value && x.section === r.section)) into.reads.push(r);
 }
 
 interface Built { id: string; title: string; columns: string[]; keys: string[]; rows: { primary: boolean; slot: number; cells: Map<string, string[]> }[]; hasPrimary: boolean }
 
 /** A column heading unique within its table. */
 function headings(keys: string[], labels: Map<string, string>): string[] {
-  const used = new Set<string>();
+  const used = new Set<string>([PRIMARY_COLUMN]);
   return keys.map(k => {
     let h = COLUMN_HEADING[k] ?? labels.get(k) ?? k;
     if (used.has(h)) h = `${h} (${k})`;
@@ -196,26 +207,46 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
   };
   const seen = (id: string, t: string) => { if (!tableOrder.includes(id)) { tableOrder.push(id); title.set(id, t); } };
 
-  // a row read from one table that writes to exactly one record: the fields
+  // A row read from one table that writes to exactly one record: the fields
   // beside the mapped ones (unmapped, or mapped to something that is not a
-  // record) are that record's other columns, not a table of their own
+  // record) are that record's other columns, not a table of their own. Only
+  // for a table that IS the record's list: its rows point at different
+  // records (one row per record) and it is titled for them ("Contacts",
+  // "Auto: Drivers") or came from the data service. A list of something
+  // else that merely points at a record (accidents, each with a Driver) stays
+  // its own table, one row per entry.
   const rowRecords = new Map<string, Set<string>>();
+  const sectionRows = new Map<string, Map<string, Set<string>>>(); // section -> record -> groups
+  const fromService = new Set<string>();
   for (const f of fields) {
     const ref = isGridRow(f) ? recordRefOf(f.mapped) : null;
     if (!ref) continue;
-    const row = `${f.section}\u0000${f.group}`;
-    (rowRecords.get(row) ?? rowRecords.set(row, new Set()).get(row)!).add(`${ref.kind}:${ref.slot}`);
+    const record = `${ref.kind}:${ref.slot}`;
+    (rowRecords.get(`${f.section}\u0000${f.group}`) ?? rowRecords.set(`${f.section}\u0000${f.group}`, new Set()).get(`${f.section}\u0000${f.group}`)!).add(record);
+    const recs = sectionRows.get(f.section) ?? sectionRows.set(f.section, new Map()).get(f.section)!;
+    (recs.get(record) ?? recs.set(record, new Set()).get(record)!).add(f.group);
+    if (f.source === "dataservice") fromService.add(f.section);
   }
+  const pointsOnly = (section: string, record: string): boolean =>
+    (sectionRows.get(section)?.get(record)?.size ?? 0) > 1 || (!record.startsWith("policy:") && CHILD_LIST.test(section));
+  const isRecordList = (section: string, kind: string): boolean => {
+    const recs = sectionRows.get(section);
+    if (!recs || [...recs.values()].some(groups => groups.size > 1)) return false;
+    return fromService.has(section) || (LIST_TITLE[kind]?.test(section) ?? false);
+  };
   for (const f of fields) {
     if (!isGridRow(f)) continue;
     const value = usDate(f.value);
     if (!clean(value)) continue;
     let ref = recordRefOf(f.mapped);
+    // a mapped field in a list OF something else that points at a record
+    // (an accident's Driver) stays in that list's row
+    if (ref && pointsOnly(f.section, `${ref.kind}:${ref.slot}`)) ref = null;
     if (!ref && !f.mapped?.startsWith("note:")) {
       const owners = rowRecords.get(`${f.section}\u0000${f.group}`);
-      if (owners?.size === 1) {
-        const [kind, slot] = [...owners][0]!.split(":");
-        ref = { kind: kind!, slot: Number(slot), column: columnKey(f.label) || canonical(f.label) };
+      const [kind, slot] = owners?.size === 1 ? [...owners][0]!.split(":") : [];
+      if (kind && isRecordList(f.section, kind)) {
+        ref = { kind, slot: Number(slot), column: columnKey(f.label) || canonical(f.label) };
       }
     }
     if (ref) {
@@ -225,7 +256,9 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
       const key = `${ref.kind}:${ref.slot}`;
       const rec = records.get(key) ?? records.set(key, { kind: ref.kind, slot: ref.slot, cells: new Map(), reads: [] }).get(key)!;
       add(rec.cells.get(ref.column) ?? rec.cells.set(ref.column, []).get(ref.column)!, value);
-      rec.reads.push({ column: ref.column, label: f.label, value, section: f.section });
+      if (!rec.reads.some(r => r.column === ref.column && r.label === f.label && r.value === value && r.section === f.section)) {
+        rec.reads.push({ column: ref.column, label: f.label, value, section: f.section });
+      }
       continue;
     }
     const id = `section:${f.section}`;

@@ -4,7 +4,7 @@ import { usDate } from "@/util/usDate";
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
 import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
-import { recordTables } from "@/boldpenguin/recordTables";
+import { recordTables, UNMATCHED_TITLE } from "@/boldpenguin/recordTables";
 import { noteRecordOf, noteSlotOf, type NoteRecord } from "@/portal/fieldMaps";
 import type { CapturedApplication, CapturedAppField } from "@/boldpenguin/types";
 
@@ -651,7 +651,10 @@ function noteHtml(title: string, app: CapturedApplication, fields: CapturedAppli
         singles.map(f => `<tr><td>${html(f.label)}</td><td>${html(usDate(f.value))}</td></tr>`).join("") + "</table>");
     }
     // list rows: columns told apart by label alone (see recordTables), one table per section
-    for (const t of recordTables(inSection.filter(isGridRow))) {
+    const tables = recordTables(inSection.filter(isGridRow));
+    for (const t of tables) {
+      // a heading when the section yields more than one table, and always for the unmatched ones
+      if (tables.length > 1 || t.title === UNMATCHED_TITLE) parts.push(`<h4>${html(t.title)}</h4>`);
       parts.push(TABLE + "<tr>" + t.columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
         t.rows.map(r => "<tr>" + t.columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
         "</table>");
