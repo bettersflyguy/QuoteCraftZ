@@ -303,7 +303,7 @@ describe("picking a box in the panel", () => {
 
 describe("teaching a box while only some of the same-name boxes are on screen", () => {
   const box = (label: string, value: string, hidden = false) =>
-    `<mat-form-field class="mat-mdc-form-field" ${hidden ? 'style="display:none"' : ""}><label>${label}</label><input name="amount" id="amount" value="${value}"></mat-form-field>`;
+    `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input name="amount" id="amount" value="${value}" ${hidden ? 'style="display:none"' : ""}></mat-form-field>`;
   const show = (...boxes: string[]) => { document.title = "Tracy Dittrich - Accidents"; document.body.innerHTML = `<main>${boxes.join("")}</main>`; };
   const pickAt = (ov: unknown, el: Element) => {
     const api = globalThis as unknown as { __bettersPortalPick: (t: number, o: unknown) => Promise<{ key: string }> };
