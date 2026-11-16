@@ -477,6 +477,16 @@ describe("the shared key fails closed when the sibling boxes are read-only or di
     expect(routed()).toEqual([]);
   });
 
+  it("a dialog under an aria-hidden ancestor: the capture reads the page, so the boxes are grouped over the page", () => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<div aria-hidden="true"><div role="dialog"><input name="other" value="x"></div></div>
+      <main>${box("BI Amount", "5000")}${box("Collision Amount", "2000")}${box("MP Amount", "1000")}${box("PD Amount", "700")}</main>`;
+    // the filler sees the dialog as the open one (it has a size); the capture rejects it (hidden ancestor)
+    const dialog = document.querySelector("[role='dialog']") as HTMLElement;
+    dialog.getBoundingClientRect = () => ({ left: 100, top: 100, width: 800, height: 600, right: 900, bottom: 700, x: 100, y: 100, toJSON() { return {}; } }) as DOMRect;
+    expect(routed()).toEqual([]);
+  });
+
   it("a one-box legacy page is unchanged: it captures and fills as today", async () => {
     show(box("BI Amount", "5000"));
     expect(routed()).toEqual(["crm:incident.biamount=5000"]);

@@ -1174,6 +1174,9 @@
     return box ? boxLabel(box) : "";
   };
   globalThis.__bettersCaptureElements = captureElements;
+  /* the root a capture reads (the open dialog, else main, else the page): the
+   * filler groups same-name boxes over the same root */
+  globalThis.__bettersCaptureRoot = captureRoot;
   /* `controls`: the page's saved control mappings. `secure` comes back
    * separately and is never merged into the capture by the worker. */
   globalThis.__bettersPortalIngest = (taught, controls) => {

@@ -167,7 +167,13 @@
      * Grouping over fewer controls than the capture reads would let a box whose
      * siblings are read-only keep the shared key and fail open. Never a radio
      * or an image button. */
-    const root = activeModal() || document;
+    /* the capture picks its dialog with its own rule (isVisible: a dialog under
+     * a [hidden] / aria-hidden ancestor is not one) and falls back to main. When
+     * its root is not the root this filler picked, the two disagree about where
+     * the page's boxes are, so group over the whole document, a superset. */
+    const fillRoot = activeModal() || document;
+    const captureRoot = typeof globalThis.__bettersCaptureRoot === "function" ? globalThis.__bettersCaptureRoot() : fillRoot;
+    const root = captureRoot === fillRoot ? fillRoot : document;
     Array.from(root.querySelectorAll("input, select, textarea")).filter((el) => visible(el) || captureVisible(el)).forEach((el) => {
       const type = (el.type || "").toLowerCase();
       if (["radio", "image", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
