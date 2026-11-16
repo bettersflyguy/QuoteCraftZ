@@ -101,7 +101,7 @@
   /* THE KEY EVERY SAVED MAPPING WAS TAKEN AGAINST. Never change what this
    * returns for a control: saved mappings (agents hold dozens) are stored
    * under it and must keep resolving exactly as they always have. */
-  function legacyControlKey(element) {
+  function rawLegacyKey(element) {
     if ((element.type || "").toLowerCase() === "radio") {
       return "radio:" + (clean(element.name) || mapper.canonical(primaryLabel(element)).slice(0, 60)) + sectionSuffix(element);
     }
@@ -110,28 +110,46 @@
     return (tag + ":" + base).slice(0, 120) + sectionSuffix(element);
   }
 
+  /* Everything below is computed ONCE per tick (a scan, a capture or a peek
+   * runs inside one): each control's legacy key, own label and final key, and
+   * each shared-key group's label set. A fill pass awaits between controls, so
+   * it pins the cache for its whole run instead. */
+  let tickCache = null;
+  let pinned = 0;
+  function tick() {
+    if (tickCache) return tickCache;
+    const c = { legacy: new Map(), own: new Map(), keys: new Map(), groups: null };
+    tickCache = c;
+    Promise.resolve().then(() => { if (!pinned && tickCache === c) tickCache = null; });
+    return c;
+  }
+  function legacyControlKey(element) {
+    const c = tick();
+    let k = c.legacy.get(element);
+    if (k === undefined) { k = rawLegacyKey(element); c.legacy.set(element, k); }
+    return k;
+  }
+
   /* Controls that share a name or id yet carry DIFFERENT labels are different
    * fields (the BI, Collision, MP and PD amount boxes of one accident card
    * share one amount component), so under the legacy key they merge into one
    * field "repeated" on every card. Such a control gets its own key: the
    * legacy key plus "~<its label>". Controls with the same label (the same
    * field on each card) and controls whose key came from a label keep the
-   * legacy key. The index is built once per tick, so a scan or a fill pass
-   * stays linear. */
-  let sharedIndex = null;
-  function sharedKeyIndex() {
-    if (sharedIndex) return sharedIndex;
+   * legacy key. */
+  function sharedGroups() {
+    const c = tick();
+    if (c.groups) return c.groups;
     const byKey = new Map();
     Array.from(document.querySelectorAll("input, select, textarea")).forEach((el) => {
       const type = (el.type || "").toLowerCase();
       if (["radio", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
       if (!clean(el.name) && !clean(el.id)) return;
       const k = legacyControlKey(el);
-      if (!byKey.has(k)) byKey.set(k, []);
-      byKey.get(k).push(el);
+      if (!byKey.has(k)) byKey.set(k, { els: [], labels: null });
+      byKey.get(k).els.push(el);
     });
-    sharedIndex = byKey;
-    Promise.resolve().then(() => { if (sharedIndex === byKey) sharedIndex = null; });
+    c.groups = byKey;
     return byKey;
   }
   /* the control's own label: the box's label first (it stays right when an
@@ -143,7 +161,29 @@
     return clean(viaIngest || (lab ? lab.textContent : "")).replace(/^[*\s]+|[:*\s]+$/g, "");
   }
   function ownLabelOf(element) {
-    return mapper.canonical(ownLabelText(element) || primaryLabel(element) || "").slice(0, 40);
+    const c = tick();
+    let v = c.own.get(element);
+    if (v === undefined) { v = mapper.canonical(ownLabelText(element) || primaryLabel(element) || "").slice(0, 30); c.own.set(element, v); }
+    return v;
+  }
+  function controlKey(element) {
+    const c = tick();
+    let k = c.keys.get(element);
+    if (k === undefined) { k = computeControlKey(element); c.keys.set(element, k); }
+    return k;
+  }
+  function computeControlKey(element) {
+    const legacy = legacyControlKey(element);
+    if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return legacy;
+    const group = sharedGroups().get(legacy);
+    if (!group || group.els.length < 2 || group.els.indexOf(element) < 0) return legacy;
+    const own = ownLabelOf(element);
+    if (!own) return legacy;
+    if (!group.labels) group.labels = new Set(group.els.map(ownLabelOf).filter(Boolean));
+    if (group.labels.size < 2) return legacy;
+    const suffix = sectionSuffix(element);
+    const head = suffix ? legacy.slice(0, legacy.length - suffix.length) : legacy;
+    return head + "~" + own + suffix;
   }
   /* the label the mapping editor shows: primaryLabel, except that a control
    * told apart from same-id twins is named by its own box, never by a label
@@ -151,19 +191,6 @@
   function shownLabel(element) {
     const own = controlKey(element) !== legacyControlKey(element) ? ownLabelText(element) : "";
     return own || primaryLabel(element);
-  }
-  function controlKey(element) {
-    const legacy = legacyControlKey(element);
-    if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return legacy;
-    const group = sharedKeyIndex().get(legacy);
-    if (!group || group.length < 2 || group.indexOf(element) < 0) return legacy;
-    const own = ownLabelOf(element);
-    if (!own) return legacy;
-    const labels = new Set(group.map(ownLabelOf).filter(Boolean));
-    if (labels.size < 2) return legacy;
-    const suffix = sectionSuffix(element);
-    const head = suffix ? legacy.slice(0, legacy.length - suffix.length) : legacy;
-    return head + "~" + own + suffix;
   }
   /* where this control's saved mapping lives: its own key when it has a
    * mapping there, else the legacy key (a mapping saved before the keys were
@@ -443,6 +470,13 @@
   }
 
   async function fill(payload, overwrite, autoAdvance, overrides) {
+    /* keys are computed once for the whole pass (it awaits between controls) */
+    tickCache = null;
+    pinned += 1;
+    try { return await fillPass(payload, overwrite, autoAdvance, overrides); }
+    finally { pinned -= 1; tickCache = null; }
+  }
+  async function fillPass(payload, overwrite, autoAdvance, overrides) {
     const ov = overrides || {};
     const candidates = mapper.buildCandidates(payload);
     const fillRoot = activeModal() || document;
@@ -671,9 +705,10 @@
     const at = keys.indexOf(key);
     if (at >= 0) return all[at];
     /* a key saved before same-id controls were told apart is the legacy key:
-     * it still names the control, the first one that has it, as it always did */
-    const legacyAt = all.findIndex((c, i) => keys[i].indexOf("~") >= 0 && legacyControlKey(c) === key);
-    if (legacyAt >= 0) return all[legacyAt];
+     * it names the control only when EXACTLY ONE control carries it (the rule
+     * below: a key that matches several boxes is never read as the first) */
+    const legacyHits = all.filter((c, i) => keys[i].indexOf("~") >= 0 && legacyControlKey(c) === key);
+    if (legacyHits.length === 1) return legacyHits[0];
     /* Past the exact key, a control is returned only when EXACTLY ONE
      * candidate remains: reading a look-alike field (card 1 for card 2, a
      * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
@@ -808,14 +843,24 @@
     const candidates = payload ? mapper.buildCandidates(payload) : [];
     const rows = [];
     const seen = new Set();
+    /* saved keys of controls that now carry their own key: the key stays a
+     * row of its own (below) so a Save writes it back untouched */
+    const legacyShared = new Map();
     for (const element of pageControls(activeModal() || document)) {
       const name = fieldName(element);
       if (!name) continue;
       const key = controlKey(element);
       if (seen.has(key)) continue;
       seen.add(key);
+      const legacy = legacyControlKey(element);
+      const inherited = legacy !== key && !ov[key] && typeof ov[legacy] === "string" && Boolean(ov[legacy]);
+      if (legacy !== key) {
+        const hit = legacyShared.get(legacy) || { element, count: 0 };
+        hit.count += 1;
+        legacyShared.set(legacy, hit);
+      }
       const payment = PAYMENT_FIELD.test(name);
-      const auto = payment || !candidates.length ? null : mapper.matchField(name, candidates);
+      const auto = payment || inherited || !candidates.length ? null : mapper.matchField(name, candidates);
       const autoPath = auto && typeof auto.path === "string" && auto.path.indexOf("fields.") !== 0 ? auto.path : null;
       rows.push({
         key,
@@ -826,10 +871,28 @@
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
         autoPath,
-        mapped: typeof ov[savedKeyOf(ov, element)] === "string" ? ov[savedKeyOf(ov, element)] : null,
+        /* a box that still follows the old shared key shows no mapping of its
+         * own (the old key's row below carries it), so a Save does not copy it */
+        mapped: inherited ? "" : typeof ov[key] === "string" ? ov[key] : null,
         options: choiceOptions(element)
       });
     }
+    legacyShared.forEach((hit, legacy) => {
+      if (seen.has(legacy) || typeof ov[legacy] !== "string" || !ov[legacy]) return;
+      seen.add(legacy);
+      const el = hit.element;
+      rows.push({
+        key: legacy,
+        label: "Every box sharing " + (clean(el.name) || clean(el.id)) + " (saved before the boxes were told apart)",
+        fieldLabel: "",
+        section: mapper && mapper.sectionOf ? mapper.sectionOf(el).key : "",
+        type: el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase(),
+        payment: false,
+        autoPath: null,
+        mapped: ov[legacy],
+        options: undefined
+      });
+    });
     /* saved read-only-text teachings ("pick:<selector>" -> CRM field) show as
      * rows too, so a revisit can review/retarget/clear them */
     for (const key of Object.keys(ov)) {
