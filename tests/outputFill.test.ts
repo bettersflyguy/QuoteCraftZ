@@ -214,6 +214,24 @@ describe("page filler: radio groups", () => {
   }, 10000);
 });
 
+describe("page filler: a fill that relabels another question", () => {
+  it("a question that becomes ambiguous after an earlier fill is refused, not filled from a stale key index", async () => {
+    document.body.innerHTML = `<form>
+      <fieldset><legend>Garaged</legend><label><input type="radio" id="a-y">Yes</label><label><input type="radio" id="a-n">No</label></fieldset>
+      <fieldset><legend>Owned</legend><label><input type="radio" id="b-y">Yes</label><label><input type="radio" id="b-n">No</label></fieldset>
+      <fieldset id="c"><legend>Other</legend><label><input type="radio" id="c-y">Yes</label><label><input type="radio" id="c-n">No</label></fieldset></form>`;
+    // answering "Garaged" renames the third question to "Owned": the second now has a same-key twin
+    const rename = () => { document.querySelector("#c legend")!.textContent = "Owned"; };
+    document.getElementById("a-n")!.addEventListener("click", rename);
+    document.getElementById("a-n")!.addEventListener("change", rename);
+    await (g["__bettersPortalFill"] as (p: unknown, o: boolean, a: boolean, ov: unknown) => Promise<unknown>)(
+      { normalized: {}, fields: [], values: { "crm:q.garaged": "No", "crm:q.owned": "No" } }, false, false,
+      { "radio:garaged": "crm:q.garaged", "radio:owned": "crm:q.owned" });
+    const on = Array.from(document.querySelectorAll<HTMLInputElement>("input[type=radio]")).filter((r) => r.checked).map((r) => r.id);
+    expect(on).toEqual(["a-n"]);
+  }, 20000);
+});
+
 describe("page filler: radio fill cost", () => {
   it("nameless fieldset questions with nothing mapped: the filler does not compare every radio's key with every other", async () => {
     document.body.innerHTML = "<form>" + Array.from({ length: 300 }, (_, i) =>

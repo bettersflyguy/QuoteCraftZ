@@ -426,6 +426,7 @@
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
         const outcome = await fillControl(target, candidate, overwrite, addrCtx, name);
+        radioKeys = null; /* a fill can relabel other questions: the key index is stale */
         results.push({ label: name, path: candidate.path, status: outcome.status });
         continue;
       }
@@ -439,6 +440,7 @@
         continue;
       }
       const outcome = await fillControl(element, candidate, overwrite, addrCtx, name);
+      radioKeys = null;
       results.push({ label: name, path: candidate.path, status: outcome.status });
     }
 
