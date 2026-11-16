@@ -613,20 +613,20 @@
     const inSection = (list) => list.filter((c) => sectionOfEl(c) === section);
     /* the candidates whose label is `label`, by the full lookup, on a short list only */
     const withLabel = (list) => (list.length > FULL_SCAN_LIMIT ? [] : list.filter((c) => labelOf(c) === label));
-    /* a generated-id shape alone names no field ("mat-select-12" could be any
-     * of them): it needs a label or a section to say which */
-    if (GENERATED_ID.test(parts.base) && (label || section)) {
+    /* a generated-id shape or a section alone names no field ("mat-select-12"
+     * could be any dropdown left in the section): both fallbacks need the label */
+    if (!label) return null;
+    if (GENERATED_ID.test(parts.base)) {
       const want = stableBase(parts.base);
       let same = sameTag.filter((c) => {
         const k = splitKey(controlKey(c));
         return GENERATED_ID.test(k.base) && stableBase(k.base) === want;
       });
       same = inSection(same);
-      if (label) same = withLabel(same);
+      same = withLabel(same);
       const hit = only(same);
       if (hit) return hit;
     }
-    if (!label) return null;
     return only(withLabel(inSection(sameTag)));
   }
 

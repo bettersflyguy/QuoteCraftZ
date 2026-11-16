@@ -179,6 +179,15 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(await read("text:mat-select-1", {})).toBeNull();
   });
 
+  it("a section-only key with no label reads nothing, not the one other dropdown left in the section", async () => {
+    document.body.innerHTML = `
+      <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Vehicle Details</mat-panel-title></mat-expansion-panel-header>
+        <label for="mat-select-51">Performance</label><select id="mat-select-51"><option selected>Sports</option></select></mat-expansion-panel>`;
+    expect(await read("select:mat-select-9@vehicle details")).toBeNull();
+    expect(await read("select:mat-select-9@vehicle details", { section: "vehicle details" })).toBeNull();
+    expect((await read("select:mat-select-9@vehicle details", { label: "Performance", section: "vehicle details" }))?.current).toBe("Sports");
+  });
+
   it("an unsectioned key never matches a same-label field inside a named section", async () => {
     document.body.innerHTML = `
       <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Driver Info</mat-panel-title></mat-expansion-panel-header>
