@@ -319,8 +319,8 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const policyFields = app ? app.fields.filter(f => isPolicySection(f.section)) : [];
-  const renderGrid = (t: GridTable) => (
-    <div key={t.title}>
+  const renderGrid = (t: GridTable, at = 0) => (
+    <div key={`${at}:${t.title}`}>
       {t.label === "Fields" && <div className={styles.gridTitle}>{t.title}</div>}
       {t.label !== "Notes" && t.label !== "Fields" && <div className={styles.gridTitle}>{t.title} ({t.rows.length} row{t.rows.length === 1 ? "" : "s"})</div>}
       <div className={styles.grid}>
@@ -481,7 +481,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
           </table>
         </div>
       )}
-      {app && view === "data" && gridTables(regular).map(renderGrid)}
+      {app && view === "data" && gridTables(regular).map((t, i) => renderGrid(t, i))}
       {app && view === "data" && [...new Set(policyFields.map(f => f.section))].map(sec => renderGrid({
         title: sec, label: "Fields", columns: ["Field", "Value", "Goes to"],
         rows: policyFields.filter(f => f.section === sec).map(f => ({
@@ -511,7 +511,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
                   title: sec || `${target}:singles`, label: sec ? "Fields" : "Notes", columns: ["Field", "Value"],
                   rows: singles.filter(f => (f.section ?? "") === sec).map(f => ({ Field: f.label, Value: usDate(f.value) }))
                 }))}
-                {gridTables(forRecord).map(renderGrid)}
+                {gridTables(forRecord).map((t, i) => renderGrid(t, i))}
               </div>
             );
           })}

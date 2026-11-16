@@ -217,6 +217,41 @@ describe("a list that only points at a record stays its own table (review of 832
   });
 });
 
+describe("a list that points at records is its own table whatever it is called (review of 602ef42)", () => {
+  const entry = (section: string, g: string, slot: number, driver: string, amount: string, source: CapturedAppField["source"] = "taught") => [
+    f(section, g, "Driver", driver, `crm:contact${slot}.fullname`, source), f(section, g, "BI Amount", amount, undefined, "table")
+  ];
+  const people = [...dataService(1, 2, "Tracy", "D", "03/11/1972"), ...dataService(2, 3, "Alex", "D", "06/02/2005")];
+
+  it.each(["Auto: Tickets", "Auto: Driver Violations", "Driver Incidents"])("%s keeps its Driver and its columns, one row per entry", section => {
+    const fields = [...people, ...entry(section, "Row 1", 2, "Tracy D", "100"), ...entry(section, "Row 2", 3, "Alex D", "200")];
+    const tables = recordTables(fields);
+    expect(tables.map(t => t.title)).toEqual(["Contacts", section]);
+    expect(table(fields, "Contacts").columns).toEqual(["First name", "Last name", "Date of birth"]);
+    expect(table(fields, section).rows).toEqual([{ Driver: "Tracy D", "BI Amount": "100" }, { Driver: "Alex D", "BI Amount": "200" }]);
+  });
+
+  it("a Prior Address list still merges into Addresses, in the same column for every address", () => {
+    const fields = [
+      f("Addresses", "Row 1", "Street", "1 Main", "crm:address1.line1"),
+      f("Prior Address", "Row 1", "Street", "9 Lake", "crm:address2.line1")
+    ];
+    const t = table(fields, "Addresses");
+    expect(t.columns).toEqual(["Primary", "Street"]);
+    expect(t.rows).toEqual([{ Primary: "Yes", Street: "1 Main" }, { Primary: "", Street: "9 Lake" }]);
+  });
+
+  it("a data-service list of accidents never folds into Contacts", () => {
+    const fields = [...dataService(1, 1, "Tracy", "D", "03/11/1972"), ...dataService(2, 2, "Alex", "D", "06/02/2005"),
+      ...entry("Accidents", "Row 1", 1, "Tracy D", "5", "dataservice"), ...entry("Accidents", "Row 2", 2, "Alex D", "6", "dataservice")];
+    expect(recordTables(fields).map(t => t.title)).toEqual(["Contacts", "Accidents"]);
+  });
+
+  it("a source column named Primary keeps its heading in a table that has no Primary flag", () => {
+    expect(table([f("Prior Policies", "Row 1", "Primary", "Yes")], "Prior Policies").columns).toEqual(["Primary"]);
+  });
+});
+
 describe("page text cannot break the tables (security review of 83270cd)", () => {
   const odd = ["__proto__", "constructor", "toString", "hasOwnProperty"];
 

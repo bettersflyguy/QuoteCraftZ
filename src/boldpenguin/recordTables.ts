@@ -84,7 +84,7 @@ const LIST_TITLE: Record<string, RegExp> = {
 };
 
 /** Lists of things that happen to or belong to a record, never the record's own list. */
-const CHILD_LIST = /\b(accidents?|violations?|claims?|losses|loss|incidents?|prior|coverages?|policy|policies)\b/i;
+const CHILD_LIST = /\b(accidents?|violations?|claims?|losses|loss|incidents?)\b/i;
 
 /** Heading for a column whose label varies between sources. */
 const COLUMN_HEADING: Record<string, string> = {
@@ -189,8 +189,8 @@ function absorb(into: Rec, from: Rec) {
 interface Built { id: string; title: string; columns: string[]; keys: string[]; rows: { primary: boolean; slot: number; cells: Map<string, string[]> }[]; hasPrimary: boolean }
 
 /** A column heading unique within its table. */
-function headings(keys: string[], labels: Map<string, string>): string[] {
-  const used = new Set<string>([PRIMARY_COLUMN]);
+function headings(keys: string[], labels: Map<string, string>, reserved: string[] = []): string[] {
+  const used = new Set<string>(reserved);
   return keys.map(k => {
     let h = lookup(COLUMN_HEADING, k) ?? labels.get(k) ?? k;
     if (used.has(h)) h = `${h} (${k})`;
@@ -224,35 +224,58 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
   // "Auto: Drivers") or came from the data service. A list of something
   // else that merely points at a record (accidents, each with a Driver) stays
   // its own table, one row per entry.
+  const rowKey = (f: CapturedAppField) => `${f.section}\u0000${f.group}`;
   const rowRecords = new Map<string, Set<string>>();
+  const rowFields = new Map<string, CapturedAppField[]>();
   const sectionRows = new Map<string, Map<string, Set<string>>>(); // section -> record -> groups
+  const sectionGroups = new Map<string, Set<string>>();
   const fromService = new Set<string>();
   for (const f of fields) {
-    const ref = isGridRow(f) ? recordRefOf(f.mapped) : null;
+    if (!isGridRow(f)) continue;
+    (rowFields.get(rowKey(f)) ?? rowFields.set(rowKey(f), []).get(rowKey(f))!).push(f);
+    (sectionGroups.get(f.section) ?? sectionGroups.set(f.section, new Set()).get(f.section)!).add(f.group);
+    const ref = recordRefOf(f.mapped);
     if (!ref) continue;
     const record = `${ref.kind}:${ref.slot}`;
-    (rowRecords.get(`${f.section}\u0000${f.group}`) ?? rowRecords.set(`${f.section}\u0000${f.group}`, new Set()).get(`${f.section}\u0000${f.group}`)!).add(record);
+    (rowRecords.get(rowKey(f)) ?? rowRecords.set(rowKey(f), new Set()).get(rowKey(f))!).add(record);
     const recs = sectionRows.get(f.section) ?? sectionRows.set(f.section, new Map()).get(f.section)!;
     (recs.get(record) ?? recs.set(record, new Set()).get(record)!).add(f.group);
     if (f.source === "dataservice") fromService.add(f.section);
   }
-  const pointsOnly = (section: string, record: string): boolean =>
-    (sectionRows.get(section)?.get(record)?.size ?? 0) > 1 || (!record.startsWith("policy:") && CHILD_LIST.test(section));
+  /** The table IS this kind's own list: one row per record (no record spans
+   * two rows, no row holds two records), and it says so by its title or by
+   * being the data service's. A list of something else that only points at a
+   * record (accidents, violations, tickets) is never it, whatever it is called. */
   const isRecordList = (section: string, kind: string): boolean => {
     const recs = sectionRows.get(section);
     if (!recs || [...recs.values()].some(groups => groups.size > 1)) return false;
+    if ([...(sectionGroups.get(section) ?? [])].some(g => (rowRecords.get(`${section}\u0000${g}`)?.size ?? 0) > 1)) return false;
+    if (CHILD_LIST.test(section)) return false;
     return fromService.has(section) || (lookup(LIST_TITLE, kind)?.test(section) ?? false);
+  };
+  /** A mapped field stays in its list's row when that list is not the
+   * record's own and the row holds anything besides that record's fields
+   * (or the record spans several rows). A row of nothing but the record's own
+   * fields is a fragment of it and merges, whatever its section is called. */
+  const staysInList = (f: CapturedAppField, ref: RecordRef): boolean => {
+    if (isRecordList(f.section, ref.kind)) return false;
+    const record = `${ref.kind}:${ref.slot}`;
+    if ((sectionRows.get(f.section)?.get(record)?.size ?? 0) > 1 || CHILD_LIST.test(f.section)) return true;
+    return (rowFields.get(rowKey(f)) ?? []).some(x => {
+      const other = recordRefOf(x.mapped);
+      return other?.kind !== ref.kind || other.slot !== ref.slot;
+    });
   };
   for (const f of fields) {
     if (!isGridRow(f)) continue;
     const value = usDate(f.value);
     if (!clean(value)) continue;
     let ref = recordRefOf(f.mapped);
-    // a mapped field in a list OF something else that points at a record
-    // (an accident's Driver) stays in that list's row
-    if (ref && pointsOnly(f.section, `${ref.kind}:${ref.slot}`)) ref = null;
-    if (!ref && !f.mapped?.startsWith("note:")) {
-      const owners = rowRecords.get(`${f.section}\u0000${f.group}`);
+    if (ref) {
+      if (staysInList(f, ref)) ref = null;
+    } else if (!f.mapped?.startsWith("note:")) {
+      // beside a record's mapped fields in that record's own list: another column of it
+      const owners = rowRecords.get(rowKey(f));
       const [kind, slot] = owners?.size === 1 ? [...owners][0]!.split(":") : [];
       if (kind && isRecordList(f.section, kind)) {
         ref = { kind, slot: Number(slot), column: columnKey(f.label) || canonical(f.label) };
@@ -300,9 +323,11 @@ export function recordTables(fields: CapturedAppField[]): RecordTable[] {
       const rows = anchored.filter(r => r.kind === kind).sort((a, b) => a.slot - b.slot);
       if (!rows.length) continue;
       const keys = (columnOrder.get(id) ?? []).filter(k => rows.some(r => r.cells.has(k)));
+      const rowsOut = rows.map(r => ({ primary: r.slot === 1 && (kind === "contact" || kind === "address"), slot: r.slot, cells: r.cells }));
+      // the Primary flag's heading is taken only in a table that has one
       built.push({
-        id, title: title.get(id)!, keys, columns: headings(keys, labels.get(id) ?? new Map()), hasPrimary: false,
-        rows: rows.map(r => ({ primary: r.slot === 1 && (kind === "contact" || kind === "address"), slot: r.slot, cells: r.cells }))
+        id, title: title.get(id)!, keys, hasPrimary: false, rows: rowsOut,
+        columns: headings(keys, labels.get(id) ?? new Map(), rowsOut.some(r => r.primary) ? [PRIMARY_COLUMN] : [])
       });
     } else {
       const section = id.slice("section:".length);
