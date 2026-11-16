@@ -9,11 +9,20 @@ From: the QuoteCraftZ session, which has already built the extension side agains
 
 From the next QuoteCraftZ release, the extension **never writes `iacrm_amsexternalid`**. It reads it only to recognize quotes that older versions already loaded.
 
+## Current DEV state
+
+Re-checked read-only with the service principal, 2026-11-15: **steps 1 and 3 are done in DEV.**
+
+- `iacrm_quote.iacrm_sourcequotekey` **exists**: text, max length: dev has 2000 (captured out-of-band, awaiting owner confirmation); Git has 200. Optional, not secured, valid for create and update. QuoteCraftZ v0.1.68 starts writing it on the next Load with no update.
+- The old alternate key `iacrm_quote_provider_amsexternalid` was **removed in CRM release 1.3.0.302**; `iacrm_quote` has no alternate keys.
+- Quotes with `iacrm_amsexternalid` set: **0** in DEV (checked 2026-11-11), so step 2 only matters in prod.
+- `iacrm_riskanswer.iacrm_insureditemid` (lookup to `iacrm_insureditem`, entity set `iacrm_insureditems`, navigation property `iacrm_insureditemid`) **exists**.
+
 ## 1. New column on Quote (`iacrm_quote`)
 
 | Column | Schema name | Type | Notes |
 |---|---|---|---|
-| Source Quote Key | iacrm_SourceQuoteKey | Text 200, optional, searchable | Logical name **`iacrm_sourcequotekey`** (the extension uses exactly this name) |
+| Source Quote Key | iacrm_SourceQuoteKey | Text, optional, searchable. Length: dev has 2000 (captured out-of-band, awaiting owner confirmation); Git has 200 | Logical name **`iacrm_sourcequotekey`** (the extension uses exactly this name) |
 
 Values the extension writes:
 - EZLynx quotes: `ezlynx:<quote id>:<req or altN>`
@@ -31,7 +40,7 @@ Do it in that order: the extension finds a quote by the source key first, then t
 
 ## 3. Remove the old alternate key
 
-If an alternate key on (`iacrm_provider`, `iacrm_amsexternalid`) exists on `iacrm_quote`, remove it after step 2. Nothing in QuoteCraftZ addresses quotes through it any more.
+**Done:** removed in CRM release 1.3.0.302, so nothing remains to do. (If an alternate key on (`iacrm_provider`, `iacrm_amsexternalid`) ever reappears on `iacrm_quote`, remove it after step 2.) Nothing in QuoteCraftZ addresses quotes through it any more.
 
 ## 4. AMS isolation
 
@@ -40,7 +49,7 @@ If an alternate key on (`iacrm_provider`, `iacrm_amsexternalid`) exists on `iacr
 
 ## 5. Security
 
-Same privileges as the other quote columns. The extension's app user needs read and write on `iacrm_sourcequotekey`.
+Same privileges as the other quote columns. QuoteCraftZ writes as the signed-in agent (not a service account), so the agents' security roles need Read and Write on Quote, Append on Risk Answer and Append To on Insured Item.
 
 ## 6. Report back to the QuoteCraftZ session
 
