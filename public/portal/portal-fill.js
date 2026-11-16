@@ -945,7 +945,7 @@
     /* boxes sharing this control's key are the same field on every card */
     if (element) {
       const same = ctx.byKey.get(controlKey(element)) || [];
-      const twins = same.indexOf(element) >= 0 ? same : same.concat([element]);
+      const twins = same;
       if (twins.length > repeatSections.length) repeatSections = twins.map(sectionKey);
     }
     const parts = String(document.title || "").split(" - ");

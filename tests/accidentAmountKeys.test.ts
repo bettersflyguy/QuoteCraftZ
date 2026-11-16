@@ -368,6 +368,19 @@ describe("label lookups stay linear on a page of same-id boxes (counted, not tim
   });
 });
 
+describe("picking a box the scan would not list", () => {
+  it("a read-only box that shares its name with one other box counts as one, not two", async () => {
+    document.title = "Tracy Dittrich - Accidents";
+    document.body.innerHTML = `<main>
+      <mat-form-field class="mat-mdc-form-field"><label>BI Amount</label><input name="amount" id="amount" value="5000" readonly></mat-form-field>
+      <mat-form-field class="mat-mdc-form-field"><label>Collision Amount</label><input name="amount" id="amount" value="2000"></mat-form-field></main>`;
+    const api = globalThis as unknown as { __bettersPortalPick: (t: number, o: unknown) => Promise<{ key: string; repeats: number }> };
+    const pending = api.__bettersPortalPick(5000, {});
+    inputs()[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
+    expect((await pending).repeats).toBe(1);
+  });
+});
+
 describe("long labels that start alike stay separate fields", () => {
   const boxes = (labels: string[]) => {
     document.title = "Tracy Dittrich - Accidents";
