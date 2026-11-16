@@ -73,7 +73,7 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     document.body.innerHTML = styledDropdown("veh-anti-theft-x9f", "Anti-theft", "Alarm", []) + `<div class="cdk-overlay-container"></div>`;
     wireOverlay("veh-anti-theft-x9f", ["None", "Alarm", "Tracking"]);
     // the key held an id that no longer exists; the label comes from the scan row
-    const r = await read("select:veh-anti-theft-old", { label: "Anti-theft" });
+    const r = await read("text:veh-anti-theft-old", { label: "Anti-theft" });
     expect(r).toEqual({ current: "Alarm", options: ["None", "Alarm", "Tracking"] });
   });
 
@@ -143,4 +143,33 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     // the section that does match is read
     expect((await read("select:vtype-old@driver info", { label: "Type", section: "driver info" }))?.current).toBe("Primary");
   });
+
+  it("never reads a password or hidden input, even when its stale key and label match", async () => {
+    document.body.innerHTML = `<label for="mat-input-7">Use</label><input type="password" id="mat-input-7" value="hunter2">
+      <label for="mat-input-8">Use</label><input type="hidden" id="mat-input-8" value="secret">`;
+    expect(await read("text:mat-input-3", { label: "Use" })).toBeNull();
+    expect(await read("password:mat-input-7", { label: "Use" })).toBeNull();
+    expect(await read("text:mat-input-7")).toBeNull();
+  });
+
+  it("respects the key's tag: a stale select key does not read a text input", async () => {
+    document.body.innerHTML = `<label for="mat-input-7">Use</label><input type="text" id="mat-input-7" value="Commute">`;
+    expect(await read("select:mat-input-3", { label: "Use" })).toBeNull();
+    expect((await read("text:mat-input-3", { label: "Use" }))?.current).toBe("Commute");
+  });
+
+  it("stays fast on a page with 1,500 controls (the label lookup is not quadratic)", async () => {
+    let h = "";
+    for (let i = 0; i < 1500; i++) h += `<div><label for="mat-select-${i}">Field ${i}</label><select id="mat-select-${i}"><option>a</option></select></div>`;
+    h += `<label for="mat-select-use">Use</label><select id="mat-select-use"><option selected>Business</option></select>`;
+    document.body.innerHTML = h;
+    const t0 = Date.now();
+    const found = await read("select:mat-select-gone", { label: "Use" });
+    const missing = await read("select:other-gone", { label: "Nothing here" });
+    const noLabel = await read("select:mat-select-9999");
+    expect(found?.current).toBe("Business");
+    expect(missing).toBeNull();
+    expect(noLabel).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(5000); // 47-100 s before the single-pass label index
+  }, 30000);
 });

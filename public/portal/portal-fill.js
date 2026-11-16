@@ -580,15 +580,42 @@
     return { tag: colon < 0 ? "" : head.slice(0, colon), base: colon < 0 ? head : head.slice(colon + 1), section: at < 0 ? "" : key.slice(at + 1) };
   }
   function stableBase(base) { return String(base).replace(/\d+/g, "#"); }
+  const NOT_CHOICE_TYPES = ["hidden", "password", "file", "submit", "button", "reset", "image"];
+  /* the controls whose visible label could be `wanted` (canonical), found in
+   * ONE pass over the labels and aria attributes. Running the full per-control
+   * label lookup on every control is quadratic on a big page; this index
+   * leaves only a handful for the full check. */
+  function labelledBy(all, wanted) {
+    const hits = new Set();
+    const text = (n) => mapper.canonical(clean(n && (n.innerText || n.textContent)));
+    document.querySelectorAll("label").forEach((l) => {
+      if (text(l) !== wanted) return;
+      if (l.htmlFor) { const t = document.getElementById(l.htmlFor); if (t) hits.add(t); }
+      l.querySelectorAll("input, select, textarea, [role='combobox'], mat-select").forEach((t) => hits.add(t));
+    });
+    document.querySelectorAll("[aria-label], [aria-labelledby]").forEach((t) => {
+      if (mapper.canonical(clean(t.getAttribute("aria-label"))) === wanted) hits.add(t);
+      const ids = clean(t.getAttribute("aria-labelledby")).split(/\s+/).filter(Boolean);
+      if (ids.length && mapper.canonical(ids.map((id) => text(document.getElementById(id))).join(" ")) === wanted) hits.add(t);
+    });
+    return all.filter((c) => hits.has(c) || hits.has(choiceHost(c)));
+  }
+  const FULL_SCAN_LIMIT = 300;
+
   function findChoiceControl(key, hint) {
-    const all = Array.from(document.querySelectorAll(LABELLED_FIELDS));
-    const exact = all.find((c) => controlKey(c) === key);
-    if (exact) return exact;
+    /* never a password, hidden, file or button control, on any path */
+    const all = Array.from(document.querySelectorAll(LABELLED_FIELDS))
+      .filter((c) => NOT_CHOICE_TYPES.indexOf((c.type || "").toLowerCase()) < 0);
+    const keys = all.map(controlKey);
+    const at = keys.indexOf(key);
+    if (at >= 0) return all[at];
     /* Past the exact key, a control is returned only when EXACTLY ONE
      * candidate remains: reading a look-alike field (card 1 for card 2, a
      * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
      * known section must match; an ambiguous result is null, not a guess. */
     const parts = splitKey(key);
+    /* the key's tag (select, text, ...) must agree on every fallback path */
+    const sameTag = all.filter((c, i) => splitKey(keys[i]).tag === parts.tag);
     const label = hint && hint.label ? mapper.canonical(hint.label) : "";
     const section = (hint && hint.section) || parts.section || "";
     const sectionOfEl = (c) => (mapper.sectionOf ? mapper.sectionOf(c).key : "");
@@ -599,22 +626,26 @@
       return pool.length === 1 ? pool[0] : null;
     };
     const inSection = (list) => (section ? list.filter((c) => sectionOfEl(c) === section) : list);
+    /* the candidates whose label is `label`: the one-pass index first, the
+     * full per-control lookup only on those (or, when the page marks no label
+     * at all, on a small page) */
+    const withLabel = (list) => {
+      let pool = labelledBy(list, label);
+      if (!pool.length && list.length <= FULL_SCAN_LIMIT) pool = list;
+      return pool.filter((c) => labelOf(c) === label);
+    };
     if (GENERATED_ID.test(parts.base)) {
       const want = stableBase(parts.base);
-      let same = all.filter((c) => {
+      let same = sameTag.filter((c) => {
         const k = splitKey(controlKey(c));
         return GENERATED_ID.test(k.base) && stableBase(k.base) === want;
       });
-      same = inSection(same);
-      if (label) same = same.filter((c) => labelOf(c) === label);
-      const hit = only(same);
+      if (label) same = withLabel(same);
+      const hit = only(inSection(same));
       if (hit) return hit;
     }
     if (!label) return null;
-    return only(inSection(all.filter((c) => {
-      if (c.type && ["hidden", "submit", "button", "password", "file"].indexOf(c.type) >= 0) return false;
-      return labelOf(c) === label;
-    })));
+    return only(inSection(withLabel(sameTag)));
   }
 
   async function readChoices(key, labels, hint) {
