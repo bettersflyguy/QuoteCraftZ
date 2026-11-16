@@ -214,6 +214,23 @@ describe("page filler: radio groups", () => {
   }, 10000);
 });
 
+describe("page filler: radio fill cost", () => {
+  it("nameless fieldset questions with nothing mapped: the filler does not compare every radio's key with every other", async () => {
+    document.body.innerHTML = "<form>" + Array.from({ length: 300 }, (_, i) =>
+      `<fieldset><legend>Question ${i}</legend><label><input type="radio">Yes</label><label><input type="radio">No</label></fieldset>`).join("") + "</form>";
+    const m = (globalThis as unknown as { BettersPortalMapper: { canonical: (s: string) => string } }).BettersPortalMapper;
+    const real = m.canonical;
+    let calls = 0;
+    m.canonical = (s: string) => { calls += 1; return real(s); };
+    try {
+      await (g["__bettersPortalFill"] as (p: unknown, o: boolean, a: boolean, ov: unknown) => Promise<unknown>)(
+        { normalized: {}, fields: [], values: {} }, false, false, {});
+    } finally { m.canonical = real; }
+    // linear in the radio count (600): quadratic comparison needed about 600 * 300 key lookups
+    expect(calls).toBeLessThan(600 * 40);
+  }, 60000);
+});
+
 describe("page ingester", () => {
   it("routes mapped controls, sends secured values apart, never captures identifier data", () => {
     document.body.innerHTML = `<main>

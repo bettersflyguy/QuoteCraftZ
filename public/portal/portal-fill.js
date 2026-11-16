@@ -380,6 +380,7 @@
     const results = [];
     const handledRadioGroups = new Set();
     const formIds = new Map();
+    let radioKeys = null;
     const values = (payload && payload.values) || {};
     /* secured mappings present in THIS frame: the worker fetches only these
      * and sends them back to this frame alone */
@@ -403,12 +404,24 @@
         handledRadioGroups.add(groupKey);
         const mapKey = controlKey(element);
         if (ov[mapKey] === "skip") continue;
-        /* a nameless radio is keyed by its label or option text ("radio:no"):
-         * when a radio of ANOTHER group has the same key the mapping cannot say
-         * which question it means, so neither is filled */
-        if (!element.name && controls.some((c) => c.type === "radio" && !sameRadioGroup(c, element) && controlKey(c) === mapKey)) continue;
         const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
+        /* a nameless radio is keyed by its label or option text ("radio:no"):
+         * when a radio of ANOTHER group has the same key the mapping cannot say
+         * which question it means, so neither is filled. The key index is built
+         * once, and only when a nameless radio actually has something to fill */
+        if (!element.name) {
+          if (!radioKeys) {
+            radioKeys = new Map();
+            controls.forEach((c) => {
+              if (c.type !== "radio") return;
+              const k = controlKey(c);
+              if (!radioKeys.has(k)) radioKeys.set(k, []);
+              radioKeys.get(k).push(c);
+            });
+          }
+          if ((radioKeys.get(mapKey) || []).some((c) => !sameRadioGroup(c, element))) continue;
+        }
         const group = controls.filter((control) => control.type === "radio" && sameRadioGroup(control, element));
         const target = group.find((control) => mapper.canonical(optionName(control)) === mapper.canonical(candidate.value));
         if (!target) { results.push({ label: name, status: "option-mismatch" }); continue; }
