@@ -223,7 +223,7 @@ describe("a list that points at records is its own table whatever it is called (
   ];
   const people = [...dataService(1, 2, "Tracy", "D", "03/11/1972"), ...dataService(2, 3, "Alex", "D", "06/02/2005")];
 
-  it.each(["Auto: Tickets", "Auto: Driver Violations", "Driver Incidents"])("%s keeps its Driver and its columns, one row per entry", section => {
+  it.each(["Auto: Tickets", "Auto: Driver Violations", "Driver Incidents", "Auto: Driver Tickets", "Driver Suspensions"])("%s keeps its Driver and its columns, one row per entry", section => {
     const fields = [...people, ...entry(section, "Row 1", 2, "Tracy D", "100"), ...entry(section, "Row 2", 3, "Alex D", "200")];
     const tables = recordTables(fields);
     expect(tables.map(t => t.title)).toEqual(["Contacts", section]);

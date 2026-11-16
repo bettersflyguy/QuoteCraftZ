@@ -76,11 +76,11 @@ const COLUMN_ALIAS: Record<string, string> = {
   mobilephone: "mobilephone", telephone1: "phone"
 };
 
-/** Section titles that name a kind's own list. */
+/** Section titles that name a kind's own list: the record word ends the title ("Auto: Drivers"), so "Auto: Driver Tickets" is not one. */
 const LIST_TITLE: Record<string, RegExp> = {
-  contact: /\b(contacts?|drivers?|people|persons?|insureds?|applicants?)\b/i,
-  vehicle: /\b(vehicles?|autos?)\b/i,
-  address: /\baddress(es)?\b/i
+  contact: /\b(contacts?|drivers?|people|persons?|insureds?|applicants?)\s*$/i,
+  vehicle: /\b(vehicles?|autos?)\s*$/i,
+  address: /\baddress(es)?\s*$/i
 };
 
 /** Lists of things that happen to or belong to a record, never the record's own list. */
