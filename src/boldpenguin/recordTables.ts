@@ -76,11 +76,12 @@ const COLUMN_ALIAS: Record<string, string> = {
   mobilephone: "mobilephone", telephone1: "phone"
 };
 
-/** Section titles that name a kind's own list: the record word ends the title ("Auto: Drivers"), so "Auto: Driver Tickets" is not one. */
+/** Section titles that name a kind's own list: the record word ends the title, give or take a count, a parenthetical or punctuation ("Auto: Drivers", "Drivers (2)"), so "Auto: Driver Tickets" is not one. The tail is written so it cannot backtrack badly. */
+const TITLE_TAIL = String.raw`[\s\d:#.\-\u2013]*(?:\([^)]*\)[\s\d:#.\-\u2013]*)*$`;
 const LIST_TITLE: Record<string, RegExp> = {
-  contact: /\b(contacts?|drivers?|people|persons?|insureds?|applicants?)\s*$/i,
-  vehicle: /\b(vehicles?|autos?)\s*$/i,
-  address: /\baddress(es)?\s*$/i
+  contact: new RegExp(String.raw`\b(contacts?|drivers?|people|persons?|insureds?|applicants?)\b` + TITLE_TAIL, "i"),
+  vehicle: new RegExp(String.raw`\b(vehicles?|autos?)\b` + TITLE_TAIL, "i"),
+  address: new RegExp(String.raw`\baddress(es)?\b` + TITLE_TAIL, "i")
 };
 
 /** Lists of things that happen to or belong to a record, never the record's own list. */

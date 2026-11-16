@@ -231,6 +231,28 @@ describe("a list that points at records is its own table whatever it is called (
     expect(table(fields, section).rows).toEqual([{ Driver: "Tracy D", "BI Amount": "100" }, { Driver: "Alex D", "BI Amount": "200" }]);
   });
 
+  it.each(["Drivers (current)", "Drivers (2)", "Drivers:", "Auto: Drivers 2", "Auto: Drivers "])("%s is still the contacts' own list: an unmapped column joins each driver", section => {
+    const rows = (g: string, slot: number, first: string) => [
+      f(section, g, "First Name", first, `crm:contact${slot}.firstname`), f(section, g, "Occupation", "Teacher", undefined, "table")
+    ];
+    const fields = [...rows("Row 1", 2, "Tracy"), ...rows("Row 2", 3, "Alex")];
+    const tables = recordTables(fields);
+    expect(tables.map(t => t.title)).toEqual(["Contacts"]);
+    expect(tables[0]!.rows).toEqual([{ "First name": "Tracy", Occupation: "Teacher" }, { "First name": "Alex", Occupation: "Teacher" }]);
+  });
+
+  it("Driver Suspensions (current) is a child list", () => {
+    const fields = [...people, ...entry("Driver Suspensions (current)", "Row 1", 2, "Tracy D", "1"), ...entry("Driver Suspensions (current)", "Row 2", 3, "Alex D", "2")];
+    expect(recordTables(fields).map(t => t.title)).toEqual(["Contacts", "Driver Suspensions (current)"]);
+  });
+
+  it("a very long title is matched in linear time", () => {
+    const title = "Drivers" + " (a)".repeat(5000) + "x";
+    const start = Date.now();
+    recordTables([f(title, "Row 1", "First Name", "Tracy", "crm:contact2.firstname")]);
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+
   it("a Prior Address list still merges into Addresses, in the same column for every address", () => {
     const fields = [
       f("Addresses", "Row 1", "Street", "1 Main", "crm:address1.line1"),
