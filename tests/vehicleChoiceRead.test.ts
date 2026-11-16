@@ -179,6 +179,17 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(await read("text:mat-select-1", {})).toBeNull();
   });
 
+  it("the key's section decides: a hint naming another section never overrides it", async () => {
+    document.body.innerHTML = `
+      <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Driver Info</mat-panel-title></mat-expansion-panel-header>
+        <label for="du2">Use</label><select id="du2"><option selected>Primary</option></select></mat-expansion-panel>`;
+    const hint = { label: "Use", section: "driver info" };
+    expect(await read("select:use-gone", hint)).toBeNull();                       // unsectioned key
+    expect(await read("select:mat-select-9", hint)).toBeNull();                   // unsectioned generated-id key
+    expect(await read("select:use-gone@vehicle details", hint)).toBeNull();       // key names a different section
+    expect((await read("select:use-gone@driver info", hint))?.current).toBe("Primary"); // they agree
+  });
+
   it("a section-only key with no label reads nothing, not the one other dropdown left in the section", async () => {
     document.body.innerHTML = `
       <mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Vehicle Details</mat-panel-title></mat-expansion-panel-header>

@@ -603,7 +603,10 @@
     /* the key's tag (select, text, ...) must agree on every fallback path */
     const sameTag = all.filter((c, i) => splitKey(keys[i]).tag === parts.tag);
     const label = hint && hint.label ? mapper.canonical(hint.label) : "";
-    const section = (hint && hint.section) || parts.section || "";
+    /* the section comes from the KEY only; a hint that names another section
+     * (or none, when the key has one) is a mismatch, not an override */
+    const section = parts.section;
+    if (hint && typeof hint.section === "string" && hint.section !== section) return null;
     const sectionOfEl = (c) => (mapper.sectionOf ? mapper.sectionOf(c).key : "");
     const labelOf = (c) => mapper.canonical(primaryLabel(c) || primaryLabel(choiceHost(c)));
     /* visibility never decides: a collapsed card 2 must not hand back card 1 */
