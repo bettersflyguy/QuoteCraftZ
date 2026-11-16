@@ -503,7 +503,7 @@
     } else if ((element.type || "").toLowerCase() === "radio") {
       const fieldset = element.closest("fieldset");
       texts = Array.from(document.querySelectorAll("input[type='radio']"))
-        .filter((r) => (element.name ? r.name === element.name : r.closest("fieldset") === fieldset))
+        .filter((r) => (element.name ? r.name === element.name && r.form === element.form : r.closest("fieldset") === fieldset))
         .map((r) => optionName(r));
     } else {
       return undefined;
@@ -681,7 +681,7 @@
       return { current: sel ? clean(sel.textContent) : "", options: choiceOptions(host) || [] };
     }
     if ((el.type || "").toLowerCase() === "radio") {
-      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => r.name === el.name);
+      const group = Array.from(document.querySelectorAll("input[type='radio']")).filter((r) => r.name === el.name && r.form === el.form);
       const on = group.find((r) => r.checked);
       return { current: on ? optionName(on) : "", options: choiceOptions(el) || [] };
     }

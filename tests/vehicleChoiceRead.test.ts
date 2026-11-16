@@ -307,4 +307,24 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
       <form><input type="radio" name="garaged" id="b1" checked><input type="radio" name="garaged" id="b2"></form>`;
     expect(await read("radio:garaged")).toBeNull();
   });
+
+  it("a radio group belongs to its own form: same-name groups with different answers are read separately", async () => {
+    document.body.innerHTML = `
+      <form id="p"><fieldset><legend>Primary Garage</legend>
+        <label><input type="radio" name="garaged" value="y">Yes</label><label><input type="radio" name="garaged" value="n">No</label></fieldset></form>
+      <form id="s"><fieldset><legend>Secondary Garage</legend>
+        <label><input type="radio" name="garaged" value="y" checked>Yes</label><label><input type="radio" name="garaged" value="n">No</label></fieldset></form>`;
+    // primary has nothing checked: it must not read the secondary form's "Yes"
+    expect((await read("pick:#p input"))?.current).toBe("");
+    expect((await read("pick:#s input"))?.current).toBe("Yes");
+  });
+
+  it("a radio group's options come from its own form only", async () => {
+    document.body.innerHTML = `
+      <form id="f1"><label><input type="radio" name="g" value="a">A</label><label><input type="radio" name="g" value="b">B</label></form>
+      <form id="f2"><label><input type="radio" name="g" value="a" checked>A</label><label><input type="radio" name="g" value="c">C</label></form>`;
+    const r = await read("pick:#f1 input");
+    expect(r?.current).toBe("");
+    expect(r?.options).toEqual(["A", "B"]);
+  });
 });
