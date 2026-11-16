@@ -265,6 +265,42 @@ describe("the boxes that count as sharing a key", () => {
   });
 });
 
+describe("picking a box in the panel", () => {
+  const one = (label: string, value: string) => `<mat-form-field class="mat-mdc-form-field"><label>${label}</label><input name="amount" id="amount" value="${value}"></mat-form-field>`;
+  const show = (...boxes: string[]) => { document.title = "Tracy Dittrich - Accidents"; document.body.innerHTML = `<main>${boxes.join("")}</main>`; };
+  const pick = (ov: unknown, el: Element) => {
+    const g2 = globalThis as unknown as { __bettersPortalPick: (t: number, o: unknown) => Promise<Row & { key: string }> };
+    const pending = g2.__bettersPortalPick(5000, ov);
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
+    return pending;
+  };
+
+  it("picking BI alone returns the key its mapping lives under, so the new mapping fills BI and never Collision", async () => {
+    show(one("BI Amount", "5000"), one("Collision Amount", "2000"));
+    const [bi] = inputs().map(i => g.__bettersControlKey(i));
+    const saved = { [bi!]: "crm:incident.biamount" };
+    await Promise.resolve();
+    show(one("BI Amount", "5000"));
+    const row = await pick(saved, inputs()[0]!);
+    expect(row.key).toBe(bi);
+    // the owner re-maps BI from that row: saved under the key BI fills from
+    const remapped = { ...saved, [row.key]: "crm:incident.biamount2" };
+    inputs()[0]!.value = "";
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.biamount2": "42" } }, true, false, remapped);
+    expect(inputs()[0]!.value).toBe("42");
+    // Collision, shown alone later, is not touched by BI's mapping
+    await Promise.resolve();
+    show(one("Collision Amount", "2000"));
+    await g.__bettersPortalFill({ normalized: {}, fields: [], values: { "crm:incident.biamount2": "42" } }, true, false, remapped);
+    expect(inputs()[0]!.value).toBe("2000");
+  }, 20000);
+
+  it("a box with no mapping yet is still keyed as before (nothing changes for a first pick)", async () => {
+    show(one("BI Amount", "5000"));
+    expect((await pick({}, inputs()[0]!)).key).toBe("text:amount");
+  });
+});
+
 describe("long labels that start alike stay separate fields", () => {
   const boxes = (labels: string[]) => {
     document.title = "Tracy Dittrich - Accidents";

@@ -187,6 +187,7 @@
   function computeControlKey(element) {
     const legacy = legacyControlKey(element);
     if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return legacy;
+    if (!mapper) return legacy;
     const group = sharedGroups().get(legacy);
     if (!group || group.els.length < 2 || group.els.indexOf(element) < 0) return legacy;
     if (!ownLabelOf(element)) return legacy;
@@ -206,6 +207,7 @@
     return k;
   }
   function computeLabelKey(element) {
+    if (!mapper) return null;
     if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return null;
     const own = ownLabelOf(element);
     if (!own) return null;
@@ -242,6 +244,12 @@
     if (map[key]) return key;
     const legacy = legacyControlKey(element);
     return legacy !== key && map[legacy] ? legacy : key;
+  }
+  /* the key a row (the scan's, the picker's) is listed and saved under: the
+   * box's own-label key when it holds a mapping, else its current key */
+  function rowKeyOf(map, element) {
+    const own = labelKeyOf(element);
+    return own && map && map[own] ? own : controlKey(element);
   }
   /* "Other Address: City" for a sub-section's field, else the label */
   function inSection(element, label) {
@@ -900,8 +908,7 @@
       /* a box whose own-label key holds a mapping is listed under it even when
        * it is alone on the page and its current key is the legacy key, so a
        * Save keeps that mapping */
-      const ownKey = labelKeyOf(element);
-      const key = ownKey && ov[ownKey] ? ownKey : controlKey(element);
+      const key = rowKeyOf(ov, element);
       if (seen.has(key)) continue;
       seen.add(key);
       const legacy = legacyControlKey(element);
@@ -1120,7 +1127,7 @@
     return null;
   }
 
-  function pickField(timeoutMs) {
+  function pickField(timeoutMs, overrides) {
     if (activePickCancel) activePickCancel();
     return new Promise(function (resolve) {
       var done = false;
@@ -1185,9 +1192,10 @@
           var name = fieldName(el) || "";
           var plain = shownLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id);
           var rep = repeatInfo(plain, el);
+          var pickedKey = rowKeyOf(overrides || {}, el);
           finish({
-            key: controlKey(el),
-            label: inSection(el, plain) || controlKey(el),
+            key: pickedKey,
+            label: inSection(el, plain) || pickedKey,
             fieldLabel: plain,
             repeats: rep.repeats,
             repeatSections: rep.repeatSections,
@@ -1521,6 +1529,6 @@
   globalThis.__bettersSavedKey = savedKeyOf;
   globalThis.__bettersIsSensitiveLabel = isSensitiveSource;
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
-  globalThis.__bettersPortalPick = (timeoutMs) => pickField(timeoutMs);
+  globalThis.__bettersPortalPick = (timeoutMs, overrides) => pickField(timeoutMs, overrides || {});
   globalThis.__bettersPortalPickCancel = () => { if (activePickCancel) activePickCancel(); };
 })();

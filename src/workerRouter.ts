@@ -1236,9 +1236,14 @@ async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types
   // the ingester supplies form-field labels, so a click inside a labelled
   // field maps it by label (robust on any site's design system)
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
+  // the site's saved mappings, so a picked box is keyed the way its mapping is
+  const origin = await tabOrigin(tabId);
+  const overrides = origin ? await fieldMapFor(origin) : {};
   const frames = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: () => (globalThis as { __bettersPortalPick?: () => unknown }).__bettersPortalPick?.() ?? null
+    func: (ov: unknown) =>
+      (globalThis as { __bettersPortalPick?: (t: undefined, ov: unknown) => unknown }).__bettersPortalPick?.(undefined, ov) ?? null,
+    args: [overrides]
   });
   const results = frames.map(f => f.result as import("@/boldpenguin/types").PortalScanRow | "timeout" | null | undefined);
   const row = results.find((r): r is import("@/boldpenguin/types").PortalScanRow => r !== null && r !== undefined && r !== "timeout");
