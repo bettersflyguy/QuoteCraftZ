@@ -24,9 +24,16 @@
     return ids.map((id) => document.getElementById(id)).filter(Boolean).map((node) => clean(node.innerText || node.textContent)).join(" ");
   }
 
+  /* A page can give several inputs ONE id (a shared amount component): every
+   * label[for] then points at that id, and the first label would name all of
+   * them. When more than one label claims the id, the label inside this
+   * control's own box names it; otherwise the first label, as before. */
+  const OWN_BOX = "mat-form-field, .mat-form-field, .mat-mdc-form-field, .k-floating-label-container, .form-group, .form-field, .field";
   function explicitLabel(element) {
     if (!element.id) return "";
-    const label = document.querySelector(`label[for="${CSS.escape(element.id)}"]`);
+    const labels = Array.from(document.querySelectorAll(`label[for="${CSS.escape(element.id)}"]`));
+    const box = labels.length > 1 ? element.closest(OWN_BOX) : null;
+    const label = (box && labels.find((l) => box.contains(l))) || labels[0];
     return clean(label && (label.innerText || label.textContent));
   }
 
@@ -91,13 +98,81 @@
     const s = mapper && mapper.sectionOf ? mapper.sectionOf(element).key : "";
     return s ? "@" + s : "";
   }
-  function controlKey(element) {
+  /* THE KEY EVERY SAVED MAPPING WAS TAKEN AGAINST. Never change what this
+   * returns for a control: saved mappings (agents hold dozens) are stored
+   * under it and must keep resolving exactly as they always have. */
+  function legacyControlKey(element) {
     if ((element.type || "").toLowerCase() === "radio") {
       return "radio:" + (clean(element.name) || mapper.canonical(primaryLabel(element)).slice(0, 60)) + sectionSuffix(element);
     }
     const tag = element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase();
     const base = clean(element.name) || clean(element.id) || mapper.canonical(primaryLabel(element) || fieldName(element)).slice(0, 60);
     return (tag + ":" + base).slice(0, 120) + sectionSuffix(element);
+  }
+
+  /* Controls that share a name or id yet carry DIFFERENT labels are different
+   * fields (the BI, Collision, MP and PD amount boxes of one accident card
+   * share one amount component), so under the legacy key they merge into one
+   * field "repeated" on every card. Such a control gets its own key: the
+   * legacy key plus "~<its label>". Controls with the same label (the same
+   * field on each card) and controls whose key came from a label keep the
+   * legacy key. The index is built once per tick, so a scan or a fill pass
+   * stays linear. */
+  let sharedIndex = null;
+  function sharedKeyIndex() {
+    if (sharedIndex) return sharedIndex;
+    const byKey = new Map();
+    Array.from(document.querySelectorAll("input, select, textarea")).forEach((el) => {
+      const type = (el.type || "").toLowerCase();
+      if (["radio", "hidden", "password", "file", "submit", "button", "reset"].indexOf(type) >= 0) return;
+      if (!clean(el.name) && !clean(el.id)) return;
+      const k = legacyControlKey(el);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(el);
+    });
+    sharedIndex = byKey;
+    Promise.resolve().then(() => { if (sharedIndex === byKey) sharedIndex = null; });
+    return byKey;
+  }
+  /* the control's own label: the box's label first (it stays right when an
+   * id is duplicated), then the label the key logic already trusts */
+  function ownLabelText(element) {
+    const box = element.closest ? element.closest(OWN_BOX) : null;
+    const viaIngest = box && typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(box) : "";
+    const lab = box ? box.querySelector("label, mat-label, .k-label") : null;
+    return clean(viaIngest || (lab ? lab.textContent : "")).replace(/^[*\s]+|[:*\s]+$/g, "");
+  }
+  function ownLabelOf(element) {
+    return mapper.canonical(ownLabelText(element) || primaryLabel(element) || "").slice(0, 40);
+  }
+  /* the label the mapping editor shows: primaryLabel, except that a control
+   * told apart from same-id twins is named by its own box, never by a label
+   * the twins share */
+  function shownLabel(element) {
+    const own = controlKey(element) !== legacyControlKey(element) ? ownLabelText(element) : "";
+    return own || primaryLabel(element);
+  }
+  function controlKey(element) {
+    const legacy = legacyControlKey(element);
+    if ((element.type || "").toLowerCase() === "radio" || (!clean(element.name) && !clean(element.id))) return legacy;
+    const group = sharedKeyIndex().get(legacy);
+    if (!group || group.length < 2 || group.indexOf(element) < 0) return legacy;
+    const own = ownLabelOf(element);
+    if (!own) return legacy;
+    const labels = new Set(group.map(ownLabelOf).filter(Boolean));
+    if (labels.size < 2) return legacy;
+    const suffix = sectionSuffix(element);
+    const head = suffix ? legacy.slice(0, legacy.length - suffix.length) : legacy;
+    return head + "~" + own + suffix;
+  }
+  /* where this control's saved mapping lives: its own key when it has a
+   * mapping there, else the legacy key (a mapping saved before the keys were
+   * told apart keeps working, exactly as it did), else its own key */
+  function savedKeyOf(map, element) {
+    const key = controlKey(element);
+    if (map && map[key]) return key;
+    const legacy = legacyControlKey(element);
+    return map && legacy !== key && map[legacy] ? legacy : key;
   }
   /* "Other Address: City" for a sub-section's field, else the label */
   function inSection(element, label) {
@@ -387,18 +462,19 @@
     for (const element of controls) {
       const name = fieldName(element);
       if (!name || PAYMENT_FIELD.test(name)) continue;
-      if (element.type !== "radio" && isSecurePath(ov[controlKey(element)])) {
-        if (overwrite || blank(element)) secure.push({ key: controlKey(element), path: ov[controlKey(element)] });
+      const savedKey = savedKeyOf(ov, element);
+      if (element.type !== "radio" && isSecurePath(ov[savedKey])) {
+        if (overwrite || blank(element)) secure.push({ key: savedKey, path: ov[savedKey] });
         continue;
       }
       /* an identifier field nobody mapped as secured is never auto-filled */
-      if (!ov[controlKey(element)] && isSensitiveSource(name)) continue;
+      if (!ov[savedKey] && isSensitiveSource(name)) continue;
       if (element.type === "radio") {
         const fieldset = element.closest("fieldset");
         const groupKey = element.name ? `name:${element.name}` : fieldset || element;
         if (handledRadioGroups.has(groupKey)) continue;
         handledRadioGroups.add(groupKey);
-        const mapKey = controlKey(element);
+        const mapKey = savedKey;
         if (ov[mapKey] === "skip") continue;
         const candidate = overrideCandidate(ov, mapKey, candidates, payload && payload.fields, values) || (ov[mapKey] ? null : mapper.matchField(name, candidates));
         if (!candidate) continue;
@@ -409,7 +485,7 @@
         results.push({ label: name, path: candidate.path, status: outcome.status });
         continue;
       }
-      const mapKey = controlKey(element);
+      const mapKey = savedKey;
       if (ov[mapKey] === "skip") continue;
       /* a timeline-note mapping is capture-only: nothing to fill */
       if (/^note(:|$)/.test(ov[mapKey] || "")) continue;
@@ -480,8 +556,7 @@
     let missing = 0;
     for (const element of pageControls(activeModal() || document)) {
       if (element.type === "radio" || element.type === "checkbox" || element.tagName === "SELECT") continue;
-      const key = controlKey(element);
-      const path = ov[key];
+      const path = ov[savedKeyOf(ov, element)];
       if (!isSecurePath(path)) continue;
       if (!overwrite && !blank(element)) continue;
       const value = typeof vals[path] === "string" ? vals[path] : "";
@@ -595,6 +670,10 @@
     const keys = all.map(controlKey);
     const at = keys.indexOf(key);
     if (at >= 0) return all[at];
+    /* a key saved before same-id controls were told apart is the legacy key:
+     * it still names the control, the first one that has it, as it always did */
+    const legacyAt = all.findIndex((c, i) => keys[i].indexOf("~") >= 0 && legacyControlKey(c) === key);
+    if (legacyAt >= 0) return all[legacyAt];
     /* Past the exact key, a control is returned only when EXACTLY ONE
      * candidate remains: reading a look-alike field (card 1 for card 2, a
      * Driver "Type" for a Vehicle "Type") would bind the wrong choices. A
@@ -740,14 +819,14 @@
       const autoPath = auto && typeof auto.path === "string" && auto.path.indexOf("fields.") !== 0 ? auto.path : null;
       rows.push({
         key,
-        label: inSection(element, primaryLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key,
-        fieldLabel: primaryLabel(element) || "",
-        ...repeatInfo(primaryLabel(element) || "", element),
+        label: inSection(element, shownLabel(element) || clean(element.getAttribute("placeholder")) || clean(element.name) || clean(element.id)) || key,
+        fieldLabel: shownLabel(element) || "",
+        ...repeatInfo(shownLabel(element) || "", element),
         section: mapper && mapper.sectionOf ? mapper.sectionOf(element).key : "",
         type: element.tagName === "SELECT" ? "select" : (element.type || "text").toLowerCase(),
         payment,
         autoPath,
-        mapped: typeof ov[key] === "string" ? ov[key] : null,
+        mapped: typeof ov[savedKeyOf(ov, element)] === "string" ? ov[savedKeyOf(ov, element)] : null,
         options: choiceOptions(element)
       });
     }
@@ -989,7 +1068,7 @@
         if (t.control) {
           var el = t.control;
           var name = fieldName(el) || "";
-          var plain = primaryLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id);
+          var plain = shownLabel(el) || clean(el.getAttribute("placeholder")) || clean(el.name) || clean(el.id);
           var rep = repeatInfo(plain, el);
           finish({
             key: controlKey(el),
@@ -1179,6 +1258,9 @@
       if (["hidden", "password", "file", "submit", "button", "reset", "image"].indexOf(type) !== -1 || !visible(el)) return;
       var k = controlKey(el);
       (byKey[k] = byKey[k] || []).push(el);
+      /* a mapping saved under the legacy key still outlines its controls */
+      var lk = legacyControlKey(el);
+      if (lk !== k) (byKey[lk] = byKey[lk] || []).push(el);
     });
     var shown = 0;
     var missing = 0;
@@ -1298,7 +1380,7 @@
     all.forEach(function (el) {
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
-      if (isControl && coveredKeys.has(controlKey(el))) return;
+      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(legacyControlKey(el)))) return;
       if (isControl && serviceLabels.length && serviceCovers(el)) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
       markPeek(el, "unmapped", "");
@@ -1319,6 +1401,7 @@
   /* shared with the ingester, so a control's saved mapping routes its value
    * on capture exactly as it does on fill */
   globalThis.__bettersControlKey = controlKey;
+  globalThis.__bettersSavedKey = savedKeyOf;
   globalThis.__bettersIsSensitiveLabel = isSensitiveSource;
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
   globalThis.__bettersPortalPick = (timeoutMs) => pickField(timeoutMs);

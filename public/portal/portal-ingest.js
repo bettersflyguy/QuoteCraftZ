@@ -82,7 +82,10 @@
     const aria = control.getAttribute("aria-label") || control.getAttribute("data-label");
     if (aria) return aria;
     if (control.id) {
-      const explicit = document.querySelector(`label[for="${CSS.escape(control.id)}"]`);
+      const claimed = Array.from(document.querySelectorAll(`label[for="${CSS.escape(control.id)}"]`));
+      /* one id shared by several inputs: the label inside this control's own box names it */
+      const box = claimed.length > 1 ? control.closest(FORM_FIELD) : null;
+      const explicit = (box && claimed.find((l) => box.contains(l))) || claimed[0];
       if (explicit) return text(explicit);
     }
     if (control.labels && control.labels.length) {
@@ -629,7 +632,12 @@
     const root = modal || document.querySelector("main") || document;
     const fields = [];
     const map = controlMap || {};
-    const keyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
+    const baseKeyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
+    /* the key the control's saved mapping lives under: its own key, or the
+     * legacy key a mapping saved before same-id controls were told apart
+     * still uses (then the controls it covers group together, as before) */
+    const keyOf = baseKeyOf && typeof globalThis.__bettersSavedKey === "function"
+      ? (control) => globalThis.__bettersSavedKey(map, control) : baseKeyOf;
     const noteControls = [];
     const personControls = [];
 
