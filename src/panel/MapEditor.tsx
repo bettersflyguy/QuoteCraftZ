@@ -11,6 +11,7 @@ import {
   familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
 } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
+import { catalogUnavailableNote, classifyCatalogError } from "@/crm/catalogNote";
 import { send } from "./api";
 import { capturedTargets } from "./capturedTargets";
 export { capturedTargets };
@@ -133,9 +134,11 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     try {
       const c = await send<FieldCatalog>({ type: "panel/crmFieldCatalog", refresh });
       setCatalog(c);
-      setCatalogNote(c.entities.length ? null : "CRM fields unavailable. Showing built-in targets.");
-    } catch {
-      setCatalogNote("CRM fields unavailable (sign in to the CRM). Showing built-in targets.");
+      setCatalogNote(c.entities.length ? null : catalogUnavailableNote(c.unavailable));
+    } catch (e) {
+      // the worker reports a CRM failure inside the catalog (see below); this
+      // is only a failed message round-trip
+      setCatalogNote(catalogUnavailableNote(classifyCatalogError(e)));
     }
   };
   useEffect(() => { void loadCatalog(false); }, []);

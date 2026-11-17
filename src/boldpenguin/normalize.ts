@@ -146,6 +146,8 @@ export const CRM_BRIDGE: Record<string, string> = {
   "crm:policy1.iacrm_effectivedate": "coverage.effectiveDate",
   "crm:policy1.iacrm_expirationdate": "coverage.expirationDate"
 };
+/** The CRM column the built-in vehicle Purchase date writes to. */
+export const VEHICLE_PURCHASE_COLUMN = "iacrm_acquireddate";
 const CONTACT_COLUMN_BRIDGE: Record<string, string> = {
   firstname: "firstName", lastname: "lastName", emailaddress1: "email",
   mobilephone: "phone", telephone1: "phone", birthdate: "dateOfBirth"
@@ -153,6 +155,9 @@ const CONTACT_COLUMN_BRIDGE: Record<string, string> = {
 
 function bridgeOf(path: string): string | null {
   if (CRM_BRIDGE[path]) return CRM_BRIDGE[path]!;
+  // the built-in vehicle Purchase date is the vehicle's Acquired date column
+  const vehicle = /^vehicle(\d+)\.purchaseDate$/.exec(path);
+  if (vehicle) return `crm:vehicle${vehicle[1]}.${VEHICLE_PURCHASE_COLUMN}`;
   const m = /^crm:contact(\d+)\.([a-z0-9_]+)$/.exec(path);
   const key = m ? CONTACT_COLUMN_BRIDGE[m[2]!] : undefined;
   return m && key ? `contact${m[1]}.${key}` : null;

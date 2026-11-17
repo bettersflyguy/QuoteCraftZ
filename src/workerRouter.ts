@@ -41,6 +41,7 @@ import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutc
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAsset, upsertChildRecord, insuredItemOf, upsertPriorCoverage, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
+import { classifyCatalogError } from "@/crm/catalogNote";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
 import { buildFillValues } from "@/portal/fillValues";
 import { dataServiceScope, getOptionMaps, setOptionMaps } from "@/portal/optionMaps";
@@ -571,8 +572,15 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       }
 
       case "panel/crmFieldCatalog": {
-        const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.getFieldCatalog(env, msg.refresh ?? false) };
+        // a CRM failure (not signed in, no security role, rejected sign-in) is
+        // returned as an empty catalog with its reason, so the panel can say
+        // why instead of one generic line
+        try {
+          const env = await deps.getActiveEnvironment();
+          return { ok: true, data: await deps.getFieldCatalog(env, msg.refresh ?? false) };
+        } catch (e) {
+          return { ok: true, data: { envId: "", fetchedAt: Date.now(), entities: [], unavailable: classifyCatalogError(e) } };
+        }
       }
 
       case "panel/getStagesForLob": {

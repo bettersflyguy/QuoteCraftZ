@@ -63,7 +63,10 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "vehicles[].year", label: "Vehicle year", group: "Vehicles (all rows, risk data)" },
   { path: "vehicles[].make", label: "Vehicle make", group: "Vehicles (all rows, risk data)" },
   { path: "vehicles[].model", label: "Vehicle model", group: "Vehicles (all rows, risk data)" },
-  { path: "vehicles[].vin", label: "Vehicle VIN", group: "Vehicles (all rows, risk data)" }
+  { path: "vehicles[].vin", label: "Vehicle VIN", group: "Vehicles (all rows, risk data)" },
+  /* the one built-in vehicle target with a CRM column: it is written to the
+   * vehicle's Acquired date (iacrm_acquireddate), see CRM_BRIDGE in normalize.ts */
+  { path: "vehicles[].purchaseDate", label: "Vehicle purchase date", group: "Vehicles (all rows, risk data)" }
 ];
 export const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
 
@@ -74,7 +77,7 @@ export const isArrayPath = (path: string): boolean => path.includes("[].");
 
 /** Concrete per-row slots an array capture fans out into ("contact2.email",
  * "vehicle5.vin"; contact1 is reserved for the primary insured). */
-const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin))$/;
+const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin|purchaseDate))$/;
 
 /** Rows a form control can address ("Driver 2" = related contact row 1). */
 export const ARRAY_ROW_MAX = 10;
