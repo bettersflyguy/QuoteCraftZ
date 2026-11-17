@@ -31,7 +31,7 @@ There is no local publish script. A release goes through a reviewed process:
 
 1. **Reviewed version bump.** Every pull request that changes shipped code raises `version` in `package.json` and `package-lock.json` (patch by default) in that same pull request. Reviewers check the bump with the rest of the diff. Nothing is pushed directly to `main`; a pull request is required.
 2. **Release desk build.** After the merge, the Release desk builds the zip from the merge commit on `main` (`npm ci`, `npm test`, `npm run build`) and records its sha256.
-3. **Decision desk delivery.** The Decision desk sends Nathan the zip with a release note naming the version and the sha256. Nathan checks the hash with `Get-FileHash`, unzips into his one stable folder, loads it unpacked the first time or reloads it for updates, and confirms the version in `chrome://extensions` matches the release note. The install steps are in the README.
+3. **Decision desk delivery.** The Decision desk sends Nathan the zip with a release note naming the version and the sha256. Nathan checks the hash with `Get-FileHash`, unzips into his one stable folder, loads it unpacked the first time or reloads it for updates, and confirms the version in `chrome://extensions` matches the release note. The install steps are in the README. The first delivery after this change must also carry the README warning about the first move from the old OneDrive folder: it may leave two cards or empty settings, so he exports his settings first and does not Remove the old card until the export is saved.
 
 Do not build or hand over a zip from a coding session. In the cloud: commit and push source changes on a branch and open a pull request.
 

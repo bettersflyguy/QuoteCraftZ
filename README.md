@@ -37,7 +37,7 @@ Releases are built by the Release desk and delivered through the Decision desk. 
 1. Get the release zip from the Decision desk. It comes with a release note that names the version and the sha256 of the zip.
 2. Check the zip is the one that was built. In PowerShell:
    ```powershell
-   Get-FileHash .\QuoteCraftZ.zip -Algorithm SHA256
+   Get-FileHash <path to the zip named in the release note> -Algorithm SHA256
    ```
    The hash must match the release note exactly. If it does not, do not install it; tell the Decision desk.
 3. Unzip it into one stable folder that you keep using for every release (for example `C:\Tools\QuoteCraftZ`). Chrome reads the extension from this folder, so do not move or delete it afterwards.
@@ -48,9 +48,17 @@ Releases are built by the Release desk and delivered through the Decision desk. 
 7. First CRM action prompts a Microsoft sign-in - an account picker appears;
    choose your `@bettersagency.com` account. This happens once per environment.
 
-The extension ID stays the same on every release because the manifest carries the public key. Reloading the same folder keeps your settings.
+The extension ID stays the same on every release because the manifest carries the public key. Once QuoteCraftZ is loaded from the stable folder, later updates are a Reload of that same folder and keep your settings. The first move from an older install is different, see below.
 
-Your settings (CRM environments, field maps, choice maps, carrier matches) can be saved and restored from the Options page with the export and import icons. Before you switch from an older install to the stable folder for the first time, export your settings from Options, and import the file after loading the new build. Do not click **Remove** on the old QuoteCraftZ card until the export file is saved: removing an unpacked extension clears its stored settings. The file never contains sign-in tokens, so you sign in again once per environment.
+Your settings (CRM environments, field maps, choice maps, carrier matches) can be saved and restored from the Options page with the export and import icons.
+
+**The first move from an older install is not guaranteed to be safe.** Loading the stable folder for the first time may leave two QuoteCraftZ cards in `chrome://extensions`, or may come up with empty settings. Do it in this order:
+1. Export your settings from Options on the old install and save the file.
+2. Do not click **Remove** on the old QuoteCraftZ card until the export file is saved: removing an unpacked extension clears its stored settings.
+3. Load the new folder, then import the file in Options.
+4. If two QuoteCraftZ cards remain, remove the old one.
+
+The export file never contains sign-in tokens or your default servicing agent. After the move you sign in again once per environment and pick your default servicing agent again.
 
 Building from source (`npm ci && npm run build`, output in `dist/`) is for development only. See "Development" below.
 
