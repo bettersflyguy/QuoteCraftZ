@@ -9,6 +9,7 @@ import { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, isSensitiveLabel }
 import { autoMatchOption } from "@/portal/optionMaps";
 import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
 import type { CrmEnvironment } from "./environments";
+import { classifyCatalogError, type CatalogUnavailable } from "./catalogNote";
 
 export interface CatalogColumn {
   name: string;
@@ -35,7 +36,11 @@ export interface CatalogEntity {
 /** Entities whose identifier columns are offered as secured targets. */
 export const SECURE_ENTITY_KEYS = new Set(["account", "primarycontact", "contacts"]);
 
-export interface FieldCatalog { envId: string; fetchedAt: number; entities: CatalogEntity[] }
+export interface FieldCatalog {
+  envId: string; fetchedAt: number; entities: CatalogEntity[];
+  /** Set only when no table could be read: why (never cached). */
+  unavailable?: CatalogUnavailable;
+}
 
 /** Hierarchy order: the account first, its one-to-one primary contact, then
  * the arrays and per-load records. */
@@ -253,12 +258,21 @@ async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogAp
 export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): Promise<FieldCatalog> {
   const byLogical = new Map<string, Promise<{ columns: CatalogColumn[]; secured: CatalogColumn[] }>>();
   const entities: CatalogEntity[] = [];
+  // one table failing leaves just that table out; the first failure is kept
+  // so a catalog where EVERY table failed can say why
+  let firstFailure: unknown;
+  let failed = false;
   for (const e of CATALOG_ENTITIES) {
-    if (!byLogical.has(e.logical)) byLogical.set(e.logical, fetchColumns(env, e.logical, api).catch(() => ({ columns: [], secured: [] })));
+    if (!byLogical.has(e.logical)) {
+      byLogical.set(e.logical, fetchColumns(env, e.logical, api).catch(err => {
+        if (!failed) { failed = true; firstFailure = err; }
+        return { columns: [], secured: [] };
+      }));
+    }
     const { columns, secured } = await byLogical.get(e.logical)!;
     if (columns.length) entities.push({ ...e, columns, ...(SECURE_ENTITY_KEYS.has(e.key) && secured.length ? { secured } : {}) });
   }
-  return { envId: env.id, fetchedAt: Date.now(), entities };
+  return { envId: env.id, fetchedAt: Date.now(), entities, ...(!entities.length && failed ? { unavailable: classifyCatalogError(firstFailure) } : {}) };
 }
 
 // v2: entities carry their secured (pass-through) columns; v3: addresses;

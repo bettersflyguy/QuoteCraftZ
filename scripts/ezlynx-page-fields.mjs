@@ -17,7 +17,7 @@ const PAGES = {
     "Daytime Running Lights", "Cost New Value", "Anti-Theft", "Vehicle Use", "Miles One Way", "# Days/Week",
     "# Weeks/Month", "Annual Miles", "Current Odometer", "Performance", "Modifications Value", "Was the car new?",
     "Ownership Type", "Car Pool", "Telematics", "Transportation Network Company"
-  ].map(l => [l, "note"]),
+  ].map(l => [l, l === "Purchase Date" ? "vehicles[].purchaseDate" : "note"]),
   // driver rating details (names identify each row; identity, license
   // state/status, relationship and occupation come from the data service;
   // SSN and DL# are secured and never shared)

@@ -53,7 +53,7 @@ The manifest `key` pins the extension ID; the private key in `keys/` is local on
 
 Build and publish:
 - `npm run build` (tsc + vite) writes `dist/`.
-- Releases are reviewed. Every pull request that changes shipped code raises `version` in `package.json` and `package-lock.json`; nothing is pushed directly to `main`. After the merge the Release desk builds the zip from the merge commit, and the Decision desk delivers it to Nathan, who checks its sha256, unzips it into one stable folder and loads or reloads it unpacked. A cloud build keeps the same extension ID because the manifest embeds the public key.
+- Releases are reviewed. Every pull request that changes shipped code raises `version` in `package.json` and `package-lock.json`; nothing is pushed directly to `main`. After the merge the Release desk builds the zip from the merge commit, and the Decision desk delivers it to Nathan, who checks its sha256 against the release note and the Release desk's record on the work item, unzips it into one install folder and loads or reloads it unpacked. A cloud build keeps the same extension ID because the manifest embeds the public key.
 
 ---
 

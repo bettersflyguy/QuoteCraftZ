@@ -9,7 +9,7 @@
       "field:vehicles|make": "note",
       "field:vehicles|model": "note",
       "field:vehicles|sub model": "note",
-      "field:vehicles|purchase date": "note",
+      "field:vehicles|purchase date": "vehicles[].purchaseDate",
       "field:vehicles|passive restraints": "note",
       "field:vehicles|anti lock brakes": "note",
       "field:vehicles|daytime running lights": "note",
