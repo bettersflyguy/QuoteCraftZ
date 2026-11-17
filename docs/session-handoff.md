@@ -25,21 +25,17 @@ npx tsc --noEmit -p .  # must be clean
 npm run build          # tsc + vite build into dist/
 ```
 
-## Publishing (local machine only)
+## Publishing (reviewed release)
 
-`scripts/publish-local.ps1` does the following:
-1. bumps the patch version;
-2. builds;
-3. commits `package.json` as `release: vX.Y.Z` and pushes;
-4. mirrors `dist/` into Nathan's OneDrive folder, which Chrome loads unpacked.
+There is no local publish script. A release goes through a reviewed process:
 
-That last step only works on Nathan's machine. **In the cloud:** commit and push source changes, then tell Nathan to run the publish script locally:
+1. **Reviewed version bump.** Every pull request that changes shipped code raises `version` in `package.json` and `package-lock.json` (patch by default) in that same pull request. Reviewers check the bump with the rest of the diff. Nothing is pushed directly to `main`; a pull request is required.
+2. **Release desk build.** After the merge, the Release desk builds the zip from the merge commit on `main` (`npm ci`, `npm test`, `npm run build`) and records its sha256.
+3. **Decision desk delivery.** The Decision desk sends Nathan the zip with a release note naming the version and the sha256. Nathan checks the hash with `Get-FileHash`, unzips into his one stable folder, loads it unpacked the first time or reloads it for updates, and confirms the version in `chrome://extensions` matches the release note. The install steps are in the README.
 
-```bash
-powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
-```
+Do not build or hand over a zip from a coding session. In the cloud: commit and push source changes on a branch and open a pull request.
 
-`keys/` (the manifest signing key that keeps the extension ID stable) is gitignored and only exists locally. A cloud build gets a different extension ID; that's fine for tests but not for publishing.
+A cloud build keeps the same extension ID. `manifest.config.ts` embeds the public key in the manifest `key` field, and that key hashes to the pinned ID in `spike/README.md`. `keys/` (the private key, gitignored, local only) is needed only to pack a .crx by hand.
 
 ## Standing rules (from Nathan, non-negotiable)
 
@@ -50,7 +46,7 @@ powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
 **Commits**
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - PR descriptions end with the Claude Code attribution line.
-- Commit and push source first; the release commit is the publish script's.
+- Commit and push source to a branch and open a pull request. Nothing is pushed directly to `main`. Any pull request that changes shipped code raises `version` in `package.json` and `package-lock.json`.
 
 **Security and privacy**
 - SSN is never stored in the capture, export, notes or panel; it is shown masked only.
@@ -145,7 +141,6 @@ powershell -ExecutionPolicy Bypass -File scripts/publish-local.ps1
   2. `npx vitest run`
   3. the dash check
   4. commit
-  5. push
-  6. publish (locally)
+  5. push the branch and open a pull request (with the version bump if shipped code changed)
 - The reply states the version, what changed, how to verify it, and what wasn't verified.
 - Shell gotcha seen locally: `\\` in Bash heredocs got collapsed. Prefer the Edit tool for regex-bearing code, or `chr(92)` in Python scripts.
