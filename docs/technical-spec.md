@@ -53,7 +53,7 @@ The manifest `key` pins the extension ID; the private key in `keys/` is local on
 
 Build and publish:
 - `npm run build` (tsc + vite) writes `dist/`.
-- `scripts/publish-local.ps1` bumps the patch version, builds, commits `release: vX`, pushes, and mirrors `dist/` to the OneDrive folder Chrome loads unpacked. This runs on Nathan's machine only.
+- Releases are reviewed. Every pull request that changes shipped code raises `version` in `package.json` and `package-lock.json`; nothing is pushed directly to `main`. After the merge the Release desk builds the zip from the merge commit, and the Decision desk delivers it to Nathan, who checks its sha256, unzips it into one stable folder and loads or reloads it unpacked. A cloud build keeps the same extension ID because the manifest embeds the public key.
 
 ---
 
@@ -508,7 +508,7 @@ OAuth 2.0 auth-code + PKCE against Entra ID (`src/crm/auth.ts`, `APP_CONFIG`) wi
   - `tests/*.test.ts` (Vitest), 313 tests at v0.1.66;
   - page-script tests use `// @vitest-environment jsdom` and load the IIFEs (see `tests/sections.test.ts`);
   - worker routes are tested with stubbed `chrome` (`tests/helpers/chromeStub.ts`) and fetch.
-- Each change runs `npx tsc --noEmit -p .`, `npx vitest run` and the dash check, then commit, push and publish (locally).
+- Each change runs `npx tsc --noEmit -p .`, `npx vitest run` and the dash check, then commit, push the branch and open a pull request.
 - Comments explain intent in plain sentences.
 - No em or en dashes anywhere.
 - Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
