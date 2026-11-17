@@ -40,8 +40,9 @@ Releases are built by the Release desk and delivered through the Decision desk. 
    Get-FileHash <path to the zip named in the release note> -Algorithm SHA256
    ```
    The hash must match the release note exactly. If it does not, do not install it; tell the Decision desk.
-3. Unzip it into one stable folder that you keep using for every release (for example `C:\Tools\QuoteCraftZ`). Chrome reads the extension from this folder, so do not move or delete it afterwards.
-4. First time only: Chrome `chrome://extensions` → Developer mode ON → **Load unpacked** → select that folder. Edge: `edge://extensions`, same steps.
+3. Unzip it into one stable folder that you keep using for every release (for example `C:\Tools\QuoteCraftZ`). Use a new, empty folder that holds only QuoteCraftZ. Chrome reads the extension from this folder, so do not move or delete it afterwards.
+4. Moving from an older install (for example the OneDrive folder)? Do the steps in "The first move from an older install" below before you load the new folder.
+   First time only: Chrome `chrome://extensions` → Developer mode ON → **Load unpacked** → select that folder. Edge: `edge://extensions`, same steps.
    Updates: delete everything inside that folder, unzip the new release into it (so no files from an older build stay loaded), then click **Reload** on the QuoteCraftZ card in `chrome://extensions`.
 5. Confirm the version shown on the QuoteCraftZ card in `chrome://extensions` matches the version in the release note.
 6. Pin "QuoteCraftZ" from the extensions menu (🧩).
