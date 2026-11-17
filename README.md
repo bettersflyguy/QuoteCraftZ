@@ -41,12 +41,12 @@ Releases are built by the Release desk and delivered through the Decision desk. 
    ```
    The hash must match the release note exactly. If it does not, do not install it; tell the Decision desk.
 3. Unzip it into one stable folder that you keep using for every release (for example `C:\Tools\QuoteCraftZ`). Use a new, empty folder that holds only QuoteCraftZ. Chrome reads the extension from this folder, so do not move or delete it afterwards.
-4. Moving from an older install (for example the OneDrive folder)? Do the steps in "The first move from an older install" below before you load the new folder.
-   First time only: Chrome `chrome://extensions` → Developer mode ON → **Load unpacked** → select that folder. Edge: `edge://extensions`, same steps.
-   Updates: delete everything inside that folder, unzip the new release into it (so no files from an older build stay loaded), then click **Reload** on the QuoteCraftZ card in `chrome://extensions`.
-5. Confirm the version shown on the QuoteCraftZ card in `chrome://extensions` matches the version in the release note.
-6. Pin "QuoteCraftZ" from the extensions menu (🧩).
-7. First CRM action prompts a Microsoft sign-in - an account picker appears;
+4. Moving from an older install (for example the OneDrive folder)? Do the steps in "The first move from an older install" below before you load the new folder. Otherwise go to step 5.
+5. First time only: Chrome `chrome://extensions` → Developer mode ON → **Load unpacked** → select the stable folder from step 3. Edge: `edge://extensions`, same steps.
+   Updates: the update deletes everything inside the stable folder from step 3, so keep nothing there, including your settings export file. Delete everything inside it, unzip the new release into it (so no files from an older build stay loaded), then click **Reload** on the QuoteCraftZ card in `chrome://extensions`.
+6. Confirm the version shown on the QuoteCraftZ card in `chrome://extensions` matches the version in the release note.
+7. Pin "QuoteCraftZ" from the extensions menu (🧩).
+8. First CRM action prompts a Microsoft sign-in - an account picker appears;
    choose your `@bettersagency.com` account. This happens once per environment.
 
 The extension ID stays the same on every release because the manifest carries the public key. Once QuoteCraftZ is loaded from the stable folder, later updates are a Reload of that same folder and keep your settings. The first move from an older install is different, see below.
@@ -54,7 +54,7 @@ The extension ID stays the same on every release because the manifest carries th
 Your settings (CRM environments, field maps, choice maps, carrier matches) can be saved and restored from the Options page with the export and import icons.
 
 **The first move from an older install is not guaranteed to be safe.** Loading the stable folder for the first time may leave two QuoteCraftZ cards in `chrome://extensions`, or may come up with empty settings. Do it in this order:
-1. Export your settings from Options on the old install and save the file.
+1. Export your settings from Options on the old install and save the file outside the install folder (for example in Downloads), because updates delete everything in the install folder.
 2. Do not click **Remove** on the old QuoteCraftZ card until the export file is saved: removing an unpacked extension clears its stored settings.
 3. Load the new folder, then import the file in Options.
 4. If two QuoteCraftZ cards remain, remove the old one.
