@@ -83,7 +83,7 @@ export const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
 /** Array relationship ("contacts[].email"): teaching ONE row's cell makes the
  * capture pull that cell from EVERY row of the repeated structure. A form
  * control (one input) maps to ONE row instead: see toRowTarget. */
-export const isArrayPath = (path: string): boolean => path.includes("[].");
+export const isArrayPath = (path: string): boolean => /\[\](?:\.|$)/.test(path);
 
 /** Concrete per-row slots an array capture fans out into ("contact2.email",
  * "vehicle5.vin"; contact1 is reserved for the primary insured). */
@@ -196,13 +196,14 @@ export const NOTE_TARGET = "note";
 
 /** Which record's timeline a note teaching lands on ("note" = the insured
  * account, kept for mappings saved before the record choice existed). */
-export type NoteRecord = "account" | "contact" | "relatedcontact" | "opportunity" | "quote" | "policy";
+export type NoteRecord = "account" | "contact" | "relatedcontact" | "property" | "opportunity" | "quote" | "policy";
 export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[] = [
   { value: "note", record: "account", label: "Notes: Insured (account)" },
   { value: "note:contact", record: "contact", label: "Notes: Primary contact" },
   // each person's values on THEIR own timeline (resolved per row: the
   // primary insured to note:contact, others to note:contact2, note:contact3 ...)
   { value: "note:contacts[]", record: "relatedcontact", label: "Notes: Each contact's own timeline" },
+  { value: "note:properties[]", record: "property", label: "Notes: Properties (all rows)" },
   { value: "note:opportunity", record: "opportunity", label: "Notes: Opportunity" },
   { value: "note:quote", record: "quote", label: "Notes: Quote" },
   { value: "note:policy", record: "policy", label: "Notes: Policy" }
@@ -216,10 +217,15 @@ export const isPrimaryTarget = (path: string | undefined): boolean =>
 /** One related contact's note, resolved from a row ("note:contact3" = the
  * second related contact; contact1 is the primary insured). */
 const RELATED_NOTE = /^note:contact([2-9]|[1-3]\d)$/;
+const PROPERTY_NOTE = /^note:property([1-9]|[1-3]\d)$/;
 export const isNoteTarget = (path: string | undefined): boolean =>
-  NOTE_TARGETS.some(t => t.value === path) || RELATED_NOTE.test(path ?? "");
+  NOTE_TARGETS.some(t => t.value === path) || RELATED_NOTE.test(path ?? "") || PROPERTY_NOTE.test(path ?? "");
 export const noteRecordOf = (path: string | undefined): NoteRecord | null =>
-  RELATED_NOTE.test(path ?? "") ? "relatedcontact" : NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
+  PROPERTY_NOTE.test(path ?? "") ? "property" : RELATED_NOTE.test(path ?? "") ? "relatedcontact" : NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
+export const propertyNoteSlotOf = (path: string | undefined): number | null => {
+  const m = PROPERTY_NOTE.exec(path ?? "");
+  return m ? Number(m[1]) : null;
+};
 /** The related-contact slot a resolved note names (note:contact3 -> 3). */
 export const noteSlotOf = (path: string | undefined): number | null => {
   const m = RELATED_NOTE.exec(path ?? "");
@@ -227,6 +233,8 @@ export const noteSlotOf = (path: string | undefined): number | null => {
 };
 /** Display label for any note target, resolved rows included. */
 export const noteLabelOf = (path: string | undefined): string => {
+  const property = propertyNoteSlotOf(path);
+  if (property) return `Notes: Property ${property}`;
   const slot = noteSlotOf(path);
   if (slot) return `Notes: Related contact ${slot - 1}`;
   return NOTE_TARGETS.find(t => t.value === path)?.label ?? "Notes";

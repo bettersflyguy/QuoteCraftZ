@@ -1182,7 +1182,7 @@
       const m = FIELD_KEY_RE.exec(key);
       if (!m) continue;
       /* a section field on a list target reads every section of its kind */
-      const family = m[2].indexOf(">") > 0 && /\[\]\./.test(String(ov[key] || ""));
+      const family = m[2].indexOf(">") > 0 && /\[\](?:\.|$)/.test(String(ov[key] || ""));
       const els = typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2], family) : [];
       const name = els.length && typeof globalThis.__bettersFieldLabelText === "function" ? globalThis.__bettersFieldLabelText(els[0]) : "";
       const kind = m[2].slice(0, m[2].indexOf(">")).split(" ").pop();

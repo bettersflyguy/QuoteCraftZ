@@ -152,7 +152,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlig
   // contact); account-level fields can still pick the primary contact's
   const specialsFor = (section: string) => [
     { value: "", label: "Not mapped (kept in the capture)" },
-    ...NOTE_TARGETS.filter(t => (section === "Contacts" ? t.record !== "contact" : t.record !== "relatedcontact"))
+    ...NOTE_TARGETS.filter(t => t.record !== "property" && (section === "Contacts" ? t.record !== "contact" : t.record !== "relatedcontact"))
       .map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> }))
   ];
   const labelsOf = (f: DataServiceField) => [f.label, ...(f.pageLabels ?? [])];

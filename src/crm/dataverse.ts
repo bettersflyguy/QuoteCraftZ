@@ -500,6 +500,7 @@ export async function getInsuredSourceRecords(
 export const NOTE_RECORDS = {
   account: { logical: "account", set: "accounts" },
   contact: { logical: "contact", set: "contacts" },
+  property: { logical: "iacrm_property", set: "iacrm_properties" },
   opportunity: { logical: "opportunity", set: "opportunities" },
   quote: { logical: "iacrm_quote", set: "iacrm_quotes" },
   policy: { logical: "iacrm_policy", set: "iacrm_policies" }

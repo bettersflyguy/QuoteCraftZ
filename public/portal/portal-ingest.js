@@ -961,8 +961,11 @@
    * the primary insured, so related contacts start at 2). */
   /* timeline-note targets; "note:contacts[]" = each row's related contact
    * (row 1 -> note:contact2, like the related-contact slots) */
-  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]))?$/;
-  function noteRow(path, i) { return path === "note:contacts[]" ? "note:contact" + (i + 2) : path; }
+  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]|properties\[\]|property[1-9]\d?))?$/;
+  function noteRow(path, i) {
+    return path === "note:contacts[]" ? "note:contact" + (i + 2)
+      : path === "note:properties[]" ? "note:property" + (i + 1) : path;
+  }
   /* a person's mapped path (1 = the primary insured, N = related contact
    * N-1); same grammar as src/boldpenguin/people.ts slotOf / withSlot */
   var PERSON_PATH = /^(?:(contact|crm:primarycontact)|(contact|crm:contact)(\d+))\.([a-zA-Z][a-zA-Z0-9_]{0,99})$/;
@@ -1033,7 +1036,7 @@
     const path = typeof t.path === "string" ? t.path : "";
     if (!path || isSecurePath(path)) return;
     if (t.page && labelKey(pageTitle()) !== t.page) return;
-    const els = fieldsByLabel(t.byLabel, /\[\]\./.test(path));
+    const els = fieldsByLabel(t.byLabel, /\[\](?:\.|$)/.test(path));
     if (!els.length) return;
     const label = clean(t.label) || fieldLabelText(els[0]) || t.byLabel;
     if (PAYMENT_FIELD.test(label) || sensitiveLabel(label)) return;
