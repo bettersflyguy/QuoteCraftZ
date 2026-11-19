@@ -8,22 +8,61 @@ The inventory reconciles **all 136 page-note rules and all 22 Data Service note 
 
 ## Verified disposition: create or reuse
 
-**Live schema audit:** AgentCRMDev (`https://agentcrmdev.crm.dynamics.com`), 2026-11-19 (initial snapshot at 20:20 UTC, with same-day follow-up queries). Read-only Dataverse v9.2 metadata requests checked entity definitions, all attributes on the relevant tables, choice options, lookup relationships and customization capabilities. The entity inventory contained 2,182 definitions. This audit read metadata only; it changed no CRM customizations or client records.
+**Cross-environment schema audit:** 2026-11-19. Read-only Dataverse v9.2 requests retrieved every table definition and its complete attribute collection in both AgentCRMDev and production. The comparison searched logical/schema names, display labels, descriptions and field structures across all publisher prefixes; candidate equivalents also had their lookup targets, choice options and table capabilities inspected. Role-configuration reads checked whether Co-applicant already exists. No CRM customizations or client records were changed.
+
+| Environment | Full snapshot UTC | Tables | Attributes | Result |
+|---|---|---|---|---|
+| AgentCRMDev — `https://agentcrmdev.crm.dynamics.com` | 2026-11-19 20:40:04 | 2,182 | 92,258 | Complete response; no continuation link. |
+| Production — `https://bettersinsurance.crm.dynamics.com` | 2026-11-19 20:40:29 | 2,146 | 90,217 | Complete response; no continuation link. |
+
+An additional unfiltered relationship read covered **32,899 many-to-one relationships in dev and 30,880 in production**. It identified every table with an actual Contact lookup target (116 dev / 110 production), independent of what that lookup was named. Those tables' value/type/context fields were checked for a contact-method alternative; the review did not rely solely on searching for the words Contact Point.
+
+The earlier dev-only audit was insufficient to justify every new-table proposal. This wider audit removes the proposed Quote Participant table: existing **Connection** provides that representation once Quote connections are enabled and the missing role is configured. Contact Point remains the only proposed new table after checking both names and structural alternatives.
 
 The Required work column now uses these explicit instructions:
 
 | Instruction | What to do |
 |---|---|
-| **REUSE** | The named field/table/relationship already exists in dev. Do not create a duplicate. Implement or correct its extension mapping. |
+| **REUSE** | The named field/table/relationship exists in both environments, except where explicitly marked REUSE + DEPLOY. Do not create a duplicate. Implement or correct its extension mapping. |
 | **CREATE** | The required representation has no equivalent on the audited target entity. Create the named proposed column, then map it. |
-| **EXTEND** | The table and listed REUSE columns exist, but specified columns or choice options are missing. Create/add only those named additions, then implement the mapping. |
-| **CREATE TABLE** | No equivalent model supporting this repeating/contextual data exists in dev. Create the proposed table and its explicitly listed columns. |
+| **EXTEND** | Reuse the existing model and add only the named missing columns, choice options, capability or role configuration. Then implement the mapping. |
+| **CREATE TABLE** | No same-purpose repeating model was found in either environment after the alias/structure check. Create the one proposed Contact Point table and its listed columns. |
+| **REUSE + DEPLOY** | The definition exists in dev but is absent in production. Deploy that existing definition; do not create another field. |
 
-New names marked **proposed** are implementation names to author in the canonical solution; they do not exist yet. Existing logical names below were checked against live dev. A missing extension mapping alone was not treated as evidence that a CRM column is missing.
+New names marked **proposed** are implementation names to author in the canonical solution; they do not exist yet. Existing logical names below were checked against both environments, with dev-only exceptions explicitly marked REUSE + DEPLOY. A missing extension mapping alone was not treated as evidence that a CRM column is missing.
 
 Examples: **occupant count reuses `iacrm_property.iacrm_householdresidents`**; **Retirees Credit needs new `iacrm_property.iacrm_retireecredit`**; **Preferred Language reuses `contact.iacrm_preferredlanguage`**; and the complete driver/vehicle matrix reuses **`iacrm_vehicleassignment`**, including `iacrm_percentuse`.
 
-**Environment limit:** the configured principal's metadata GET to `https://bettersinsurance.crm.dynamics.com` returned HTTP 401. These dispositions are verified against dev, not production. Before a release, compare the selected managed production baseline through the authorized pipeline. Do not recreate a dev field simply because it is not yet deployed to production. Existing managed dependencies still need their normal pipeline checks.
+**Production access corrected:** the earlier HTTP 401 came from using the dev principal against production. The documented production principal was used for the successful full read above. Missing in production does not automatically mean create: Contact Preferred Language and Maiden Name already exist in dev and need deployment of those existing definitions, rather than duplicate columns.
+
+### Same-purpose tables and alternative names reviewed
+
+| Candidate / aliases | Dev / production | Decision and evidence |
+|---|---|---|
+| `connection`, `connectionrole` — Connection / Connection Role | Present / present | **EXTEND and REUSE for Co-applicant.** Existing `record1id`, `record2id`, `record1roleid`, `record2roleid` represent two parties and their contextual roles. Contact connections are enabled; Quote and Application connections are disabled, with change permitted. Each environment has 35 configured Connection Roles and none named Co-applicant or equivalent applicant/insured/borrower role. Enable Quote connections and add a solution-owned Co-applicant role. Do not create `iacrm_quoteparticipant`. |
+| `customeropportunityrole`, `relationshiprole` — Opportunity Relationship / Relationship Role | Present / present | Existing `customerid` can target Contact; `opportunityid` identifies an Opportunity; `opportunityroleid` supplies a role. No Relationship Role definitions exist in either environment. This is a genuine alternate relationship model, but it has Opportunity context rather than the required per-Quote context. Use Connection for this handoff; do not silently widen a quote-specific answer to every quote on an Opportunity. |
+| `customerrelationship` — Customer Relationship | Present / present | Links customer/partner Accounts or Contacts and their roles; no Quote context. It is not the selected Co-applicant representation. |
+| `iacrm_servicingteammember` — Servicing Team Member | Present / present | Reuse for Producer and CSR: Account parent and both role values exist in both. Its purpose is staffing/AMS servicing, so do not add Co-applicant as a staffing role. |
+| `iacrm_policydriver`, `iacrm_vehicleassignment`, `iacrm_drivingincident` | Present / present | Reuse the existing driver, matrix-assignment and incident models. Their required existing columns and relevant choices agree across both environments. Do not create renamed equivalents. Only the specific missing incident columns in this document are additions. |
+| `iacrm_propertyrenovation`, `iacrm_quoteitem`, `iacrm_quotecoverage`, `iacrm_riskanswer`, `iacrm_carrierquestion` | Present / present | Reuse these existing models and the specifically listed attributes. Existing renovation choices agree across both; only Not Updated and Cooling need adding. Quote Item already links Quote and Insured Item. |
+| `msdynmkt_contactpointconsent`, `...consent2`, `...consent3`, `...consent4`, `msdynmkt_contactpointsettings` | Present / present | These similarly named tables describe marketing consent/settings. The current consent table links purpose/topic/message, without a Contact-owner lookup, typed phone/email usage, extension and sequence model. They do not replace a Contact Point child row. |
+| `msdyn_channelinstance`, channel-instance provider tables, `msdynmkt_preferencecenterlink`, `msdynmkt_trackingcontext` | Present / present | Contact-point strings here belong to channel/provider configuration, preference links or marketing tracking. Channel Instance relates to channel definition/account/provider configuration, not an owning Contact. Do not repurpose them. |
+| `socialprofile`, `msdyn_ocphonenumber`, `msdyn_ocvoicemail`, `phonecall`, `email`, `activityparty` | Present / present | Social identity, organization phone, voicemail/activity and activity-participant records have different ownership/context contracts. Social Profile can link a customer and a messaging phone, but it is not a general typed phone/email/extension collection. Activities are communications, not reusable contact methods. |
+| `msdyn_contactprofilerdetail`, `msdyn_contactkpiitem`, `iacrm_propertyresident` | Present / present | Profiler Detail has Contact, phone/email, profiler-result, citation, rank and reasoning fields; it has no usage-type/extension method contract. KPI Item stores communication metrics. Property Resident is a research-provider person at a Property. These are not general contact-method collections, despite containing phone/email-related fields. |
+| `contact`, `customeraddress` | Present / present | Contact's fixed phone/email slots and Address's phone slots cannot preserve arbitrary typed phone/email rows with extension and order. Reuse Address for actual addresses; do not fabricate addresses to store contact methods. |
+| Proposed `iacrm_contactpoint` — Contact Point | Absent / absent | **CREATE one new table** for arbitrary Contact-owned method rows, using the eight authored columns below. No same-purpose table was found after the name/description/field-structure and relationship checks above. |
+
+### Existing dev definitions awaiting production deployment
+
+| Source / definition | Dev | Production | Required action |
+|---|---|---|---|
+| F099 Preferred Language — `contact.iacrm_preferredlanguage` | Picklist exists; communication-language description | Absent | **REUSE dev and DEPLOY its existing definition.** Do not create a second language field. `mspp_userpreferredlcid` is portal UI language and is not equivalent. |
+| F145 Maiden name — `contact.iacrm_maidenname` | String exists; description Last name before marriage | Absent | **REUSE dev and DEPLOY its existing definition.** Do not create a renamed equivalent. |
+| Custom Contact Prefix/Suffix and Account/Contact SMS-consent definitions | Present in dev | Absent | Existing dev drift outside this gap implementation scope. Preserve and reconcile through the normal release baseline; do not recreate or remove these fields as part of this handoff. |
+
+The 53 proposed additions on existing tables are absent on their named target entity in **both** full schema snapshots. This is distinct from the two fields above, which already exist in dev. The current instructions are tied to the target representation; metadata cannot establish that an unrelated business label means the same thing without comparing its context. Refresh the audit before implementation if either environment changes.
+
+**Snapshot evidence:** complete responses were retained locally, without tokens or client values. SHA-256: dev `51865c1850294c7617b9794a323250d8d5356fa9a4ab46345f3a9fe7a3cfb614`; production `64afc6c373cd83bfec3fd8d43df2ade279b16ce7b7fc46c8dc0820a88e892d8a`. The read shape was `EntityDefinitions` with all table names/labels/descriptions and expanded `Attributes` names/types/labels/descriptions; there was no table-name filter. Additional GETs inspected candidate relationships, choices, capabilities and role definitions. Managed dependencies and actual capture/load/read-back still require the normal pipeline and acceptance checks.
 
 ## Exact current fallback destinations
 
@@ -39,9 +78,9 @@ Fallback notes preserve original labels and answers. Keep blank/unknown, zero, N
 
 **Configuration evidence:** saved 2026-11-19 page preset and a fresh Settings Data Service export at 18:25 UTC on 2026-11-19. These are configuration exports, without client values. Secured mappings are deliberately excluded from share exports.
 
-**Schema work proposed:** 53 new columns across 10 existing tables; two new child tables (Contact Point and Quote Participant, with 13 authored columns between them); and two added choice options (Not Updated and Cooling). The 53 proposed names were checked as absent on their respective dev tables. Existing fields and relationships identified as REUSE must not be recreated. Platform-generated table/ID/system columns are additional to the 13 authored child-table columns.
+**Schema work proposed:** 53 new columns across 10 existing tables; **one** new child table (Contact Point, with eight authored columns); two added choice options (Not Updated and Cooling); and configuration of existing Connections for Quote plus a new Co-applicant Connection Role. Deploy the existing dev Preferred Language and Maiden Name definitions to production. The 53 proposed column names are absent on their respective target tables in both snapshots. Platform-generated table/ID/system columns are additional to the eight authored Contact Point columns.
 
-**Catalog dispositions:** 13 REUSE; 41 CREATE; 97 EXTEND; 8 CREATE TABLE source-field entries. The eight CREATE TABLE entries share just the two new child tables. These are row dispositions, not unique column counts: shared additions and new child-table columns are listed once in the representation sections.
+**Catalog dispositions:** 13 REUSE; 41 CREATE; 98 EXTEND; 7 CREATE TABLE source-field entries. The seven CREATE TABLE entries share the one Contact Point table. REUSE for F099/F145 includes deploying their existing dev definitions to production. These are row dispositions, not unique column counts: shared additions and child-table columns are listed once in the representation sections.
 
 ## Complete implementation catalog
 
@@ -184,7 +223,7 @@ These 24 source entries require 23 new Property columns and one existing occupan
 
 | ID | Source field | Target entity | Required representation / exact existing or proposed field | Current fallback | Required work |
 |---|---|---|---|---|---|
-| F099 | Preferred Language | Contact (`contact`) | Existing Contact `iacrm_preferredlanguage` choice; English = 298400000, Spanish = 298400001; map other values from live choices. | `note:contacts[]` | **REUSE** — Contact `iacrm_preferredlanguage` (Picklist); expose Contacts (all rows). |
+| F099 | Preferred Language | Contact (`contact`) | Existing Contact `iacrm_preferredlanguage` choice; English = 298400000, Spanish = 298400001; map other values from live choices. | `note:contacts[]` | **REUSE + DEPLOY** — Contact `iacrm_preferredlanguage` exists in dev and is absent in production. Deploy the existing definition via the CRM pipeline; expose Contacts (all rows). |
 | F100 | Rated Driver | Policy Driver (`iacrm_policydriver`) | Existing Policy Driver rating choice: Rated = 298400000 / Excluded = 298400001 / Non-Driver = 298400002, with Contact and quote/policy context. | `note:contacts[]` | **REUSE** — Policy Driver `iacrm_ratingstatus`, `iacrm_contactid`, `iacrm_quoteid` / `iacrm_opportunityid`; expose Policy drivers (all rows). |
 | F101 | Good Driver | Policy Driver / Risk Answer, Quote/Policy context | Yes/No eligibility answer with source question, carrier and applicable window. | `note:contacts[]` | **EXTEND** — REUSE Risk Answer `iacrm_value` and Carrier Question identity/type; CREATE Risk Answer `iacrm_quoteid` and `iacrm_contactid`; expose contextual answer mapping. |
 
@@ -252,8 +291,8 @@ Address additions belong on existing `customeraddress`; live metadata confirms `
 | F142 | Primary address: ZIP suffix | Account (`account`), primary address | Text(4), leading zeroes preserved. Proposed `iacrm_address1zip4`. | `note` | **CREATE** — Account `iacrm_address1zip4`; no equivalent exists in the audited entity. |
 | F143 | Primary address: Years at address | Account (`account`), primary address | Whole number, nonnegative. Proposed `iacrm_yearsatprimaryaddress`. | `note` | **CREATE** — Account `iacrm_yearsatprimaryaddress`; no equivalent exists in the audited entity. |
 | F144 | Primary address: Months at address | Account (`account`), primary address | Whole number 0–11. Proposed `iacrm_monthsatprimaryaddress`. | `note` | **CREATE** — Account `iacrm_monthsatprimaryaddress`; no equivalent exists in the audited entity. |
-| F145 | Maiden name | Contact (`contact`) | Existing Contact `iacrm_maidenname` (Maiden Name): Text. | `note:contacts[]` | **REUSE** — Contact `iacrm_maidenname` (String); expose Contacts (all rows). |
-| F146 | Co-applicant | Quote Participant (new `iacrm_quoteparticipant`) | Proposed Quote Participant: `iacrm_contactid` + `iacrm_quoteid` + `iacrm_role` = Co-applicant. Application resolves through its Quote Source. Do not use a universal Contact status. | `note:contacts[]` | **CREATE TABLE** — proposed `iacrm_quoteparticipant` with Contact/Quote lookups and role; no insurance participant representation exists in dev. |
+| F145 | Maiden name | Contact (`contact`) | Existing Contact `iacrm_maidenname` (Maiden Name): Text. | `note:contacts[]` | **REUSE + DEPLOY** — Contact `iacrm_maidenname` exists in dev and is absent in production. Deploy the existing definition; expose Contacts (all rows). |
+| F146 | Co-applicant | Connection (`connection`) + Connection Role (`connectionrole`), Quote context | Existing Contact ↔ Quote connection using `record1id` / `record2id`, with the Contact side assigned Co-applicant through `record1roleid` / `record2roleid`. Preserve per-Quote context. | `note:contacts[]` | **EXTEND** — REUSE Connection; ENABLE connections on Quote and ADD the missing Co-applicant Connection Role. Do not create `iacrm_quoteparticipant`. |
 | F147 | Driver flag | Policy Driver (`iacrm_policydriver`) | Presence of an existing Policy Driver relationship row means driver membership; keep `iacrm_ratingstatus` separate. | `note:contacts[]` | **REUSE** — membership row in `iacrm_policydriver`, linked by `iacrm_contactid` and quote/opportunity/policy; no new driver Boolean. |
 | F148 | Deceased | Contact (`contact`) | Yes/No; preserve unknown separately from No. Proposed `iacrm_isdeceased`. | `note:contacts[]` | **CREATE** — Contact `iacrm_isdeceased`; no equivalent exists in the audited entity. |
 | F149 | Every address: Person | Address (`customeraddress`) | Existing Address Contact parent lookup, plus source address sequence. Resolve the Person label to the owning Contact; do not store its display name as an address fact. | `note` | **REUSE** — Address `parentid` (Contact binding `parentid_contact`) and `addressnumber`; implement owner resolution. |
@@ -270,7 +309,7 @@ Address additions belong on existing `customeraddress`; live metadata confirms `
 
 ## Required child-record and relationship representations
 
-The following tables separate **verified existing** schema from **specific missing additions**. CREATE means missing from the audited dev entity, not missing from a picker. Shared additions are created once, even when referenced by many catalog rows. Lookup names in the existing-bindings table are navigation property names; attribute logical names alone are not always valid `@odata.bind` names.
+The following tables separate **verified existing** schema from **specific missing additions**. CREATE means missing from the audited target entity in both environments, not missing from a picker. Shared additions are created once, even when referenced by many catalog rows. Lookup names in the existing-bindings table are navigation property names; attribute logical names alone are not always valid `@odata.bind` names.
 
 ### Quote Coverage (`iacrm_quotecoverage`)
 
@@ -402,7 +441,7 @@ Map F139/F140 to Account-scoped team rows and preserve existing/manual staffing 
 
 ### Additional contact methods: CREATE Contact Point
 
-**CREATE proposed `iacrm_contactpoint`**, one child per typed phone/email row. It is absent from dev. Standard Contact has a finite set of scalar phone/email slots; those slots cannot preserve an arbitrary number of rows with usage type, extension and sequence. The existing `msdynmkt_contactpointconsent*` tables store marketing consent, not contact-owned method rows, and must not be repurposed.
+**CREATE proposed `iacrm_contactpoint`**, one child per typed phone/email row. It is absent from both environments, and the alternate models reviewed above do not supply this ownership/type/value/extension contract. Standard Contact has a finite set of scalar phone/email slots; those slots cannot preserve an arbitrary number of rows with usage type, extension and sequence. The existing `msdynmkt_contactpointconsent*` tables store marketing consent, not contact-owned method rows, and must not be repurposed.
 
 | Proposed new column | Representation |
 |---|---|
@@ -417,11 +456,20 @@ Map F139/F140 to Account-scoped team rows and preserve existing/manual staffing 
 
 Expose Contact points (all rows) and return the actual deployed entity set/navigation names. Repeated loads need an explicit owner/channel/value matching strategy that preserves intentional duplicates and does not rely only on row position.
 
-### Co-applicant: CREATE Quote Participant
+### Co-applicant: EXTEND and REUSE Connections
 
-**CREATE proposed `iacrm_quoteparticipant`** with `iacrm_name` (String), `iacrm_contactid` (Contact lookup), `iacrm_quoteid` (Quote lookup), `iacrm_role` (choice including Co-applicant), and `iacrm_source` (String). No existing insurance participant table or Quote/Contact role relationship was found. Generic Connection exists, but Connections are disabled on both Quote and Application in audited metadata; this handoff chooses a typed Quote Participant relationship rather than changing the generic Connections feature. Do not repurpose Property Resident (research-provider people) or a universal Contact role.
+**Do not create `iacrm_quoteparticipant`.** Both environments already have the standard `connection` and `connectionrole` tables. They support a role-bearing link from Contact to the existing custom Quote once Connections are enabled on Quote. Microsoft documents this capability for customizable tables: [Connections](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/connection-entities) and [connection-role configuration](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/configure-connection-roles).
 
-F146 uses that relationship. Application already has a Quote Source lookup; bind the loaded Quote and preserve co-applicant context there. Keep the current Contact-note fallback until Quote identity and participant mapping are available. Return the actual relationship navigation names and role choice values after deployment.
+| Disposition | Existing representation / exact configuration |
+|---|---|
+| REUSE | `connection.record1id` and `connection.record2id`: Contact and `iacrm_quote` endpoints. |
+| REUSE | `connection.record1roleid` / `connection.record2roleid`: apply Co-applicant to the Contact endpoint, rather than the Quote endpoint. |
+| REUSE | `connection.description`, `effectivestart`, `effectiveend`, `statecode` when applicable; do not fabricate missing dates. |
+| ENABLE CAPABILITY | Set `iacrm_quote.IsConnectionsEnabled.Value = true` through the canonical solution/pipeline. It is false in both snapshots, with change permitted. Contact is already enabled. A disabled capability does not mean the relationship model is absent. |
+| ADD CONFIGURATION | Add solution-owned Connection Role **Co-applicant**, scoped to Contact and the intended Quote connection. Both environments have 35 Connection Roles, none providing this applicant role. Return the actual role identity/row-type configuration after deployment. Do not hard-code an unrelated role ID. |
+| IMPLEMENT MAPPING | Resolve Contact + Quote and upsert the contextual connection. The platform maintains a reciprocal record; reconciliation must not count or create the reciprocal twice. |
+
+F146 retains `note:contacts[]` until Quote identity, capability/role deployment and mapping are available. Application already has a Quote Source lookup; use that Quote context. The existing Opportunity Relationship (`customeropportunityrole`) is an alternate relationship table, but its Opportunity context would broaden a per-Quote answer; it is not the chosen destination. Servicing Team Member is for staffing and must not receive a Co-applicant staffing role.
 
 ### Verified existing lookup navigation names
 
@@ -466,7 +514,7 @@ These entries complete the handoff but are not requests to duplicate existing CR
 
 ## Implementation sequence and return contract
 
-1. Use the verified dev dispositions above. Before authoring, refresh metadata for changes since the audit and check managed dependencies. Do not recreate a named REUSE field or table. Production metadata was not accessible through the configured read principal; compare the release baseline through the pipeline.
+1. Use the cross-environment dispositions above. Refresh metadata if either environment has changed and check managed dependencies. Do not recreate a named REUSE field/table or the existing dev language/maiden-name definitions. Compare the selected production release baseline through the pipeline.
 2. Create only missing representations in the canonical CRM solution. Retain existing forms/views/apps and add the required fields/subgrids there.
 3. Return exact logical names, entity set names, lookup `@odata.bind` navigation names, choice integers, required fields, matching/upsert keys, security privileges and solution version to the extension implementation.
 4. Expose missing extension collection targets, identity resolvers and child writers. A new attribute can appear in the live catalog; a new child table also needs its collection target, parent binding and load behavior implemented.
