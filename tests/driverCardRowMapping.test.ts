@@ -91,4 +91,17 @@ describe("a one-row person mapping on a box every driver card shares", () => {
     const f = ingest([], { [first]: "crm:contact2.firstname" }).fields.find(x => x.mapped?.startsWith("crm:"));
     expect(f).toMatchObject({ mapped: "crm:contact2.firstname", value: "Alexander" });
   });
+
+  it("keeps heating, electrical, plumbing and roof years separate despite the shared caption", () => {
+    document.title = "Tracy Dittrich - Dwelling Info";
+    document.body.innerHTML = `<main>${["Heating", "Electrical", "Plumbing", "Roofing"].map((system, i) =>
+      `<mat-form-field><label for="yearUpdated${system}">Year Updated</label><input type="number" id="yearUpdated${system}" name="yearUpdated${system}" value="${2000 + i}"></mat-form-field>`
+    ).join("")}</main>`;
+    const rows = scan(null, {});
+    expect(rows.filter(r => /yearUpdated/i.test(r.key))).toHaveLength(4);
+    expect(rows.filter(r => /yearUpdated/i.test(r.key)).every(r => r.repeats === 1)).toBe(true);
+    const roof = keyOf(document.getElementById("yearUpdatedRoofing")!);
+    const fields = ingest([], { [roof]: "crm:property1.iacrm_roofyear" }).fields;
+    expect(fields.filter(f => f.mapped === "crm:property1.iacrm_roofyear").map(f => f.value)).toEqual(["2003"]);
+  });
 });

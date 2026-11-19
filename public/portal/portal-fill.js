@@ -1078,8 +1078,9 @@
     /* boxes sharing this control's key are the same field on every card */
     if (element) {
       const same = ctx.byKey.get(controlKey(element)) || [];
-      const twins = same;
-      if (twins.length > repeatSections.length) repeatSections = twins.map(sectionKey);
+      // Native controls with different keys can share a caption (the four
+      // home system update years). Only twins of this control are rows.
+      if (same.length) repeatSections = same.map(sectionKey);
     }
     const parts = String(document.title || "").split(" - ");
     return { repeats: repeatSections.length, repeatSections, page: parts.length > 1 ? normText(parts[parts.length - 1]).slice(0, 40) : "" };
