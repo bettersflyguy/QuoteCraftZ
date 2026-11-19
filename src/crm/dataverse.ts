@@ -1,29 +1,49 @@
 import { getAccessToken } from "./auth";
 import type { CrmEnvironment } from "./environments";
+import { parseRefusal, safeClaims, safeHost, type TokenClaims } from "./catalogDiagnostics";
 import type { AccountEnrichmentState, ContactRow, NewContact } from "./enrich";
 
 export class CrmAccessError extends Error {
   orgUrl: string;
   status: number;
   upn: string | null;
-  constructor(orgUrl: string, status: number, upn: string | null = null) {
+  /** Dataverse's own error code and message from the refusal body (URL and
+   * query stripped); never headers, tokens or the raw body. */
+  dvCode?: string;
+  dvMessage?: string;
+  /** Host the refused request went to (no path or query). */
+  host?: string;
+  /** upn, oid, tid and aud of the token, claims only. */
+  claims: TokenClaims;
+  constructor(orgUrl: string, status: number, upn: string | null = null, reason: { code?: string; message?: string } = {}, claims: TokenClaims = {}) {
     super(`No access to ${orgUrl} (HTTP ${status})`);
     this.name = "CrmAccessError";
     this.orgUrl = orgUrl;
     this.status = status;
-    this.upn = upn;
+    this.claims = safeClaims({ ...claims, upn: upn ?? claims.upn });
+    this.upn = this.claims.upn ?? null;
+    const host = safeHost(orgUrl);
+    if (host) this.host = host;
+    if (reason.code) this.dvCode = reason.code;
+    if (reason.message) this.dvMessage = reason.message;
   }
 }
 
 /** Account the token was issued to, read off the JWT payload - lets the panel
  * say WHICH account Dataverse rejected (wrong-account-picked vs missing role). */
 export function upnFromToken(token: string): string | null {
+  return claimsFromToken(token).upn ?? null;
+}
+
+/** The token payload's upn, oid, tid and aud (checked shapes; claims only,
+ * never the token itself). */
+export function claimsFromToken(token: string): TokenClaims {
   try {
     const payload = token.split(".")[1];
-    if (!payload) return null;
+    if (!payload) return {};
     const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    return (json.preferred_username ?? json.upn ?? json.unique_name ?? null) as string | null;
-  } catch { return null; }
+    return safeClaims({ upn: json.preferred_username ?? json.upn ?? json.unique_name, oid: json.oid, tid: json.tid, aud: json.aud });
+  } catch { return {}; }
 }
 
 export interface AccountMatch { accountId: string; name: string; city: string | null; postalCode: string | null; openOppCount: number }
@@ -60,7 +80,13 @@ async function dv(env: CrmEnvironment, path: string, init: RequestInit = {}): Pr
     await new Promise(r => setTimeout(r, wait * 1000));
     res = await doFetch();
   }
-  if (res.status === 401 || res.status === 403) throw new CrmAccessError(env.orgUrl, res.status, upnFromToken(token));
+  if (res.status === 401 || res.status === 403) {
+    // keep Dataverse's own reason: a 403 can be a missing role, a disabled
+    // user or a blocked environment, and only its body says which
+    let reason: { code?: string; message?: string } = {};
+    try { reason = parseRefusal(await res.clone().text()); } catch { /* no readable body */ }
+    throw new CrmAccessError(env.orgUrl, res.status, upnFromToken(token), reason, claimsFromToken(token));
+  }
   return res;
 }
 

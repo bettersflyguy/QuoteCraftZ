@@ -188,10 +188,10 @@ describe("AB#3745 CRM field list diagnostic", () => {
     ({ LogicalName, AttributeType, IsValidForCreate: true, IsValidForUpdate: true, DisplayName: { UserLocalizedLabel: { Label: label } } });
 
   it("labels an every-table failure as all-failed", async () => {
-    const api = { dvJson: async <T,>(): Promise<T> => { throw Object.assign(new Error("x"), { name: "CrmAccessError", status: 403 }); } };
+    const api = { dvJson: async <T,>(): Promise<T> => { throw new Error("Dataverse 500 for x"); } };
     const c = await buildFieldCatalog(env, api);
     expect(c.diagnostics?.case).toBe("all-failed");
-    expect(c.diagnostics?.tables.every(t => !t.ok && t.status === 403)).toBe(true);
+    expect(c.diagnostics?.tables.every(t => !t.ok && t.status === 500)).toBe(true);
     expect(diagnosticNote(c, null, "ALL-FAILED NOTE")).toBe("ALL-FAILED NOTE");
   });
 
