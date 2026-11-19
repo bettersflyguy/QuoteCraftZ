@@ -8,6 +8,7 @@ import { normalize, VEHICLE_PURCHASE_COLUMN } from "@/boldpenguin/normalize";
 import { crmGroup } from "@/crm/appCommit";
 import { PATH_LABEL, MAP_PATH_GROUPS, isRoutablePath, toRowTarget, rowTargetOf, isDataServiceTarget } from "@/portal/fieldMaps";
 import { buildFieldCatalog, coerceGroup, type FieldCatalog, type RawAttribute } from "@/crm/fieldCatalog";
+import { diagnosticNote, diagnosticText, requestCatalog } from "@/crm/catalogDiagnostics";
 import { catalogUnavailableNote, classifyCatalogError, ROLE_TASK } from "@/crm/catalogNote";
 import type { CrmEnvironment } from "@/crm/environments";
 import type { CapturedApplication } from "@/boldpenguin/types";
@@ -155,6 +156,11 @@ describe("CRM field list unavailable", () => {
     const c = await buildFieldCatalog(env, api);
     expect(c.entities.map(e => e.key)).toEqual(["account"]);
     expect(c.unavailable).toBeUndefined();
+    // AB#3745: the partial case is not silent, diagnostics name the failed tables
+    expect(c.diagnostics?.case).toBe("partial");
+    expect(c.diagnostics?.tables.find(t => t.logical === "contact")).toMatchObject({ ok: false, status: 403, columns: 0 });
+    expect(c.diagnostics?.tables.find(t => t.logical === "account")).toMatchObject({ ok: true, columns: 1 });
+    expect(diagnosticNote(c, null, "x")).toContain("contact table could not be read (HTTP 403)");
   });
 
   it("the worker returns the reason with an empty catalog instead of failing", async () => {
@@ -173,5 +179,78 @@ describe("CRM field list unavailable", () => {
     const all = [{ kind: "signin" as const }, { kind: "rejected" as const, status: 401 as const }, { kind: "role" as const, status: 403 as const }, { kind: "other" as const, detail: "d" }, undefined]
       .map(r => catalogUnavailableNote(r)).join("");
     expect(/[\u2013\u2014]/.test(all)).toBe(false);
+  });
+});
+
+describe("AB#3745 CRM field list diagnostic", () => {
+  const env = { id: "dev", name: "DEV", orgUrl: "https://x.crm.dynamics.com", color: "green" } as CrmEnvironment;
+  const attr = (LogicalName: string, label: string, AttributeType = "String"): RawAttribute =>
+    ({ LogicalName, AttributeType, IsValidForCreate: true, IsValidForUpdate: true, DisplayName: { UserLocalizedLabel: { Label: label } } });
+
+  it("labels an every-table failure as all-failed", async () => {
+    const api = { dvJson: async <T,>(): Promise<T> => { throw Object.assign(new Error("x"), { name: "CrmAccessError", status: 403 }); } };
+    const c = await buildFieldCatalog(env, api);
+    expect(c.diagnostics?.case).toBe("all-failed");
+    expect(c.diagnostics?.tables.every(t => !t.ok && t.status === 403)).toBe(true);
+    expect(diagnosticNote(c, null, "ALL-FAILED NOTE")).toBe("ALL-FAILED NOTE");
+  });
+
+  it("reports a failed choice probe and counts the hidden choice columns", async () => {
+    const api = { dvJson: async <T,>(_e: CrmEnvironment, path: string): Promise<T> => {
+      if (path.includes("PicklistAttributeMetadata")) throw new Error("Dataverse 500 for " + path);
+      if (path.startsWith("EntityDefinitions(LogicalName='account')/Attributes?")) return { value: [attr("name", "Account Name"), attr("iacrm_kind", "Kind", "Picklist")] } as T;
+      return { value: [] } as T;
+    } };
+    const c = await buildFieldCatalog(env, api);
+    const t = c.diagnostics?.tables.find(x => x.logical === "account");
+    expect(t?.picklist).toMatchObject({ ok: false, status: 500, hidden: 1 });
+    expect(t?.columns).toBe(2);
+    expect(c.entities[0]!.columns.map(x => x.name)).toEqual(["name"]);
+    expect(diagnosticNote(c, null, "x")).toContain("1 choice column(s) are hidden");
+    expect(diagnosticText(c, { buildVersion: "9.9.9" })).toContain("choice columns hidden (no options): 1");
+  });
+
+  it("Copy details has the version, source, tables and probes but no query string or token", async () => {
+    const token = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnopqrstuvwxyz";
+    const api = { dvJson: async <T,>(_e: CrmEnvironment, path: string): Promise<T> => {
+      throw new Error(`Dataverse 500 for ${path} Bearer ${token}`);
+    } };
+    const c = await buildFieldCatalog(env, api);
+    const text = diagnosticText(c, { buildVersion: "0.1.69", messageError: `failed ?code=secret ${token}` });
+    expect(text).toContain("Catalog version: v8");
+    expect(text).toContain("Source: live");
+    expect(text).toContain("Extension build: 0.1.69");
+    expect(text).toContain("contact: FAILED HTTP 500");
+    expect(text).not.toContain("?");
+    expect(text).not.toContain("$select");
+    expect(text).not.toContain(token);
+    expect(text).not.toContain("secret");
+    expect(text).not.toMatch(/Bearer\s+\w/);
+  });
+
+  it("a failed message round-trip is kept and labelled message-failed", async () => {
+    const r = await requestCatalog(async () => { throw new Error("no response ?x=1"); }, false);
+    expect(r.catalog).toBeNull();
+    expect(r.messageError).toBe("no response");
+    expect(diagnosticNote(null, r.messageError, "x")).toContain("request to the extension worker failed");
+    expect(diagnosticText(null, { buildVersion: "1", messageError: r.messageError })).toContain("Case: message-failed");
+  });
+
+  it("Retry sends panel/crmFieldCatalog with refresh: true", async () => {
+    const sent: unknown[] = [];
+    await requestCatalog(async m => { sent.push(m); return { entities: [] }; }, true);
+    expect(sent).toEqual([{ type: "panel/crmFieldCatalog", refresh: true }]);
+  });
+
+  it("while the first load is in flight the note and Copy case are not all-failed", () => {
+    const note = diagnosticNote(null, null, "ALL-FAILED NOTE", true);
+    expect(note).toBe("Reading CRM field list…");
+    expect(note).not.toContain("ALL-FAILED");
+    const text = diagnosticText(null, { buildVersion: "1", loading: true });
+    expect(text).toContain("Case: loading");
+    expect(text).not.toContain("all-failed");
+    // once the read ends with nothing, all-failed is reported as before
+    expect(diagnosticNote(null, null, "ALL-FAILED NOTE", false)).toBe("ALL-FAILED NOTE");
+    expect(diagnosticText(null, { buildVersion: "1", loading: false })).toContain("Case: all-failed");
   });
 });

@@ -6,6 +6,8 @@ import { captureGroups, securedGroups } from "./MapEditor";
 import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { send } from "./api";
 import type { FieldCatalog } from "@/crm/fieldCatalog";
+import { catalogUnavailableNote } from "@/crm/catalogNote";
+import { diagnosticNote, diagnosticText, requestCatalog } from "@/crm/catalogDiagnostics";
 import type { CapturedApplication, PortalScanRow } from "@/boldpenguin/types";
 import { MAP_PATH_GROUPS, NOTE_TARGETS, scopeMatches } from "@/portal/fieldMaps";
 import { choiceColumnOf } from "@/portal/choiceRouting";
@@ -77,6 +79,10 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
   const scope = dataServiceScope(source);
   const [saved, setSaved] = useState<Record<string, string> | undefined>(undefined);
   const [catalog, setCatalog] = useState<FieldCatalog | null>(null);
+  // AB#3745: the catalog request's own failure is kept and shown, not swallowed
+  const [messageError, setMessageError] = useState<string | null>(null);
+  const [catalogBusy, setCatalogBusy] = useState(true);
+  const [copyNote, setCopyNote] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [open, setOpen] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -90,12 +96,31 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
   // a field picked from the Page fields picker that the service covers
   useEffect(() => { if (focusId) setFocus(focusId.id); }, [focusId]);
 
+  const loadCatalog = async (refresh: boolean) => {
+    setCatalogBusy(true);
+    setCopyNote(null);
+    const r = await requestCatalog<FieldCatalog>(m => send<FieldCatalog>(m), refresh);
+    setCatalog(r.catalog);
+    setMessageError(r.messageError);
+    setCatalogBusy(false);
+  };
+  const buildVersion = (() => { try { return chrome.runtime.getManifest().version; } catch { return "unknown"; } })();
+  const copyDetails = async () => {
+    try {
+      await navigator.clipboard.writeText(diagnosticText(catalog, { buildVersion, messageError, loading: catalogBusy }));
+      setCopyNote("Copied.");
+    } catch {
+      setCopyNote("Could not copy; select the text manually.");
+    }
+  };
+  const catalogNote = diagnosticNote(catalog, messageError, catalogUnavailableNote(catalog?.unavailable), catalogBusy);
+
   useEffect(() => {
     const load = () => void getDataServiceMaps().then(m => setSaved(m[source] ?? {}));
     const loadChoices = () => void getOptionMaps().then(m => setChoices(m[scope] ?? {}));
     load();
     loadChoices();
-    void send<FieldCatalog>({ type: "panel/crmFieldCatalog" }).then(setCatalog).catch(() => setCatalog(null));
+    void loadCatalog(false);
     // values the service returned in the held capture: known source wordings
     void send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(app => {
       const byField: Record<string, string[]> = {};
@@ -188,6 +213,14 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
           </Tooltip>
         )}
       </div>
+      {(
+        <div className={styles.note} role="status">
+          {catalogNote ?? "CRM field list read OK."}{" "}
+          <Button size="small" appearance="secondary" disabled={catalogBusy} onClick={() => void loadCatalog(true)}>Retry</Button>{" "}
+          <Button size="small" appearance="subtle" disabled={catalogBusy} onClick={() => void copyDetails()}>Copy details</Button>
+          {copyNote && <> {copyNote}</>}
+        </div>
+      )}
       {(picking || pickNote) && (
         <div className={styles.note}>
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
