@@ -10,6 +10,7 @@ import { autoMatchOption } from "@/portal/optionMaps";
 import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
 import type { CrmEnvironment } from "./environments";
 import { classifyCatalogError, type CatalogUnavailable } from "./catalogNote";
+import { caseOf, describeCatalogError, statusOf, type CatalogDiagnostics, type PicklistProbe, type TableDiagnostic } from "./catalogDiagnostics";
 
 export interface CatalogColumn {
   name: string;
@@ -40,6 +41,8 @@ export interface FieldCatalog {
   envId: string; fetchedAt: number; entities: CatalogEntity[];
   /** Set only when no table could be read: why (never cached). */
   unavailable?: CatalogUnavailable;
+  /** AB#3745: what the read did, per table (see catalogDiagnostics.ts). */
+  diagnostics?: CatalogDiagnostics;
 }
 
 /** Hierarchy order: the account first, its one-to-one primary contact, then
@@ -217,7 +220,9 @@ export interface CatalogApi {
   dvJson: <T>(env: CrmEnvironment, path: string) => Promise<T>;
 }
 
-async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogApi): Promise<{ columns: CatalogColumn[]; secured: CatalogColumn[] }> {
+interface FetchedColumns { columns: CatalogColumn[]; secured: CatalogColumn[]; filtered: number; picklist: PicklistProbe }
+
+async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogApi): Promise<FetchedColumns> {
   const base = `EntityDefinitions(LogicalName='${logical}')/Attributes`;
   const { value } = await api.dvJson<{ value: RawAttribute[] }>(env,
     `${base}?$select=LogicalName,AttributeType,AttributeOf,IsValidForCreate,IsValidForUpdate,IsSecured,IsPrimaryId,DisplayName`);
@@ -241,6 +246,7 @@ async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogAp
       `${base}/Microsoft.Dynamics.CRM.DateTimeAttributeMetadata?$select=LogicalName,Format`);
     for (const a of d.value) { const c = byName.get(a.LogicalName); if (c) c.dateOnly = a.Format === "DateOnly"; }
   } catch { /* date-only default */ }
+  let picklist: PicklistProbe = { ok: true, hidden: 0 };
   try {
     type Opt = { Value: number; Label?: { UserLocalizedLabel?: { Label?: string } | null } };
     const p = await api.dvJson<{ value: { LogicalName: string; OptionSet?: { Options?: Opt[] } | null; GlobalOptionSet?: { Options?: Opt[] } | null }[] }>(env,
@@ -250,13 +256,20 @@ async function fetchColumns(env: CrmEnvironment, logical: string, api: CatalogAp
       const opts = a.OptionSet?.Options ?? a.GlobalOptionSet?.Options ?? [];
       if (c) c.options = opts.map(o => ({ value: o.Value, label: clean(o.Label?.UserLocalizedLabel?.Label ?? "") })).filter(o => o.label);
     }
-  } catch { /* picklists without options can't be coerced; they simply won't write */ }
+  } catch (e) {
+    // picklists without options can't be coerced; they simply won't write.
+    // Not silent any more: the diagnostic records the probe failed
+    picklist = { ok: false, hidden: 0, ...(statusOf(e) ? { status: statusOf(e) } : {}), error: describeCatalogError(classifyCatalogError(e)) };
+  }
   // a picklist with no resolvable options can never take a value - hide it
-  return { columns: cols.filter(c => c.type !== "Picklist" || (c.options?.length ?? 0) > 0), secured };
+  const shown = cols.filter(c => c.type !== "Picklist" || (c.options?.length ?? 0) > 0);
+  picklist.hidden = cols.length - shown.length;
+  return { columns: shown, secured, filtered: cols.length, picklist };
 }
 
 export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): Promise<FieldCatalog> {
-  const byLogical = new Map<string, Promise<{ columns: CatalogColumn[]; secured: CatalogColumn[] }>>();
+  const byLogical = new Map<string, Promise<FetchedColumns>>();
+  const tables = new Map<string, TableDiagnostic>();
   const entities: CatalogEntity[] = [];
   // one table failing leaves just that table out; the first failure is kept
   // so a catalog where EVERY table failed can say why
@@ -264,20 +277,33 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
   let failed = false;
   for (const e of CATALOG_ENTITIES) {
     if (!byLogical.has(e.logical)) {
-      byLogical.set(e.logical, fetchColumns(env, e.logical, api).catch(err => {
+      byLogical.set(e.logical, fetchColumns(env, e.logical, api).then(r => {
+        tables.set(e.logical, { logical: e.logical, ok: true, columns: r.filtered, picklist: r.picklist });
+        return r;
+      }, err => {
         if (!failed) { failed = true; firstFailure = err; }
-        return { columns: [], secured: [] };
+        const status = statusOf(err);
+        tables.set(e.logical, { logical: e.logical, ok: false, ...(status ? { status } : {}), error: describeCatalogError(classifyCatalogError(err)), columns: 0 });
+        return { columns: [], secured: [], filtered: 0, picklist: { ok: true, hidden: 0 } } as FetchedColumns;
       }));
     }
     const { columns, secured } = await byLogical.get(e.logical)!;
     if (columns.length) entities.push({ ...e, columns, ...(SECURE_ENTITY_KEYS.has(e.key) && secured.length ? { secured } : {}) });
   }
-  return { envId: env.id, fetchedAt: Date.now(), entities, ...(!entities.length && failed ? { unavailable: classifyCatalogError(firstFailure) } : {}) };
+  const list = [...tables.values()];
+  const fetchedAt = Date.now();
+  return {
+    envId: env.id, fetchedAt, entities,
+    ...(!entities.length && failed ? { unavailable: classifyCatalogError(firstFailure) } : {}),
+    diagnostics: { version: CACHE_VERSION, source: "live", fetchedAt, envId: env.id, case: caseOf(list), tables: list }
+  };
 }
 
 // v2: entities carry their secured (pass-through) columns; v3: addresses;
-// v4: "Contacts (all rows)"; v5: Prior Coverage; v6: assets; v7: asset children
-const CACHE_PREFIX = "crm/fieldCatalog/v7/";
+// v4: "Contacts (all rows)"; v5: Prior Coverage; v6: assets; v7: asset children;
+// v8: per-table diagnostics (AB#3745)
+const CACHE_VERSION = "v8";
+const CACHE_PREFIX = `crm/fieldCatalog/${CACHE_VERSION}/`;
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 /** How many CRM columns the saved mappings (page sites and data services,
@@ -312,7 +338,9 @@ export async function getFieldCatalog(env: CrmEnvironment, api: CatalogApi, refr
     // a saved mapping naming a column the cached list lacks means the CRM
     // gained columns since (a solution import): re-read, at most every 10 min
     const stale = hit && Date.now() - hit.fetchedAt > 10 * 60 * 1000 && (await missingMappedColumns(hit)) > 0;
-    if (hit && !stale && Date.now() - hit.fetchedAt < TTL_MS && hit.entities.length) return hit;
+    if (hit && !stale && Date.now() - hit.fetchedAt < TTL_MS && hit.entities.length) {
+      return hit.diagnostics ? { ...hit, diagnostics: { ...hit.diagnostics, source: "cached" } } : hit;
+    }
   }
   const fresh = await buildFieldCatalog(env, api);
   if (fresh.entities.length) await chrome.storage.local.set({ [key]: fresh });

@@ -20,7 +20,8 @@ export function classifyCatalogError(e: unknown): CatalogUnavailable {
   if (err?.name === "CrmAccessError") {
     return err.status === 403 ? { kind: "role", status: 403 } : { kind: "rejected", status: 401 };
   }
-  const detail = String(err?.message ?? e ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  // never carry a URL query string (or anything after it) into the panel
+  const detail = String(err?.message ?? e ?? "").replace(/\?\S*/g, "").replace(/\s+/g, " ").trim().slice(0, 120);
   return { kind: "other", detail };
 }
 
