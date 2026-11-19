@@ -10,7 +10,7 @@ import {
   ARRAY_ROW_MAX, MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget, noteLabelOf,
   familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
 } from "@/portal/fieldMaps";
-import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
+import { catalogLabel, mappableEntities, type FieldCatalog } from "@/crm/fieldCatalog";
 import { CrmCatalogStatus, useCrmCatalog } from "./CrmCatalogStatus";
 import { send } from "./api";
 import { capturedTargets } from "./capturedTargets";
@@ -25,7 +25,7 @@ type OptionGroup = { group: string; paths: { path: string; label: string }[] };
 export function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
   const riskData = MAP_PATH_GROUPS.filter(g => /risk data/.test(g.group));
   if (!catalog?.entities.length) return MAP_PATH_GROUPS;
-  const crm = catalog.entities.map(e => ({
+  const crm = mappableEntities(catalog).map(e => ({
     group: e.label,
     paths: e.columns.map(c => ({ path: `crm:${e.key}${e.array ? "[]" : ""}.${c.name}`, label: c.label }))
   }));

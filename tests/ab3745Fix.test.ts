@@ -6,7 +6,7 @@ import { backing, reset } from "./helpers/chromeStub";
 import { __store } from "@/crm/auth";
 import { CrmAccessError, signedInAccount } from "@/crm/dataverse";
 import {
-  CATALOG_ENTITIES, type CatalogApi, buildFieldCatalog, clearFieldCatalogCache, getFieldCatalog, type FieldCatalog
+  CATALOG_ENTITIES, READ_ONLY_ENTITY_KEYS, mappableEntities, type CatalogApi, buildFieldCatalog, clearFieldCatalogCache, getFieldCatalog, type FieldCatalog
 } from "@/crm/fieldCatalog";
 import { catalogUnavailableNote, classifyCatalogError, isNotMemberRefusal, notMemberText, ROLE_TASK } from "@/crm/catalogNote";
 import { diagnosticNote, diagnosticText } from "@/crm/catalogDiagnostics";
@@ -131,6 +131,16 @@ describe("Lead in the field catalog", () => {
     expect(lead?.columns.map(x => x.name)).toEqual(["name"]);
     expect(api.dvJson.mock.calls.some(([, p]) => String(p).includes("LogicalName='lead'"))).toBe(true);
     expect(c.diagnostics?.tables.some(t => t.logical === "lead" && t.ok)).toBe(true);
+  });
+
+  it("Lead stays in the catalog but is not offered as a mapping target (nothing writes it yet)", async () => {
+    const c = await buildFieldCatalog(env, okApi());
+    expect(c.entities.some(e => e.key === "lead")).toBe(true);
+    expect(READ_ONLY_ENTITY_KEYS.has("lead")).toBe(true);
+    const keys = mappableEntities(c).map(e => e.key);
+    expect(keys).not.toContain("lead");
+    expect(keys).toContain("account");
+    expect(keys.length).toBe(c.entities.length - 1);
   });
 
   it("a failing Lead table is reported as partial, not dropped silently", async () => {
