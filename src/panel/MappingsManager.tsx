@@ -3,7 +3,7 @@ import { DATA_SERVICE_STORAGE_KEY, dataServicePeekItems, getDataServiceMaps } fr
 import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import { FIELDMAP_STORAGE_KEY, fieldKeyOf, getAllFieldMaps, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
+import { FIELDMAP_STORAGE_KEY, fieldKeyOf, getAllFieldMaps, mergeSiteFieldMap, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
 import type { ChoicesRead } from "./OptionMapEditor";
@@ -142,8 +142,8 @@ export function MappingsManager() {
     if (!scan) return;
     setBusy("save");
     try {
-      const map: Record<string, string> = {};
-      for (const [key, v] of Object.entries(draft)) if (v) map[key] = v;
+      const saved = (await getAllFieldMaps())[scan.origin] ?? {};
+      const map = mergeSiteFieldMap(saved, draft);
       await send({ type: "panel/saveFieldMap", origin: scan.origin, map, options: choices });
       setMaps(await getAllFieldMaps());
       const n = Object.keys(map).length;

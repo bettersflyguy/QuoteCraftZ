@@ -1,5 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { buildFieldMapExport, parseFieldMapImport, MAP_PATHS } from "@/portal/fieldMaps";
+import { buildFieldMapExport, parseFieldMapImport, MAP_PATHS, mergeSiteFieldMap } from "@/portal/fieldMaps";
+
+describe("site mapping saves", () => {
+  it("keeps fields from other screens and applies changes and deletions", () => {
+    const auto = { "number:annualMiles": "crm:vehicle1.iacrm_annualmiles" };
+    const home = mergeSiteFieldMap(auto, { "number:squareFootage": "crm:property1.iacrm_totallivingarea" });
+    expect(home).toEqual({
+      ...auto,
+      "number:squareFootage": "crm:property1.iacrm_totallivingarea"
+    });
+    expect(mergeSiteFieldMap(home, {
+      "number:annualMiles": "",
+      "number:squareFootage": "crm:property1.iacrm_squarefeet"
+    })).toEqual({ "number:squareFootage": "crm:property1.iacrm_squarefeet" });
+    expect(auto).toEqual({ "number:annualMiles": "crm:vehicle1.iacrm_annualmiles" });
+  });
+});
 
 describe("field-map share files", () => {
   it("round-trips an export through import", () => {

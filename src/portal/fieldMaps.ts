@@ -11,6 +11,16 @@ export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
 /** { [origin]: { [controlKey]: rulePath | "skip" } } */
 export type FieldMaps = Record<string, Record<string, string>>;
 
+/** Apply edits from one page without dropping fields mapped on other pages. */
+export function mergeSiteFieldMap(saved: Record<string, string>, draft: Record<string, string>): Record<string, string> {
+  const merged = { ...saved };
+  for (const [key, target] of Object.entries(draft)) {
+    if (target) merged[key] = target;
+    else delete merged[key];
+  }
+  return merged;
+}
+
 /** CRM fields the mapping editor can bind a page control to, grouped by the
  * CRM entity the value lands on. The hierarchy mirrors the commit order:
  * account first, then related contacts, then policy/quote/opportunity;
