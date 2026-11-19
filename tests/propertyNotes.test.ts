@@ -58,7 +58,7 @@ describe("property collection notes", () => {
 describe("capturing property notes", () => {
   type Field = { label: string; value: string; mapped?: string };
   const g = globalThis as unknown as {
-    __bettersPortalIngest: (t: unknown, c: unknown) => { fields: Field[] };
+    __bettersPortalIngest: (t: unknown, c: unknown) => { fields: Field[]; secure: { path: string; value: string }[] };
     __bettersPortalPick: (timeout: number) => Promise<PortalScanRow | null | "timeout">;
     __bettersControlKey: (el: Element) => string;
     __bettersPortalScan: (payload: unknown, controls: Record<string, string>) => PortalScanRow[];
@@ -134,7 +134,8 @@ describe("capturing property notes", () => {
 
   it("keeps the context of equal calculated coverage amounts and breakage flags", () => {
     document.body.innerHTML = `<main>${["Other Structures", "Loss Of Use"].map((label, i) => `<div><mat-form-field><label>${label}</label><mat-select>10%</mat-select></mat-form-field><div class="coverage-amount"><ez-read-only-field><span>Amount</span><span id="amount${i}">$19,800</span></ez-read-only-field></div></div>`).join("")}<label for="coins">Breakage</label><input id="coins" name="coinsBreakage" type="checkbox"><label for="arts">Breakage</label><input id="arts" name="fineArtsBreakage" type="checkbox"></main>`;
-    const fields = g.__bettersPortalIngest([0, 1].map(i => ({ selector: `#amount${i}`, label: "", path: "note:property1" })), { "checkbox:coinsBreakage": "note:property1", "checkbox:fineArtsBreakage": "note:property1" }).fields.filter(f => f.mapped === "note:property1");
+    const fields = g.__bettersPortalIngest([0, 1].map(i => ({ selector: `main > div:nth-of-type(${i + 1}) > div:nth-of-type(1) > ez-read-only-field:nth-of-type(1) > span:nth-of-type(2)`, label: "", path: "note:property1" })), { "checkbox:coinsBreakage": "note:property1", "checkbox:fineArtsBreakage": "note:property1" }).fields.filter(f => f.mapped === "note:property1");
+    expect(fields).toHaveLength(4);
     expect(fields.map(f => [f.label, f.value])).toEqual(expect.arrayContaining([
       ["Other Structures: Amount", "$19,800"], ["Loss Of Use: Amount", "$19,800"], ["Coins: Breakage", "No"], ["Fine Arts: Breakage", "No"]
     ]));
@@ -146,5 +147,77 @@ describe("capturing property notes", () => {
     const rows = g.__bettersPortalScan(null, mappings);
     expect(rows).toHaveLength(3);
     expect(rows.map(row => [row.key, row.mapped])).toEqual(Object.entries(mappings));
+  });
+
+  it("keeps EZLynx applicant fields and driver rows on their own contact slots", () => {
+    vi.stubGlobal("location", { hostname: "app.ezlynx.com" });
+    try {
+      document.title = "Applicant - Details";
+      document.body.innerHTML = `<main><mat-form-field><label>Prior Employer In Years</label><input value="7"></mat-form-field></main>`;
+      expect(g.__bettersPortalIngest([{ byLabel: "prior employer in years", page: "details", label: "", path: "crm:contacts[].iacrm_prioryearsemployed" }], {}).fields).toEqual(expect.arrayContaining([
+        expect.objectContaining({ value: "7", mapped: "crm:primarycontact.iacrm_prioryearsemployed" })
+      ]));
+      document.title = "Applicant - Drivers";
+      document.body.innerHTML = `<main>${["Alex", "Sam"].map(name => `<div><mat-form-field><label>First Name</label><input value="${name}"></mat-form-field><mat-form-field><label>FR-44 Required</label><input value="No"></mat-form-field></div>`).join("")}</main>`;
+      const fields = g.__bettersPortalIngest([
+        { byLabel: "first name", page: "drivers", label: "", path: "crm:contacts[].firstname" },
+        { byLabel: "fr 44 required", page: "drivers", label: "", path: "note:contacts[]" }
+      ], {}).fields.filter(f => f.mapped);
+      expect(fields.map(f => [f.label, f.mapped])).toEqual([
+        ["First Name", "crm:primarycontact.firstname"], ["First Name", "crm:contact2.firstname"],
+        ["FR-44 Required", "note:contact"], ["FR-44 Required", "note:contact2"]
+      ]);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("keeps long carrier questions teachable without truncating their matching key", async () => {
+    const caption = "Multi-Policy Discount?(Active policies or policies written within 60 days of the auto policy's original effective date qualify)";
+    document.body.innerHTML = `<main><icq-question><label>${caption}</label><mat-form-field><mat-select role="combobox" id="still_multipxml" name="questionModel"><span>Yes</span></mat-select></mat-form-field></icq-question></main>`;
+    const picking = g.__bettersPortalPick(5000);
+    document.querySelector("mat-select")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(await picking).toMatchObject({ key: "field:" + caption.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(), fieldLabel: caption });
+    const fields = g.__bettersPortalIngest([{ selector: "#still_multipxml", label: "", path: "note:opportunity" }], {}).fields;
+    expect(fields).toEqual(expect.arrayContaining([expect.objectContaining({ label: caption, value: "Yes", mapped: "note:opportunity" })]));
+    document.querySelector("main")!.insertAdjacentHTML("beforeend", `<icq-question><label>${caption}</label><mat-form-field><mat-select role="combobox" id="still_other" name="questionModel"><span>No</span></mat-select></mat-form-field></icq-question>`);
+    const repeated = g.__bettersPortalIngest([{ selector: "#still_multipxml", label: "", path: "note:opportunity" }], {}).fields.filter(f => f.mapped);
+    expect(repeated.map(f => [f.label, f.value])).toEqual([[caption, "Yes"], [caption, "No"]]);
+  });
+
+  it("separates Home and Auto coverage teachings with identical captions", () => {
+    document.title = "Applicant - Coverage";
+    const teachings = [
+      { byLabel: "medical payments", page: "home coverage", label: "", path: "note:properties[]" },
+      { byLabel: "medical payments", page: "auto coverage", label: "", path: "note:opportunity" }
+    ];
+    for (const line of ["Home", "Auto"]) {
+      document.body.innerHTML = `<main><h1>${line}</h1><mat-form-field><label>Medical Payments</label><input value="10000"></mat-form-field></main>`;
+      const fields = g.__bettersPortalIngest(teachings, {}).fields.filter(f => f.mapped);
+      expect(fields).toHaveLength(1);
+      expect(fields[0]).toMatchObject({ mapped: line === "Home" ? "note:property1" : "note:opportunity" });
+    }
+  });
+
+  it("retains both axes of every driver/vehicle assignment percentage", () => {
+    document.title = "Applicant - Vehicles";
+    document.body.innerHTML = `<main><h1>Auto</h1><table id="vehicle-assignment-table"><thead><tr><th>Drivers</th><th>Vehicle A</th><th>Vehicle B</th></tr></thead><tbody>${["Alex", "Sam"].map((name, i) => `<tr><td>${name}</td><td><input type="number" value="${i ? 1 : 99}"></td><td><input type="number" value="${i ? 51 : 49}"></td></tr>`).join("")}</tbody></table></main>`;
+    const fields = g.__bettersPortalIngest([{ selector: '#vehicle-assignment-table', label: "", path: "note:opportunity" }], {}).fields.filter(f => f.mapped);
+    expect(fields.map(f => [f.label, f.value])).toEqual([
+      ["Vehicle assignment: Alex / Vehicle A (%)", "99"], ["Vehicle assignment: Alex / Vehicle B (%)", "49"],
+      ["Vehicle assignment: Sam / Vehicle A (%)", "1"], ["Vehicle assignment: Sam / Vehicle B (%)", "51"]
+    ]);
+  });
+
+  it("passes locally mapped driver identifiers only through their secured contact slots", () => {
+    vi.stubGlobal("location", { hostname: "app.ezlynx.com" });
+    try {
+      document.title = "Applicant - Drivers";
+      document.body.innerHTML = `<main>${["111-22-3333", "222-33-4444"].map(value => `<mat-form-field><label>SSN</label><input value="${value}"></mat-form-field>`).join("")}</main>`;
+      const result = g.__bettersPortalIngest([{ byLabel: "ssn", page: "drivers", label: "", path: "secure:contacts[].iacrm_ssn" }], {});
+      expect(result.secure).toEqual([
+        { path: "secure:primarycontact.iacrm_ssn", value: "111-22-3333" },
+        { path: "secure:contact2.iacrm_ssn", value: "222-33-4444" }
+      ]);
+      expect(JSON.stringify(result.fields)).not.toMatch(/111-22-3333|222-33-4444/);
+    } finally { vi.unstubAllGlobals(); }
   });
 });

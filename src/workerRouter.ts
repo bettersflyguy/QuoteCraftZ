@@ -1532,7 +1532,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   // labelled-field teachings ("field:vehicles|vin"): every card's field
   // with that label on that step, routed like a pick
   const labelled = Object.entries(siteMap)
-    .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v)))
+    .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v) || isSecureTarget(v)))
     .map(([k, v]) => {
       const m = FIELD_KEY_PARTS.exec(k);
       if (!m) return null;

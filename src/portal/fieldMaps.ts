@@ -392,12 +392,12 @@ const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
 /** "field:<page>|<section>><label>" with page and section optional
  * ("field:details|other address>city"): lowercase words only. The section
  * names a sub-section whose fields share labels with a twin section. */
-export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?(?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80}$/;
+export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?(?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,140}$/;
 /** A sub-section control's label key across every section of its kind
  * ("other address" City -> "field:other address>city", which a list target
  * reads from Primary, Other and Mailing Address alike). Null outside one. */
 export function familyKeyOf(r: { fieldLabel?: string; section?: string; repeats?: number; repeatSections?: string[]; page?: string }): { key: string; label: string } | null {
-  const field = (r.fieldLabel ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80);
+  const field = (r.fieldLabel ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 140);
   const section = (r.section ?? "").slice(0, 40);
   const shown = (r.fieldLabel ?? "").replace(/^[*\s]+|[:*\s]+$/g, "");
   const kindOf = (s: string) => s.split(" ").pop() ?? "";
@@ -431,7 +431,7 @@ export function scopeMatches(want: string, scopes: string[]): boolean {
 }
 
 /** Parses a labelled-field key: [page, "section>label" or "label"]. */
-export const FIELD_KEY_PARTS = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
+export const FIELD_KEY_PARTS = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,140})$/;
 
 /** A labelled-field key for a page step and a field label; the label may
  * carry its section ("primary address>city"). */

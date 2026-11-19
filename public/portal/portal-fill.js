@@ -360,7 +360,7 @@
     const s = mapper && mapper.sectionOf ? mapper.sectionOf(element) : null;
     return s && s.text && label ? s.text + ": " + label : label;
   }
-  const FIELD_KEY_RE = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
+  const FIELD_KEY_RE = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,140})$/;
 
   /* banking, payment and card fields are NEVER auto-filled - an insurance
    * application holds nothing that belongs in them */
@@ -1280,6 +1280,9 @@
   /* best-effort label for a text value: its table row/column header, a
    * preceding bold/label sibling, or aria metadata */
   function inferTextLabel(el) {
+    var question = el.closest && el.closest("icq-question");
+    var questionCaption = question && question.querySelector(":scope > label");
+    if (questionCaption) return clean(questionCaption.innerText || questionCaption.textContent).slice(0, 140);
     var amount = el.closest && el.closest(".coverage-amount");
     var prior = amount && amount.previousElementSibling;
     var caption = prior && prior.querySelector("mat-label, label");
@@ -1457,14 +1460,17 @@
            * field by its label - it survives re-renders and covers every
            * card that repeats it; otherwise a re-locatable selector */
           var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
-          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80) : "";
+          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
+          // A truncated label cannot match the full source question later.
+          // Long carrier captions use the stable control selector instead.
+          if (labelKey.length > 140) labelKey = "";
           /* a sub-section's field ("Other Address" City) is its own mapping,
            * never its twin's in the other section */
           var sec = mapper && mapper.sectionOf ? mapper.sectionOf(tx) : { key: "", text: "" };
           var pickedPage = /(?:^| )address$/.test(sec.key) ? repeatInfo(boxLabel).page : "";
           finish({
             key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (pickedPage ? pickedPage + "|" : "") + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
-            label: (labelKey && inSection(tx, boxLabel)) || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            label: (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,
             scopes: mapper && mapper.scopesOf ? mapper.scopesOf(tx) : [],
