@@ -112,6 +112,7 @@ const ROW_SLOTS: Record<string, { slot: string; start: number }> = {
 /** "contacts[].email" + row 2 -> "contact3.email" (the one-row target a
  * form control fills from and captures into). */
 export function toRowTarget(arrayPath: string, row: number): string | null {
+  if (arrayPath === "note:properties[]") return Number.isInteger(row) && row >= 1 && row <= ARRAY_ROW_MAX ? `note:property${row}` : null;
   const m = /^((?:crm:|secure:)?[a-z]+)\[\]\.(.+)$/.exec(arrayPath);
   const cfg = m ? ROW_SLOTS[m[1]!] : undefined;
   if (!m || !cfg || !Number.isInteger(row) || row < 1 || row > ARRAY_ROW_MAX) return null;
@@ -120,6 +121,8 @@ export function toRowTarget(arrayPath: string, row: number): string | null {
 
 /** Inverse of toRowTarget: "contact3.email" -> {contacts[].email, row 2}. */
 export function rowTargetOf(path: string): { arrayPath: string; row: number } | null {
+  const propertyNote = /^note:property([1-9]|10)$/.exec(path);
+  if (propertyNote) return { arrayPath: "note:properties[]", row: Number(propertyNote[1]) };
   for (const [array, cfg] of Object.entries(ROW_SLOTS)) {
     const m = new RegExp(`^${cfg.slot.replace(":", "\\:")}(\\d+)\\.(.+)$`).exec(path);
     if (!m) continue;

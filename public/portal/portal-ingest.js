@@ -48,6 +48,9 @@
    * or aria attributes. Walk up a few levels, strip the controls out, and use
    * the container's short text as the label. */
   function containerLabel(control) {
+    const question = control.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return text(caption).slice(0, 140);
     let node = control;
     for (let hops = 0; hops < 5 && node.parentElement; hops += 1) {
       node = node.parentElement;
@@ -663,7 +666,11 @@
         const field = { label, value, name: clean(control.name || control.id), section: sectionOf(control).text || section, group: "", source: "control" };
         if (path && (/^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ||
             NOTE_PATH.test(path))) field.mapped = path;
-        if (field.mapped && /^note/.test(field.mapped)) noteControls.push({ field, control, key: keyOf(control) });
+        if (field.mapped && /^note/.test(field.mapped)) {
+          const system = /^yearUpdated(Heating|Electrical|Plumbing|Roofing)$/i.exec(control.name || control.id || "");
+          if (system && labelKey(label) === "year updated") field.label = `${system[1]}: Year Updated`;
+          noteControls.push({ field, control, key: keyOf(control) });
+        }
         else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) });
         fields.push(field);
       });

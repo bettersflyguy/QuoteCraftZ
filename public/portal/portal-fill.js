@@ -44,6 +44,9 @@
    * ancestor container instead of label[for]/aria - mirror the harvester's
    * fallback so those fields are matchable too. */
   function containerLabel(control) {
+    const question = control.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return clean(caption.innerText || caption.textContent).slice(0, 140);
     let node = control;
     for (let hops = 0; hops < 5 && node.parentElement; hops += 1) {
       node = node.parentElement;
@@ -273,7 +276,9 @@
    * the twins share */
   function shownLabel(element) {
     const own = controlKey(element) !== legacyControlKey(element) ? ownLabelText(element) : "";
-    return own || primaryLabel(element);
+    const label = own || primaryLabel(element);
+    const system = /^yearUpdated(Heating|Electrical|Plumbing|Roofing)$/i.exec(element.name || element.id || "");
+    return system && normText(label) === "year updated" ? `${system[1]}: Year Updated` : label;
   }
   /* where this control's saved mapping lives: the key made from its own
    * label first (whatever else is on the page), else its current key. When
@@ -1059,7 +1064,7 @@
     const c = tick();
     if (c.repeat) return c.repeat;
     const byKey = new Map();
-    pageControls(activeModal() || document).forEach((ct) => {
+    Array.from((activeModal() || document).querySelectorAll("input, select, textarea")).filter(visible).forEach((ct) => {
       const k = controlKey(ct);
       if (!byKey.has(k)) byKey.set(k, []);
       byKey.get(k).push(ct);

@@ -5,7 +5,8 @@ import path from "node:path";
 import type { CapturedApplication } from "@/boldpenguin/types";
 import { buildPropertyNote, buildTimelineNote } from "@/crm/appCommit";
 import { writePropertyNotes } from "@/crm/propertyNotes";
-import { isArrayPath, isNoteTarget, noteLabelOf, parseFieldMapImport } from "@/portal/fieldMaps";
+import { familyKeyOf, isArrayPath, isNoteTarget, noteLabelOf, parseFieldMapImport, rowTargetOf, toRowTarget } from "@/portal/fieldMaps";
+import type { PortalScanRow } from "@/boldpenguin/types";
 
 const app = {
   schemaVersion: "1.1", capturedAt: "2026-11-19T00:00:00Z", normalized: {},
@@ -31,6 +32,8 @@ describe("property collection notes", () => {
     expect(isNoteTarget("note:property0")).toBe(false);
     expect(isArrayPath("note:properties[]")).toBe(true);
     expect(noteLabelOf("note:property2")).toBe("Notes: Property 2");
+    expect(toRowTarget("note:properties[]", 2)).toBe("note:property2");
+    expect(rowTargetOf("note:property2")).toEqual({ arrayPath: "note:properties[]", row: 2 });
   });
 
   it("writes only to each loaded property and reports an unmatched row", async () => {
@@ -54,7 +57,11 @@ describe("property collection notes", () => {
 
 describe("capturing property notes", () => {
   type Field = { label: string; value: string; mapped?: string };
-  const g = globalThis as unknown as { __bettersPortalIngest: (t: unknown, c: unknown) => { fields: Field[] } };
+  const g = globalThis as unknown as {
+    __bettersPortalIngest: (t: unknown, c: unknown) => { fields: Field[] };
+    __bettersPortalPick: (timeout: number) => Promise<PortalScanRow | null | "timeout">;
+    __bettersControlKey: (el: Element) => string;
+  };
   beforeAll(() => {
     (globalThis as unknown as { CSS: { escape: (s: string) => string } }).CSS ??= { escape: s => s.replace(/([^\w-])/g, "\\$1") };
     HTMLElement.prototype.getBoundingClientRect = function () { return { left: 10, top: 40, width: 80, height: 16, right: 90, bottom: 56, x: 10, y: 40, toJSON() { return {}; } } as DOMRect; };
@@ -74,5 +81,30 @@ describe("capturing property notes", () => {
     document.body.innerHTML = `<label for="retiree">Retirees Credit</label><input id="retiree" name="retiree" value="Yes"><label for="ssn">SSN</label><input id="ssn" name="ssn" value="123-45-6789">`;
     const fields = g.__bettersPortalIngest([], { "text:retiree": "note:properties[]", "text:ssn": "note:properties[]" }).fields.filter(f => f.mapped?.startsWith("note:"));
     expect(fields.map(f => [f.label, f.value, f.mapped])).toEqual([["Retirees Credit", "Yes", "note:property1"]]);
+  });
+
+  it("does not turn disabled system years into different property rows", async () => {
+    document.title = "Applicant - Dwelling Info";
+    document.body.innerHTML = `<main>${["Heating", "Electrical", "Plumbing", "Roofing"].map((system, i) =>
+      `<mat-form-field><label for="yearUpdated${system}">Year Updated</label><input type="number" id="yearUpdated${system}" name="yearUpdated${system}" value="${2000 + i}" ${i < 3 ? "disabled" : ""}></mat-form-field>`
+    ).join("")}</main>`;
+    const heating = document.getElementById("yearUpdatedHeating")!;
+    const picking = g.__bettersPortalPick(5000);
+    heating.closest("mat-form-field")!.querySelector("label")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    const row = await picking as PortalScanRow;
+    expect(row).toMatchObject({ repeats: 1, fieldLabel: "Heating: Year Updated" });
+    expect(familyKeyOf(row)).toBeNull();
+    const controls = Object.fromEntries(Array.from(document.querySelectorAll("input")).slice(0, 3).map(el => [g.__bettersControlKey(el), "note:property1"]));
+    const fields = g.__bettersPortalIngest([], controls).fields.filter(f => f.mapped === "note:property1");
+    expect(fields.map(f => [f.label, f.value])).toEqual([
+      ["Heating: Year Updated", "2000"], ["Electrical: Year Updated", "2001"], ["Plumbing: Year Updated", "2002"]
+    ]);
+  });
+
+  it("uses the visible carrier question outside its nested form", () => {
+    document.body.innerHTML = `<main><icq-question><label>Enter the year updated for the cooling type in YYYY format</label><div class="row"><icq-question-input><form><ez-read-only-field-wrapper><mat-form-field><input id="allied_coolingyear" name="questionInput" value="2020"></mat-form-field></ez-read-only-field-wrapper></form></icq-question-input></div></icq-question></main>`;
+    const key = g.__bettersControlKey(document.querySelector("input")!);
+    const fields = g.__bettersPortalIngest([], { [key]: "note:property1" }).fields.filter(f => f.mapped === "note:property1");
+    expect(fields).toMatchObject([{ label: "Enter the year updated for the cooling type in YYYY format", value: "2020" }]);
   });
 });
