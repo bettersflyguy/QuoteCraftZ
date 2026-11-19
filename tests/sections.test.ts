@@ -113,6 +113,29 @@ describe("section-scoped field keys", () => {
     expect(row!.label).toBe("Applicant Info: Address State");
   });
 
+  it("scopes a styled dwelling address field to its page", async () => {
+    document.title = "Applicant - Dwelling Info";
+    document.body.innerHTML = panel("dwelling", "Dwelling Address", `<mat-form-field><label>State</label><mat-select role="combobox"><span id="dwelling-state">MN</span></mat-select></mat-form-field>`);
+    const pending = g.__bettersPortalPick!(5000) as Promise<{ key: string } | null>;
+    document.getElementById("dwelling-state")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
+    expect((await pending)!.key).toBe("field:dwelling info|dwelling address>state");
+    document.title = "";
+  });
+
+  it("prevents source focus and autocomplete while picking, then removes its guards", async () => {
+    document.body.innerHTML = field("Address", "pick-address", "address", "Original street");
+    const input = document.getElementById("pick-address")!;
+    const pending = g.__bettersPortalPick!(5000) as Promise<unknown>;
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true });
+    input.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    input.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
+    await pending;
+    const after = new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true });
+    input.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
   it("a rating step's values are the prior / new policy of that line", () => {
     document.title = "Tracy Dittrich - Policy Info";
     document.body.innerHTML = `<header><h1>Auto</h1></header><main>${field("Prior Carrier", "pc", "priorCarrier", "Travelers")}${field("Prior Policy Expiration Date", "px", "priorExp", "12/01/2019")}${field("Years with Continuous Coverage", "yc", "years", "More than 15")}${field("New Policy Term", "nt", "term", "12 Month")}${field("Paperless", "pl", "paperless", "Yes")}</main>`;

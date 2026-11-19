@@ -1355,6 +1355,8 @@
         activePickCancel = null;
         clearHover();
         document.removeEventListener("mouseover", onHover, true);
+        document.removeEventListener("pointerdown", onPointerDown, true);
+        document.removeEventListener("mousedown", onPointerDown, true);
         document.removeEventListener("click", onClick, true);
         document.removeEventListener("keydown", onKey, true);
         window.removeEventListener("message", onMessage);
@@ -1386,6 +1388,14 @@
         hoveredOffset = box.style.outlineOffset;
         box.style.outline = "2px solid #0f6cbd";
         box.style.outlineOffset = "1px";
+      }
+
+      function onPointerDown(event) {
+        // Selection must not focus/open the source control before the click
+        // is intercepted (address autocomplete can otherwise edit the form).
+        if (!pickTarget(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
       }
 
       function onClick(event) {
@@ -1432,8 +1442,9 @@
           /* a sub-section's field ("Other Address" City) is its own mapping,
            * never its twin's in the other section */
           var sec = mapper && mapper.sectionOf ? mapper.sectionOf(tx) : { key: "", text: "" };
+          var pickedPage = /(?:^| )address$/.test(sec.key) ? repeatInfo(boxLabel).page : "";
           finish({
-            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
+            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (pickedPage ? pickedPage + "|" : "") + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
             label: (labelKey && inSection(tx, boxLabel)) || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,
@@ -1464,6 +1475,8 @@
       timer = setTimeout(function () { finish("timeout"); }, timeoutMs || 20000);
       activePickCancel = function () { finish(null); };
       document.addEventListener("mouseover", onHover, true);
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("mousedown", onPointerDown, true);
       document.addEventListener("click", onClick, true);
       document.addEventListener("keydown", onKey, true);
       window.addEventListener("message", onMessage);
