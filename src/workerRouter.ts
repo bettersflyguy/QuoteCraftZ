@@ -1329,7 +1329,9 @@ async function peekPortalTab(
     arg = {
       // the editor's service items only signal a change: the saved
       // data-service mapping is the truth
-      items: [...items.filter(i => !i.key.startsWith("service:")), ...service],
+      items: [...items.filter(i => !i.key.startsWith("service:")), ...service.map(i => ({
+        ...i, focused: items.some(selected => selected.key === i.key && selected.focused)
+      }))],
       map: {},
       payload: await getCapturedApplication(),
       pageLabels: origin === "https://app.ezlynx.com" ? coveredPageLabels((await getDataServiceMaps())["ezlynx"]) : []

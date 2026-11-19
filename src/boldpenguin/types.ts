@@ -119,6 +119,8 @@ export interface PeekItem {
   key: string;
   label: string;
   kind: "mapped" | "auto" | "skip";
+  /** The mapping selected in the panel, shown in bright pink on the page. */
+  focused?: boolean;
   /** Array teaching - highlight every row the capture would pull. */
   array?: boolean;
   /** A section's field mapped to an array: every section of that kind

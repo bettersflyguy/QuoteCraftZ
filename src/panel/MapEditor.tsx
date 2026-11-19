@@ -81,7 +81,9 @@ const useStyles = makeStyles({
  * addresses and any other repeated record reach a quote form. */
 export interface CapturedTarget { value: string; label: string }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek, highlightKey, onHighlight }: {
+  highlightKey?: string | null;
+  onHighlight?: (key: string) => void;
   /** Header text (defaults to "Field mapping for <origin>"). */
   title?: string;
   /** List only mapped/picked rows, not auto-matches (data-service sites). */
@@ -257,7 +259,8 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     if (r.autoPath && !hideAuto) return [{ key: r.key, label: `Auto: ${PATH_LABEL.get(r.autoPath) ?? r.autoPath}`, kind: "auto" }];
     return [];
   }).concat((extraPeek ?? []).map(x => ({ key: x.key, label: targetText(x.target), kind: "mapped" as const, ...(x.family ? { family: true } : {}), ...(x.labels ? { labels: x.labels } : {}) })));
-  const peekSignature = JSON.stringify(peekItems);
+  const highlightedItems = peekItems.map(item => ({ ...item, focused: item.key === highlightKey }));
+  const peekSignature = JSON.stringify(highlightedItems);
   // on from the start: the page shows green/red while mapping and re-colors
   // with every change (the eye turns it off)
   const [peeking, setPeeking] = useState(Boolean(onPeek));
@@ -265,7 +268,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   useEffect(() => {
     if (!peeking || !onPeek) return;
     let live = true;
-    void onPeek(peekItems).then(r => {
+    void onPeek(highlightedItems).then(r => {
       if (!live) return;
       setPeekNote(`${r.shown} mapped in green${r.unmapped ? `, ${r.unmapped} unmapped in red` : ""}${r.missing ? `, ${r.missing} not on this page` : ""}.`);
     }).catch(e => { if (live) setPeekNote(String((e as Error).message ?? e)); });
@@ -344,8 +347,12 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
             // same signal as the page peek: green mapped, red not, grey never fill
             style={{ borderLeft: `3px solid ${r.payment ? "transparent" : current === "skip" ? "#8a8886" : current || r.autoPath ? "#13a10e" : "#d13438"}`, paddingLeft: 4 }}
             ref={el => { if (el) rowRefs.current.set(r.key, el); else rowRefs.current.delete(r.key); }}
+            onClick={() => { if (current && current !== "skip") { onHighlight?.(r.key); setPeeking(true); } }}
           >
-            <span className={styles.label} title={r.key}>{r.label}</span>
+            <button type="button" className={styles.label} title={r.key}
+              aria-label={`Highlight ${r.label} on page`}
+              style={{ background: "none", border: 0, padding: 0, textAlign: "left", font: "inherit", cursor: "pointer" }}
+            >{r.label}</button>
             {r.payment
               ? <span>Payment field, never filled</span>
               : isPick ? (

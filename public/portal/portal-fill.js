@@ -1470,6 +1470,7 @@
    * (pointer-events: none) and every style is restored on clear. --- */
   var peekMarks = [];
   var PEEK_STYLE = {
+    focused: { outline: "4px solid #ff00ff", badge: "#d000a8" },
     mapped: { outline: "3px solid #13a10e", badge: "#13a10e" },
     /* auto-matched IS mapped: green, dashed so it reads as a guess */
     auto: { outline: "2px dashed #13a10e", badge: "#13a10e" },
@@ -1514,7 +1515,7 @@
    * extension update orphans it mid-peek): badges carry data-betters-peek;
    * outlines are tagged since, and older ones are known by their exact
    * peek colors with the 1px offset */
-  var PEEK_COLORS = /rgb\((19, 161, 14|15, 108, 189|138, 136, 134|209, 52, 56)\)|#(13a10e|0f6cbd|8a8886|d13438)/i;
+  var PEEK_COLORS = /rgb\((19, 161, 14|15, 108, 189|138, 136, 134|209, 52, 56|255, 0, 255)\)|#(13a10e|0f6cbd|8a8886|d13438|ff00ff)/i;
   function sweepStalePeek() {
     try {
       document.querySelectorAll("[data-betters-peek]").forEach(function (b) { if (b.parentNode) b.parentNode.removeChild(b); });
@@ -1546,7 +1547,19 @@
 
   function markPeek(el, kind, label) {
     var s = PEEK_STYLE[kind] || PEEK_STYLE.mapped;
-    var mark = { el: el, outline: el.style.outline, offset: el.style.outlineOffset, badge: null };
+    // A service mapping and a page mapping may cover the same element.
+    // Keep one original style so clearing the selected pink outline restores it.
+    var existing = peekMarks.find(function (m) { return m.el === el; });
+    if (existing) {
+      el.style.outline = s.outline;
+      existing.focused = kind === "focused";
+      if (existing.badge) {
+        existing.badge.style.background = s.badge;
+        if (label) existing.badge.textContent = label;
+      }
+      return;
+    }
+    var mark = { el: el, outline: el.style.outline, offset: el.style.outlineOffset, badge: null, focused: kind === "focused" };
     if (!el.hasAttribute("data-betters-peek-outline")) {
       el.setAttribute("data-betters-peek-outline", el.style.outline || "");
       el.setAttribute("data-betters-peek-offset", el.style.outlineOffset || "");
@@ -1583,6 +1596,8 @@
     });
     var shown = 0;
     var missing = 0;
+    // Selected fields are painted last so overlapping mappings stay pink.
+    items = items.filter(function (it) { return !it || !it.focused; }).concat(items.filter(function (it) { return it && it.focused; }));
     items.forEach(function (it) {
       if (!it || typeof it.key !== "string") return;
       var els = [];
@@ -1605,7 +1620,7 @@
       if (!els.length) { missing += 1; return; }
       shown += 1;
       els.forEach(function (el, i) {
-        markPeek(el, it.kind, i === 0 ? String(it.label || "") + (it.array && els.length > 1 ? " (" + els.length + " rows)" : "") : "");
+        markPeek(el, it.focused ? "focused" : it.kind, i === 0 ? String(it.label || "") + (it.array && els.length > 1 ? " (" + els.length + " rows)" : "") : "");
       });
     });
     watchBadges(true);
@@ -1621,6 +1636,7 @@
    * Only real content changes count - the badges this script adds are
    * ignored, so re-applying never feeds itself. */
   var lastPeekArg = null;
+  var lastFocusedKey = "";
   var peekObserver = null;
   var peekRedo = 0;
   function isOwnNode(n) { return n && n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-betters-peek"); }
@@ -1644,11 +1660,17 @@
     if (!redo) watchPage(true);
     clearPeek();
     var items = (arg && Array.isArray(arg.items)) ? arg.items : [];
+    var focusedKey = items.filter(function (it) { return it && it.focused; }).map(function (it) { return it.key; }).join("|");
     var r = peek(items, true);
     var map = {};
     Object.keys((arg && arg.map) || {}).forEach(function (k) { map[k] = arg.map[k]; });
     items.forEach(function (it) { if (it && typeof it.key === "string") map[it.key] = map[it.key] || (it.family ? "family" : "shown"); });
     var u = peekUnmapped({ map: map, payload: arg && arg.payload, pageLabels: arg && arg.pageLabels }, true);
+    if (focusedKey && focusedKey !== lastFocusedKey) {
+      var selected = peekMarks.find(function (m) { return m.focused; });
+      if (selected && typeof selected.el.scrollIntoView === "function") selected.el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    lastFocusedKey = focusedKey;
     watchBadges(true);
     return { shown: r.shown, missing: r.missing, unmapped: u.shown };
   }
