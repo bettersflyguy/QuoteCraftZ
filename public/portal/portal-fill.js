@@ -76,7 +76,7 @@
   function primaryLabel(element) {
     /* EZLynx carrier selects point aria-labelledby at the selected answer.
      * The question's own caption is the stable field identity. */
-    const question = element.closest("icq-question");
+    const question = element.tagName === "MAT-SELECT" ? element.closest("icq-question") : null;
     const caption = question && question.querySelector(":scope > label");
     if (caption) return clean(caption.innerText || caption.textContent).slice(0, 140);
     const fieldset = element.closest("fieldset");
@@ -553,10 +553,10 @@
     return null;
   }
 
-  function pageControls(fillRoot) {
+  function pageControls(fillRoot, includeReadOnly) {
     return Array.from(fillRoot.querySelectorAll("input, select, textarea"))
       .filter(visible)
-      .filter((element) => !element.disabled && !element.readOnly)
+      .filter((element) => includeReadOnly || (!element.disabled && !element.readOnly))
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
   }
 
@@ -1106,7 +1106,7 @@
     return { repeats: repeatSections.length, repeatSections, page: parts.length > 1 ? normText(parts[parts.length - 1]).slice(0, 40) : "" };
   }
 
-  /* mapping editor's view of this frame: every fillable control with its key,
+  /* mapping editor's view of this frame: every visible control with its key,
    * visible label, what auto-matching would pick, and any saved mapping */
   function scanControls(payload, overrides) {
     const ov = overrides || {};
@@ -1116,17 +1116,20 @@
     /* saved keys of controls that now carry their own key: the key stays a
      * row of its own (below) so a Save writes it back untouched */
     const legacyShared = new Map();
-    for (const element of pageControls(activeModal() || document)) {
+    for (const element of pageControls(activeModal() || document, true)) {
       const name = fieldName(element);
       if (!name) continue;
       /* a box whose own-label key holds a mapping is listed under it even when
        * it is alone on the page and its current key is the legacy key, so a
        * Save keeps that mapping */
       const key = rowKeyOf(ov, element);
-      if (seen.has(key)) continue;
-      seen.add(key);
       const legacy = legacyControlKey(element);
       const inherited = legacyRefused(ov, element);
+      // Identify explicitly taught disabled values without advertising an
+      // ambiguous old shared key as a mapping for its disabled siblings.
+      if ((element.disabled || element.readOnly) && (!ov[key] || inherited)) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
       if (legacy !== key) {
         const hit = legacyShared.get(legacy) || { element, count: 0 };
         hit.count += 1;

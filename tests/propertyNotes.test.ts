@@ -61,6 +61,7 @@ describe("capturing property notes", () => {
     __bettersPortalIngest: (t: unknown, c: unknown) => { fields: Field[] };
     __bettersPortalPick: (timeout: number) => Promise<PortalScanRow | null | "timeout">;
     __bettersControlKey: (el: Element) => string;
+    __bettersPortalScan: (payload: unknown, controls: Record<string, string>) => PortalScanRow[];
   };
   beforeAll(() => {
     (globalThis as unknown as { CSS: { escape: (s: string) => string } }).CSS ??= { escape: s => s.replace(/([^\w-])/g, "\\$1") };
@@ -137,5 +138,13 @@ describe("capturing property notes", () => {
     expect(fields.map(f => [f.label, f.value])).toEqual(expect.arrayContaining([
       ["Other Structures: Amount", "$19,800"], ["Loss Of Use: Amount", "$19,800"], ["Coins: Breakage", "No"], ["Fine Arts: Breakage", "No"]
     ]));
+  });
+
+  it("shows saved mappings for disabled and read-only fields in the editor scan", () => {
+    document.body.innerHTML = `<label for="business">Business Name</label><input id="business" name="businessPursuitsName" disabled><label for="excluded">Exclude Masonry Veneer</label><input id="excluded" name="excludeMasonryVeneer" type="checkbox" disabled><label for="source">Source</label><input id="source" name="source" readonly>`;
+    const mappings = { "text:businessPursuitsName": "note:property1", "checkbox:excludeMasonryVeneer": "note:property1", "text:source": "note:property1" };
+    const rows = g.__bettersPortalScan(null, mappings);
+    expect(rows).toHaveLength(3);
+    expect(rows.map(row => [row.key, row.mapped])).toEqual(Object.entries(mappings));
   });
 });
