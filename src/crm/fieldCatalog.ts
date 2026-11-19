@@ -10,7 +10,7 @@ import { autoMatchOption } from "@/portal/optionMaps";
 import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
 import type { CrmEnvironment } from "./environments";
 import { classifyCatalogError, type CatalogUnavailable } from "./catalogNote";
-import { caseOf, describeCatalogError, statusOf, type CatalogDiagnostics, type PicklistProbe, type TableDiagnostic } from "./catalogDiagnostics";
+import { caseOf, describeCatalogError, safeAccount, statusOf, type CatalogDiagnostics, type PicklistProbe, type TableDiagnostic } from "./catalogDiagnostics";
 
 export interface CatalogColumn {
   name: string;
@@ -275,6 +275,7 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
   // so a catalog where EVERY table failed can say why
   let firstFailure: unknown;
   let failed = false;
+  let account: string | undefined;
   for (const e of CATALOG_ENTITIES) {
     if (!byLogical.has(e.logical)) {
       byLogical.set(e.logical, fetchColumns(env, e.logical, api).then(r => {
@@ -283,6 +284,7 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
       }, err => {
         if (!failed) { failed = true; firstFailure = err; }
         const status = statusOf(err);
+        account ??= safeAccount((err as { upn?: string | null } | null)?.upn) ?? undefined;
         tables.set(e.logical, { logical: e.logical, ok: false, ...(status ? { status } : {}), error: describeCatalogError(classifyCatalogError(err)), columns: 0 });
         return { columns: [], secured: [], filtered: 0, picklist: { ok: true, hidden: 0 } } as FetchedColumns;
       }));
@@ -295,7 +297,7 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
   return {
     envId: env.id, fetchedAt, entities,
     ...(!entities.length && failed ? { unavailable: classifyCatalogError(firstFailure) } : {}),
-    diagnostics: { version: CACHE_VERSION, source: "live", fetchedAt, envId: env.id, case: caseOf(list), tables: list }
+    diagnostics: { version: CACHE_VERSION, source: "live", fetchedAt, envId: env.id, envName: env.name, ...(account ? { account } : {}), case: caseOf(list), tables: list }
   };
 }
 

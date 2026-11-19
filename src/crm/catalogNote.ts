@@ -4,10 +4,14 @@
  * line, and a failed read of every table was swallowed into an empty
  * catalog with no reason at all. */
 
+/** What Dataverse itself said when it refused (AB#3745): its error code and
+ * message (query and URLs stripped), and the account the token belongs to. */
+export interface RefusalInfo { upn?: string; dvCode?: string; dvMessage?: string }
+
 export type CatalogUnavailable =
   | { kind: "signin" }
-  | { kind: "rejected"; status: 401 }
-  | { kind: "role"; status: 403 }
+  | ({ kind: "rejected"; status: 401 } & RefusalInfo)
+  | ({ kind: "role"; status: 403 } & RefusalInfo)
   | { kind: "other"; detail: string };
 
 /** ADO task that tracks the missing CRM security role for the connector. */
@@ -18,7 +22,13 @@ export function classifyCatalogError(e: unknown): CatalogUnavailable {
   const err = e as { name?: string; status?: number; message?: string } | null;
   if (err?.name === "AuthRequiredError") return { kind: "signin" };
   if (err?.name === "CrmAccessError") {
-    return err.status === 403 ? { kind: "role", status: 403 } : { kind: "rejected", status: 401 };
+    const r = err as RefusalInfo & { upn?: string | null };
+    const info: RefusalInfo = {
+      ...(typeof r.upn === "string" && r.upn ? { upn: r.upn } : {}),
+      ...(typeof r.dvCode === "string" && r.dvCode ? { dvCode: r.dvCode } : {}),
+      ...(typeof r.dvMessage === "string" && r.dvMessage ? { dvMessage: r.dvMessage } : {})
+    };
+    return err.status === 403 ? { kind: "role", status: 403, ...info } : { kind: "rejected", status: 401, ...info };
   }
   // never carry a URL query string (or anything after it) into the panel
   const detail = String(err?.message ?? e ?? "").replace(/\?\S*/g, "").replace(/\s+/g, " ").trim().slice(0, 120);

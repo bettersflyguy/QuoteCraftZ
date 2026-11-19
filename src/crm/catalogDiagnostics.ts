@@ -35,20 +35,42 @@ export interface CatalogDiagnostics {
   source: "cached" | "live";
   fetchedAt: number;
   envId: string;
+  /** Environment display name (e.g. DEV), for the plain-words note. */
+  envName?: string;
+  /** Account Dataverse refused, from the token's claims (never the token). */
+  account?: string;
   case: CatalogCase;
   tables: TableDiagnostic[];
 }
 
 /** Strips anything that could carry a secret from error text: the query
  * string, bearer tokens and long token-like strings. */
-export function safeText(text: string): string {
+export function safeText(text: string, max = 120): string {
   return text
+    .replace(/https?:\/\/\S+/gi, "[url]")
     .replace(/\?\S*/g, "")
     .replace(/Bearer\s+\S+/gi, "[redacted]")
     .replace(/\b[A-Za-z0-9_-]{24,}(\.[A-Za-z0-9_-]{10,})*\b/g, "[redacted]")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 120);
+    .slice(0, max);
+}
+
+/** The signed-in account's UPN/email for display, or null when it isn't a
+ * plain account name (never a token or anything with a query). */
+export function safeAccount(upn: string | null | undefined): string | null {
+  return typeof upn === "string" && /^[^\s?/]{1,100}$/.test(upn) && upn.includes("@") ? upn : null;
+}
+
+/** Dataverse's error code and message from a refusal body
+ * ({"error":{"code":"0x80040220","message":"..."}}); anything else is dropped. */
+export function parseRefusal(body: string): { code?: string; message?: string } {
+  try {
+    const e = (JSON.parse(body) as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+    const code = typeof e?.code === "string" ? safeText(e.code, 40) : "";
+    const message = typeof e?.message === "string" ? safeText(e.message, 160) : "";
+    return { ...(code ? { code } : {}), ...(message ? { message } : {}) };
+  } catch { return {}; }
 }
 
 /** HTTP status an error carries: CrmAccessError.status, or the status that
@@ -60,12 +82,15 @@ export function statusOf(e: unknown): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
+const reasonOf = (c: { dvCode?: string; dvMessage?: string }) =>
+  c.dvCode || c.dvMessage ? ` Dataverse: ${[c.dvCode, c.dvMessage].filter(Boolean).join(" ")}` : "";
+
 /** Short, safe text for a classified failure. */
 export function describeCatalogError(c: CatalogUnavailable): string {
   switch (c.kind) {
     case "signin": return "sign-in required";
-    case "rejected": return "sign-in rejected (HTTP 401)";
-    case "role": return "no security role to read this table (HTTP 403)";
+    case "rejected": return safeText(`sign-in rejected (HTTP 401)${reasonOf(c)}`, 240);
+    case "role": return safeText(`refused (HTTP 403)${reasonOf(c)}`, 240);
     default: return safeText(c.detail) || "unknown error";
   }
 }
@@ -97,7 +122,16 @@ export function diagnosticNote(
   const c = panelCase(catalog as never, messageError, loading);
   if (c === "loading") return "Reading CRM field list…";
   if (c === "message-failed") return `CRM field list: the request to the extension worker failed (${safeText(messageError ?? "") || "no detail"}). Showing built-in targets.`;
-  if (c === "all-failed") return allFailedNote;
+  if (c === "all-failed") {
+    // every table refused with 403: say plainly whose account and where
+    const t = catalog?.diagnostics?.tables ?? [];
+    if (t.length && t.every(x => !x.ok && x.status === 403)) {
+      const who = catalog?.diagnostics?.account ?? "this account";
+      const env = catalog?.diagnostics?.envName || "this environment";
+      return `CRM field list not loaded: Dataverse refused ${who} in ${env} (HTTP 403) on every table. Showing only built-in targets. A CRM administrator needs to give this account a security role in ${env}, or sign in with the work account that has ${env} access.`;
+    }
+    return allFailedNote;
+  }
   const tables = catalog?.diagnostics?.tables ?? [];
   const hidden = tables.reduce((n, t) => n + (t.picklist?.hidden ?? 0), 0);
   const probeFailed = tables.filter(t => t.picklist && !t.picklist.ok);
@@ -128,18 +162,23 @@ export function diagnosticText(
   if (!catalog) lines.push("Catalog: none received");
   else {
     lines.push(`Entities listed: ${catalog.entities.length}`);
-    if (catalog.unavailable) lines.push(`Unavailable reason: ${describeCatalogError(catalog.unavailable)}`);
+    if (catalog.unavailable) {
+      lines.push(`Unavailable reason: ${describeCatalogError(catalog.unavailable)}`);
+      const u = catalog.unavailable as { upn?: string };
+      if (u.upn && !d?.account) lines.push(`Account refused: ${u.upn}`);
+    }
   }
   if (d) {
     lines.push(
       `Catalog version: ${d.version}`,
       `Source: ${d.source}`,
       `Fetched at: ${when(d.fetchedAt)}`,
-      `Environment: ${safeText(d.envId) || "unknown"}`,
+      `Environment: ${safeText(d.envId) || "unknown"}${d.envName ? ` (${safeText(d.envName, 60)})` : ""}`,
+      ...(d.account ? [`Account refused: ${d.account}`] : []),
       "Tables:"
     );
     for (const t of d.tables) {
-      lines.push(`  ${t.logical}: ${t.ok ? "ok" : "FAILED"}${t.status ? ` HTTP ${t.status}` : ""}${t.error ? ` (${safeText(t.error)})` : ""}; columns ${t.columns}`);
+      lines.push(`  ${t.logical}: ${t.ok ? "ok" : "FAILED"}${t.status ? ` HTTP ${t.status}` : ""}${t.error ? ` (${safeText(t.error, 240)})` : ""}; columns ${t.columns}`);
       if (t.picklist) {
         lines.push(`    choice probe: ${t.picklist.ok ? "ok" : `FAILED${t.picklist.status ? ` HTTP ${t.picklist.status}` : ""}${t.picklist.error ? ` (${safeText(t.picklist.error)})` : ""}`}; choice columns hidden (no options): ${t.picklist.hidden}`);
       }

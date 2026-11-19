@@ -1,17 +1,24 @@
 import { getAccessToken } from "./auth";
 import type { CrmEnvironment } from "./environments";
+import { parseRefusal, safeAccount } from "./catalogDiagnostics";
 import type { AccountEnrichmentState, ContactRow, NewContact } from "./enrich";
 
 export class CrmAccessError extends Error {
   orgUrl: string;
   status: number;
   upn: string | null;
-  constructor(orgUrl: string, status: number, upn: string | null = null) {
+  /** Dataverse's own error code and message from the refusal body (URL and
+   * query stripped); never headers, tokens or the raw body. */
+  dvCode?: string;
+  dvMessage?: string;
+  constructor(orgUrl: string, status: number, upn: string | null = null, reason: { code?: string; message?: string } = {}) {
     super(`No access to ${orgUrl} (HTTP ${status})`);
     this.name = "CrmAccessError";
     this.orgUrl = orgUrl;
     this.status = status;
-    this.upn = upn;
+    this.upn = safeAccount(upn);
+    if (reason.code) this.dvCode = reason.code;
+    if (reason.message) this.dvMessage = reason.message;
   }
 }
 
@@ -60,7 +67,13 @@ async function dv(env: CrmEnvironment, path: string, init: RequestInit = {}): Pr
     await new Promise(r => setTimeout(r, wait * 1000));
     res = await doFetch();
   }
-  if (res.status === 401 || res.status === 403) throw new CrmAccessError(env.orgUrl, res.status, upnFromToken(token));
+  if (res.status === 401 || res.status === 403) {
+    // keep Dataverse's own reason: a 403 can be a missing role, a disabled
+    // user or a blocked environment, and only its body says which
+    let reason: { code?: string; message?: string } = {};
+    try { reason = parseRefusal(await res.clone().text()); } catch { /* no readable body */ }
+    throw new CrmAccessError(env.orgUrl, res.status, upnFromToken(token), reason);
+  }
   return res;
 }
 
