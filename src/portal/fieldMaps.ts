@@ -390,18 +390,19 @@ export function familyKeyOf(r: { fieldLabel?: string; section?: string; repeats?
   const section = (r.section ?? "").slice(0, 40);
   const shown = (r.fieldLabel ?? "").replace(/^[*\s]+|[:*\s]+$/g, "");
   const kindOf = (s: string) => s.split(" ").pop() ?? "";
+  const page = (r.page ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 40);
   // repeated cards (one per driver: "Primary Insured", "Additional Driver"):
   // the label on this page step covers every card, card order = row order,
   // and each row finds its person by the name on that card. Sections of
   // one kind ("Primary / Other Address") stay the section family below.
   const sameKind = Boolean(section) && (r.repeatSections ?? []).every(s => s && kindOf(s) === kindOf(section));
   if (field && (r.repeats ?? 0) > 1 && !sameKind) {
-    const page = (r.page ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 40);
     return { key: `field:${page ? `${page}|` : ""}${field}`, label: `${shown} (every card)` };
   }
   if (!field || !section) return null;
   const kind = section.split(" ").pop()!;
-  return { key: `field:${section}>${field}`, label: `${r.fieldLabel!.replace(/^[*\s]+|[:*\s]+$/g, "")} (every ${kind})` };
+  // A dwelling address must not also teach applicant addresses on Details.
+  return { key: `field:${page ? `${page}|` : ""}${section}>${field}`, label: `${r.fieldLabel!.replace(/^[*\s]+|[:*\s]+$/g, "")} (every ${kind})` };
 }
 
 /** A scoped label's scope against an element's scopes (every titled box

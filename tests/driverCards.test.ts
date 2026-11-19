@@ -16,7 +16,7 @@ describe("driver cards", () => {
     expect(familyKeyOf({ fieldLabel: "First Name", section: "", repeats: 2, repeatSections: ["", ""], page: "drivers" })!.key).toBe("field:drivers|first name");
     // twin address sections of one kind keep their section family
     expect(familyKeyOf({ fieldLabel: "City", section: "other address", repeats: 2, repeatSections: ["primary address", "other address"], page: "details" })!.key)
-      .toBe("field:other address>city");
+      .toBe("field:details|other address>city");
   });
 
   it("card rows land on the people they name, whatever the card order", () => {

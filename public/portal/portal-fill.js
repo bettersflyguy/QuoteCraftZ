@@ -980,6 +980,14 @@
     let el = null;
     if (key && key.indexOf("pick:") === 0) {
       try { el = document.querySelector(key.slice(5)); } catch (_e) { el = null; }
+    } else if (key && key.indexOf("field:") === 0) {
+      // Selector teachings use labelled-field keys, including every-row
+      // families. Resolve them through the same lookup used by capture/peek.
+      const m = FIELD_KEY_RE.exec(key);
+      const fields = m && typeof globalThis.__bettersFieldsByLabel === "function"
+        ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2], m[2].indexOf(">") > 0) : [];
+      const box = fields[0];
+      el = box ? (box.matches(LABELLED_FIELDS) ? box : box.querySelector(LABELLED_FIELDS)) : null;
     } else if (key) {
       el = findChoiceControl(key, hint);
     } else {

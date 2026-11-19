@@ -71,6 +71,13 @@ describe("addresses target grammar", () => {
     expect(catalogLabel(catalog, "crm:address3.city")).toBe("Address 3: City");
     expect(catalogLabel(catalog, "crm:addresses[].city")).toBe("Addresses: City");
   });
+
+  it("labels property rows as properties rather than policies", () => {
+    const catalog: FieldCatalog = { envId: "x", fetchedAt: 0, entities: [
+      { key: "properties", logical: "iacrm_property", set: "iacrm_properties", label: "Properties (all rows)", array: true, columns: [{ name: "iacrm_roofyear", label: "Roof year", type: "Integer" }] }
+    ] };
+    expect(catalogLabel(catalog, "crm:property1.iacrm_roofyear")).toBe("Property 1: Roof year");
+  });
 });
 
 const panel = (title: string, inner: string) =>
@@ -107,6 +114,18 @@ describe("address cards on a page", () => {
     expect(r.fields.filter(f => f.mapped).map(f => [f.mapped, f.value])).toEqual([
       ["crm:address1.city", "CHAMPLIN"], ["crm:address2.city", "Maple Grove"], ["crm:address3.city", "Champlin"]
     ]);
+  });
+
+  it("a dwelling teaching never captures applicant addresses on a different step", () => {
+    const teaching = [{ byLabel: "dwelling address>city", page: "dwelling info", label: "City", path: "crm:properties[].iacrm_city", section: "Properties" }];
+    document.title = "Applicant - Dwelling Info";
+    document.body.innerHTML = panel("Dwelling Address", field("City", "dwellingCity", "city", "Maple Grove"));
+    const dwelling = g.__bettersPortalIngest!(teaching, {}) as { fields: { value: string; mapped?: string }[] };
+    expect(dwelling.fields.filter(f => f.mapped).map(f => f.value)).toEqual(["Maple Grove"]);
+    document.title = "Applicant - Details";
+    document.body.innerHTML = PAGE;
+    const applicant = g.__bettersPortalIngest!(teaching, {}) as { fields: { mapped?: string }[] };
+    expect(applicant.fields.filter(f => f.mapped)).toEqual([]);
   });
 
   it("a control's list mapping becomes that every-card label mapping", () => {

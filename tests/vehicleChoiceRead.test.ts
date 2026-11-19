@@ -38,10 +38,18 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     Element.prototype.getClientRects = function (this: Element) {
       return (this.isConnected ? [this.getBoundingClientRect()] : []) as unknown as DOMRectList;
     };
-    for (const f of ["portal-mapper.js", "portal-fill.js"]) {
+    for (const f of ["portal-mapper.js", "portal-fill.js", "portal-ingest.js"]) {
       // eslint-disable-next-line no-new-func
       new Function(readFileSync(path.resolve(__dirname, "../public/portal", f), "utf8"))();
     }
+  });
+
+  it("reads choices from a selector-created labelled field on its own page", async () => {
+    document.title = "Applicant - Dwelling Info";
+    document.body.innerHTML = `<mat-form-field><label for="secondaryHeat">Secondary Heating Source Type</label>
+      <select id="secondaryHeat"><option>Electric</option><option>Wood</option></select></mat-form-field>`;
+    expect((await read("field:dwelling info|secondary heating source type"))?.options).toEqual(["Electric", "Wood"]);
+    expect(await read("field:drivers|secondary heating source type")).toBeNull();
   });
 
   it("finds a native select whose generated id changed after a re-render", async () => {
