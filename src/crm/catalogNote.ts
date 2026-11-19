@@ -6,7 +6,7 @@
 
 /** What Dataverse itself said when it refused (AB#3745): its error code and
  * message (query and URLs stripped), and the account the token belongs to. */
-export interface RefusalInfo { upn?: string; dvCode?: string; dvMessage?: string }
+export interface RefusalInfo { upn?: string; dvCode?: string; dvMessage?: string; host?: string; claims?: { upn?: string; oid?: string; tid?: string; aud?: string } }
 
 export type CatalogUnavailable =
   | { kind: "signin" }
@@ -26,7 +26,9 @@ export function classifyCatalogError(e: unknown): CatalogUnavailable {
     const info: RefusalInfo = {
       ...(typeof r.upn === "string" && r.upn ? { upn: r.upn } : {}),
       ...(typeof r.dvCode === "string" && r.dvCode ? { dvCode: r.dvCode } : {}),
-      ...(typeof r.dvMessage === "string" && r.dvMessage ? { dvMessage: r.dvMessage } : {})
+      ...(typeof r.dvMessage === "string" && r.dvMessage ? { dvMessage: r.dvMessage } : {}),
+      ...(typeof r.host === "string" && r.host ? { host: r.host } : {}),
+      ...(r.claims && typeof r.claims === "object" ? { claims: r.claims } : {})
     };
     return err.status === 403 ? { kind: "role", status: 403, ...info } : { kind: "rejected", status: 401, ...info };
   }

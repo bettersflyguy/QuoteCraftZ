@@ -10,7 +10,7 @@ import { autoMatchOption } from "@/portal/optionMaps";
 import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
 import type { CrmEnvironment } from "./environments";
 import { classifyCatalogError, type CatalogUnavailable } from "./catalogNote";
-import { caseOf, describeCatalogError, safeAccount, statusOf, type CatalogDiagnostics, type PicklistProbe, type TableDiagnostic } from "./catalogDiagnostics";
+import { caseOf, describeCatalogError, safeAccount, safeHost, statusOf, type CatalogDiagnostics, type PicklistProbe, type TableDiagnostic } from "./catalogDiagnostics";
 
 export interface CatalogColumn {
   name: string;
@@ -276,6 +276,7 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
   let firstFailure: unknown;
   let failed = false;
   let account: string | undefined;
+  let refusalErr: { status?: number; dvCode?: string; dvMessage?: string; host?: string; claims?: Record<string, string> } | undefined;
   for (const e of CATALOG_ENTITIES) {
     if (!byLogical.has(e.logical)) {
       byLogical.set(e.logical, fetchColumns(env, e.logical, api).then(r => {
@@ -285,6 +286,7 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
         if (!failed) { failed = true; firstFailure = err; }
         const status = statusOf(err);
         account ??= safeAccount((err as { upn?: string | null } | null)?.upn) ?? undefined;
+        if (!refusalErr && (err as { name?: string } | null)?.name === "CrmAccessError") refusalErr = err as typeof refusalErr;
         tables.set(e.logical, { logical: e.logical, ok: false, ...(status ? { status } : {}), error: describeCatalogError(classifyCatalogError(err)), columns: 0 });
         return { columns: [], secured: [], filtered: 0, picklist: { ok: true, hidden: 0 } } as FetchedColumns;
       }));
@@ -297,7 +299,11 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
   return {
     envId: env.id, fetchedAt, entities,
     ...(!entities.length && failed ? { unavailable: classifyCatalogError(firstFailure) } : {}),
-    diagnostics: { version: CACHE_VERSION, source: "live", fetchedAt, envId: env.id, envName: env.name, ...(account ? { account } : {}), case: caseOf(list), tables: list }
+    diagnostics: { version: CACHE_VERSION, source: "live", fetchedAt, envId: env.id, envName: env.name, ...(account ? { account } : {}),
+      ...((refusalErr?.host ?? safeHost(env.orgUrl)) ? { orgHost: refusalErr?.host ?? safeHost(env.orgUrl)! } : {}),
+      ...(refusalErr?.claims && Object.keys(refusalErr.claims).length ? { claims: refusalErr.claims } : {}),
+      ...(refusalErr?.status ? { refusal: { status: refusalErr.status, ...(refusalErr.dvCode ? { code: refusalErr.dvCode } : {}), ...(refusalErr.dvMessage ? { message: refusalErr.dvMessage } : {}) } } : {}),
+      case: caseOf(list), tables: list }
   };
 }
 

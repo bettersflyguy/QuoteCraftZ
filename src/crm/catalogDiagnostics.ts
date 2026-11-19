@@ -39,6 +39,14 @@ export interface CatalogDiagnostics {
   envName?: string;
   /** Account Dataverse refused, from the token's claims (never the token). */
   account?: string;
+  /** Host the refused request went to (no query string), from the request. */
+  orgHost?: string;
+  /** upn, oid, tid and aud from the refused token's payload. */
+  claims?: TokenClaims;
+  /** The first refusal: status plus Dataverse's own code and message. No
+   * code or message means the 403 did not come from Dataverse's error body
+   * (a proxy or firewall, for instance). */
+  refusal?: { status: number; code?: string; message?: string };
   case: CatalogCase;
   tables: TableDiagnostic[];
 }
@@ -60,6 +68,35 @@ export function safeText(text: string, max = 120): string {
  * plain account name (never a token or anything with a query). */
 export function safeAccount(upn: string | null | undefined): string | null {
   return typeof upn === "string" && /^[^\s?/]{1,100}$/.test(upn) && upn.includes("@") ? upn : null;
+}
+
+/** The only token claims ever shown: who the token is for (upn), the user
+ * object id (oid), the tenant (tid) and the audience (aud). Each is checked
+ * against a strict shape; anything else is dropped. Never the token. */
+export interface TokenClaims { upn?: string; oid?: string; tid?: string; aud?: string }
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function safeClaims(raw: { upn?: unknown; oid?: unknown; tid?: unknown; aud?: unknown } | null | undefined): TokenClaims {
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const upn = safeAccount(str(raw?.upn));
+  const oid = str(raw?.oid), tid = str(raw?.tid), aud = str(raw?.aud);
+  return {
+    ...(upn ? { upn } : {}),
+    ...(GUID.test(oid) ? { oid } : {}),
+    ...(GUID.test(tid) ? { tid } : {}),
+    // an audience is a resource URL or a GUID: keep the host or the GUID only
+    ...(GUID.test(aud) || /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(aud) ? { aud } : safeHost(aud) ? { aud: safeHost(aud)! } : {})
+  };
+}
+
+/** Host (and port) of a URL: no path, query, credentials or fragment. */
+export function safeHost(url: string | null | undefined): string | null {
+  if (typeof url !== "string" || !url) return null;
+  try {
+    const h = new URL(url).host;
+    return /^[A-Za-z0-9.-]+(:\d+)?$/.test(h) ? h : null;
+  } catch { return null; }
 }
 
 /** Dataverse's error code and message from a refusal body
@@ -128,7 +165,8 @@ export function diagnosticNote(
     if (t.length && t.every(x => !x.ok && x.status === 403)) {
       const who = catalog?.diagnostics?.account ?? "this account";
       const env = catalog?.diagnostics?.envName || "this environment";
-      return `CRM field list not loaded: Dataverse refused ${who} in ${env} (HTTP 403) on every table. Showing only built-in targets. A CRM administrator needs to give this account a security role in ${env}, or sign in with the work account that has ${env} access.`;
+      const host = catalog?.diagnostics?.orgHost;
+      return `CRM field list not loaded: Dataverse refused ${who} in ${env}${host ? ` at ${host}` : ""} (HTTP 403) on every table. Showing only built-in targets. A CRM administrator needs to give this account a security role in ${env}, or sign in with the work account that has ${env} access.`;
     }
     return allFailedNote;
   }
@@ -174,7 +212,12 @@ export function diagnosticText(
       `Source: ${d.source}`,
       `Fetched at: ${when(d.fetchedAt)}`,
       `Environment: ${safeText(d.envId) || "unknown"}${d.envName ? ` (${safeText(d.envName, 60)})` : ""}`,
+      ...(d.orgHost ? [`Org host: ${d.orgHost}`] : []),
       ...(d.account ? [`Account refused: ${d.account}`] : []),
+      ...(d.claims ? [`Token claims: ${(["upn", "oid", "tid", "aud"] as const).map(k => `${k}=${d.claims![k] ?? "none"}`).join(" ")}`] : []),
+      ...(d.refusal ? [d.refusal.code || d.refusal.message
+        ? `First refusal: HTTP ${d.refusal.status} Dataverse: ${[d.refusal.code, d.refusal.message].filter(Boolean).join(" ")}`
+        : `First refusal: HTTP ${d.refusal.status}, no Dataverse error body (possibly a proxy or firewall)`] : []),
       "Tables:"
     );
     for (const t of d.tables) {
