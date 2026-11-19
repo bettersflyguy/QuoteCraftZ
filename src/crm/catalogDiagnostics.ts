@@ -5,7 +5,7 @@
  * Only these are ever recorded: logical table names, HTTP status, a short
  * classified error text and counts. Never an org URL query string, a token,
  * request headers or a response body. */
-import type { CatalogUnavailable } from "./catalogNote";
+import { isNotMemberRefusal, notMemberText, type CatalogUnavailable } from "./catalogNote";
 
 export interface PicklistProbe {
   ok: boolean;
@@ -126,6 +126,7 @@ const reasonOf = (c: { dvCode?: string; dvMessage?: string }) =>
 export function describeCatalogError(c: CatalogUnavailable): string {
   switch (c.kind) {
     case "signin": return "sign-in required";
+    case "notMember": return safeText(`refused (HTTP ${c.status}), account is not a user of this CRM${reasonOf(c)}`, 240);
     case "rejected": return safeText(`sign-in rejected (HTTP 401)${reasonOf(c)}`, 240);
     case "role": return safeText(`refused (HTTP 403)${reasonOf(c)}`, 240);
     default: return safeText(c.detail) || "unknown error";
@@ -160,6 +161,13 @@ export function diagnosticNote(
   if (c === "loading") return "Reading CRM field list…";
   if (c === "message-failed") return `CRM field list: the request to the extension worker failed (${safeText(messageError ?? "") || "no detail"}). Showing built-in targets.`;
   if (c === "all-failed") {
+    // the account is not a user of this environment (wrong tenant): no role
+    // can fix that, so say so instead of "needs a security role" (AB#3745)
+    const refusal = catalog?.diagnostics?.refusal;
+    if (refusal && isNotMemberRefusal({ dvCode: refusal.code, dvMessage: refusal.message })) {
+      const env = catalog?.diagnostics?.envName || "this environment";
+      return `CRM field list not loaded: ${notMemberText(catalog?.diagnostics?.account)} (${env}). Showing only built-in targets.`;
+    }
     // every table refused with 403: say plainly whose account and where
     const t = catalog?.diagnostics?.tables ?? [];
     if (t.length && t.every(x => !x.ok && x.status === 403)) {

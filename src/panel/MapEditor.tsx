@@ -11,7 +11,7 @@ import {
   familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
 } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
-import { catalogUnavailableNote, classifyCatalogError } from "@/crm/catalogNote";
+import { CrmCatalogStatus, useCrmCatalog } from "./CrmCatalogStatus";
 import { send } from "./api";
 import { capturedTargets } from "./capturedTargets";
 export { capturedTargets };
@@ -72,6 +72,7 @@ const useStyles = makeStyles({
     padding: "2px"
   },
   label: { color: tokens.colorNeutralForeground3, flexShrink: 0, maxWidth: "45%", overflowWrap: "anywhere" },
+  note: { color: tokens.colorNeutralForeground3, marginTop: "4px", overflowWrap: "anywhere" },
   select: { flex: 1, minWidth: 0 },
   actions: { display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }
 });
@@ -126,22 +127,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   // still get a row so they can be mapped
   const [extraRows, setExtraRows] = useState<PortalScanRow[]>([]);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
-  const [catalog, setCatalog] = useState<FieldCatalog | null>(null);
-  const [catalogNote, setCatalogNote] = useState<string | null>(null);
-
-  const loadCatalog = async (refresh: boolean) => {
-    setCatalogNote(refresh ? "Refreshing CRM fields…" : null);
-    try {
-      const c = await send<FieldCatalog>({ type: "panel/crmFieldCatalog", refresh });
-      setCatalog(c);
-      setCatalogNote(c.entities.length ? null : catalogUnavailableNote(c.unavailable));
-    } catch (e) {
-      // the worker reports a CRM failure inside the catalog (see below); this
-      // is only a failed message round-trip
-      setCatalogNote(catalogUnavailableNote(classifyCatalogError(e)));
-    }
-  };
-  useEffect(() => { void loadCatalog(false); }, []);
+  // AB#3745: the field list's state, account and actions (failures are shown, not swallowed)
+  const crm = useCrmCatalog();
+  const catalog = crm.catalog;
   const secured = useMemo(() => securedGroups(catalog), [catalog]);
   const groups = useMemo(() => [...captureGroups(catalog), ...secured], [catalog, secured]);
   const groupValues = useMemo(() => new Set(groups.flatMap(g => g.paths.map(p => p.path))), [groups]);
@@ -433,11 +421,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
               </>}
         </div>
       )}
-      <div className={styles.label} style={{ maxWidth: "none", marginTop: 4 }}>
-        {catalogNote ?? (catalog
-          ? <a href="#" onClick={e => { e.preventDefault(); void loadCatalog(true); }}>Refresh CRM fields</a>
-          : "Loading CRM fields…")}
-      </div>
+      <CrmCatalogStatus state={crm} noteClassName={styles.note} />
       <div className={styles.actions}>
         <Button appearance="primary" size="small" disabled={busy} onClick={onSave}>
           {busy ? <Spinner size="tiny" /> : "Save mapping"}

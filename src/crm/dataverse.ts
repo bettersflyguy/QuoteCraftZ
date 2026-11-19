@@ -1,4 +1,4 @@
-import { getAccessToken } from "./auth";
+import { getAccessToken, __store } from "./auth";
 import type { CrmEnvironment } from "./environments";
 import { parseRefusal, safeClaims, safeHost, type TokenClaims } from "./catalogDiagnostics";
 import type { AccountEnrichmentState, ContactRow, NewContact } from "./enrich";
@@ -44,6 +44,14 @@ export function claimsFromToken(token: string): TokenClaims {
     const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
     return safeClaims({ upn: json.preferred_username ?? json.upn ?? json.unique_name, oid: json.oid, tid: json.tid, aud: json.aud });
   } catch { return {}; }
+}
+
+/** The account the cached sign-in for an org belongs to (from the token's
+ * claims), or null when there is no cached token. Never refreshes, never
+ * prompts, never returns the token (AB#3745). */
+export async function signedInAccount(orgUrl: string): Promise<string | null> {
+  const cached = await __store.get(orgUrl);
+  return cached ? claimsFromToken(cached.accessToken).upn ?? null : null;
 }
 
 export interface AccountMatch { accountId: string; name: string; city: string | null; postalCode: string | null; openOppCount: number }

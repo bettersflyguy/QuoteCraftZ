@@ -217,7 +217,7 @@ describe("AB#3745 CRM field list diagnostic", () => {
     } };
     const c = await buildFieldCatalog(env, api);
     const text = diagnosticText(c, { buildVersion: "0.1.69", messageError: `failed ?code=secret ${token}` });
-    expect(text).toContain("Catalog version: v8");
+    expect(text).toContain("Catalog version: v9");
     expect(text).toContain("Source: live");
     expect(text).toContain("Extension build: 0.1.69");
     expect(text).toContain("contact: FAILED HTTP 500");

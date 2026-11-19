@@ -1,4 +1,4 @@
-import type { BridgeRequest, PanelRequest, Res } from "@/messages";
+import type { AuthStatus, BridgeRequest, PanelRequest, Res } from "@/messages";
 import type { CrmEnvironment } from "@/crm/environments";
 import { getEnvironments, getActiveEnvironment, setActiveEnvironment } from "@/crm/environments";
 import { getAccessToken, clearToken } from "@/crm/auth";
@@ -14,7 +14,8 @@ import {
   getLinesOfBusiness,
   createOpportunity,
   getStagesForLob,
-  executeBatch
+  executeBatch,
+  signedInAccount
 } from "@/crm/dataverse";
 import { buildQuoteOps, quoteLookups } from "@/crm/mapping";
 import { ensureInsuredData, ensureServicingAssignment } from "@/crm/enrich";
@@ -41,7 +42,8 @@ import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutc
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
 import { createLead, createPolicy, createQuote, dvJson, fillIfEmpty, upsertAsset, upsertChildRecord, insuredItemOf, upsertPriorCoverage, upsertRecordAddress, upsertRecordNote, findInsuredMatches, getInsuredSourceRecords, searchInsureds, upsertAccountNote } from "@/crm/dataverse";
 import { catalogLabel, coerceGroup, getFieldCatalog, type FieldCatalog } from "@/crm/fieldCatalog";
-import { classifyCatalogError } from "@/crm/catalogNote";
+import { classifyCatalogError, isNotMemberRefusal } from "@/crm/catalogNote";
+import { safeHost } from "@/crm/catalogDiagnostics";
 import { buildCrmCaptureFields, buildCrmColumnFields } from "@/crm/crmSource";
 import { buildFillValues } from "@/portal/fillValues";
 import { dataServiceScope, getOptionMaps, setOptionMaps } from "@/portal/optionMaps";
@@ -100,6 +102,8 @@ export interface Deps {
   saveCarrierAlias: typeof saveCarrierAlias;
   getAccessToken: typeof getAccessToken;
   clearToken: typeof clearToken;
+  /** Account the cached sign-in for an org belongs to (null: signed out). */
+  getSignedInAccount: (orgUrl: string) => Promise<string | null>;
   /** Finds the EZLynx tab, relays a BridgeRequest to its content script, returns its Res. */
   sendToEzlynxTab: <T>(req: BridgeRequest, tabId?: number) => Promise<Res<T>>;
   /** Finds the Bold Penguin tab and relays a capture request to its content script.
@@ -1089,6 +1093,23 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: null };
       }
 
+      case "auth/status": {
+        const env = await deps.getActiveEnvironment();
+        const status: AuthStatus = {
+          envId: env.id, envName: env.name, orgHost: safeHost(env.orgUrl),
+          account: await deps.getSignedInAccount(env.orgUrl)
+        };
+        return { ok: true, data: status };
+      }
+
+      case "auth/signOut": {
+        // forget the cached token (and its refresh token) for this org; the
+        // next sign-in shows the account picker
+        const env = await deps.getActiveEnvironment();
+        await deps.clearToken(env.orgUrl);
+        return { ok: true, data: null };
+      }
+
       default:
         return { ok: false, error: `unknown message type: ${(msg as { type: string }).type}`, kind: "unknown" };
     }
@@ -1098,6 +1119,10 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       let envName = "the active environment";
       try { envName = (await deps.getActiveEnvironment()).name; } catch { /* keep fallback */ }
       const who = err.upn ? `The signed-in account ${err.upn}` : "Your account";
+      const dv = err as Error & { dvCode?: string; dvMessage?: string };
+      if (isNotMemberRefusal(dv)) {
+        return { ok: false, error: `Signed in as ${err.upn || "an account"}, which is not a user of this CRM (${envName}); sign out and sign in with your CRM account.`, kind: "auth" };
+      }
       const why = err.status === 403
         ? "The account exists in CRM but is missing a security role for the connector's tables, or the wrong account was picked at sign-in."
         : "This is usually the wrong account picked at sign-in. Use Sign in and choose your work account.";
@@ -1711,6 +1736,7 @@ export const realDeps: Deps = {
   saveCarrierAlias,
   getAccessToken,
   clearToken,
+  getSignedInAccount: signedInAccount,
   sendToEzlynxTab,
   sendToBoldPenguinTab,
   getActiveTab,

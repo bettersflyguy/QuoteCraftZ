@@ -105,7 +105,21 @@ export type PanelRequest =
   | { type: "panel/getCrmLink" }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
-  | { type: "auth/signIn" };
+  | { type: "auth/signIn" }
+  /** AB#3745: which account and environment the extension is signed in to (no token). */
+  | { type: "auth/status" }
+  /** AB#3745: forgets the cached sign-in for the active environment. */
+  | { type: "auth/signOut" };
+
+/** Reply to auth/status: only display-safe values, never a token. */
+export interface AuthStatus {
+  envId: string;
+  envName: string;
+  /** Host of the active environment's org URL. */
+  orgHost: string | null;
+  /** Account (UPN) the cached token belongs to, or null when signed out. */
+  account: string | null;
+}
 
 export interface CaptureRunResponse { run: CapturedRun; aliases: Record<number, string> }
 
