@@ -128,7 +128,12 @@ export async function applySettings(p: SettingsImport, scope: TransferScope): Pr
     const origins = Object.keys(p.fields.maps).filter(o => scope.kind === "all" || o === (scope as { origin: string }).origin);
     if (origins.length) {
       const merged = { ...await getAllFieldMaps() };
-      for (const o of origins) merged[o] = p.fields.maps[o]!;
+      for (const o of origins) {
+        // Share files deliberately exclude secured targets. Importing a
+        // backup must retain the agent's local identifier mappings.
+        const secured = Object.fromEntries(Object.entries(merged[o] ?? {}).filter(([, target]) => target.startsWith("secure:")));
+        merged[o] = { ...p.fields.maps[o]!, ...secured };
+      }
       await setAllFieldMaps(merged);
       for (const o of origins) if (p.fields.options[o]) await setOptionMaps(o, p.fields.options[o]!);
       changed = true;

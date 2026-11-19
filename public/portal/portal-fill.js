@@ -74,6 +74,11 @@
 
   /* the one VISIBLE label a human would read for this control */
   function primaryLabel(element) {
+    /* EZLynx carrier selects point aria-labelledby at the selected answer.
+     * The question's own caption is the stable field identity. */
+    const question = element.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return clean(caption.innerText || caption.textContent).slice(0, 140);
     const fieldset = element.closest("fieldset");
     const legend = fieldset && fieldset.querySelector(":scope > legend");
     if ((element.type || "").toLowerCase() === "radio" && legend) {
@@ -278,7 +283,9 @@
     const own = controlKey(element) !== legacyControlKey(element) ? ownLabelText(element) : "";
     const label = own || primaryLabel(element);
     const system = /^yearUpdated(Heating|Electrical|Plumbing|Roofing)$/i.exec(element.name || element.id || "");
-    return system && normText(label) === "year updated" ? `${system[1]}: Year Updated` : label;
+    if (system && normText(label) === "year updated") return `${system[1]}: Year Updated`;
+    const scheduled = /^(coins|fineArts|furs|guns|jewelry|music|silverware)Breakage$/.exec(element.name || element.id || "");
+    return scheduled && normText(label) === "breakage" ? scheduled[1].replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) + ": Breakage" : label;
   }
   /* where this control's saved mapping lives: the key made from its own
    * label first (whatever else is on the page), else its current key. When
@@ -1270,6 +1277,10 @@
   /* best-effort label for a text value: its table row/column header, a
    * preceding bold/label sibling, or aria metadata */
   function inferTextLabel(el) {
+    var amount = el.closest && el.closest(".coverage-amount");
+    var prior = amount && amount.previousElementSibling;
+    var caption = prior && prior.querySelector("mat-label, label");
+    if (caption) return clean(caption.innerText || caption.textContent) + ": Amount";
     var cell = el.closest ? el.closest("td") : null;
     if (cell) {
       var row = cell.parentElement;
@@ -1303,7 +1314,7 @@
    * (Kendo dropdowns, styled date pickers) the user clicks a wrapper span
    * while the real control sits CSS-hidden inside it, so the smallest
    * wrapper on the click path holding a couple of controls resolves too. */
-  var FIELD_BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container";
+  var FIELD_BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container, ez-read-only-field";
   function pickTarget(event) {
     var path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
     var i;

@@ -107,4 +107,35 @@ describe("capturing property notes", () => {
     const fields = g.__bettersPortalIngest([], { [key]: "note:property1" }).fields.filter(f => f.mapped === "note:property1");
     expect(fields).toMatchObject([{ label: "Enter the year updated for the cooling type in YYYY format", value: "2020" }]);
   });
+
+  it("keeps carrier select mappings stable when aria-labelledby points at the answer", async () => {
+    document.title = "Applicant - Policy Info";
+    document.body.innerHTML = `<main><icq-question><label>Number of Animals on Premises?</label><form><mat-form-field><mat-select id="animalpremises_ml" role="combobox" name="questionModel" aria-labelledby="answer"><span id="answer">None</span></mat-select></mat-form-field></form></icq-question></main>`;
+    const control = document.querySelector("mat-select")!;
+    const picking = g.__bettersPortalPick(5000);
+    control.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    const row = await picking as PortalScanRow;
+    expect(row.fieldLabel).toBe("Number of Animals on Premises?");
+    const teaching = [{ byLabel: "number of animals on premises", page: "", label: row.fieldLabel, path: "note:properties[]" }];
+    for (const answer of ["None", "2"]) {
+      document.getElementById("answer")!.textContent = answer;
+      const fields = g.__bettersPortalIngest(teaching, {}).fields.filter(f => f.mapped === "note:property1");
+      expect(fields).toMatchObject([{ label: "Number of Animals on Premises?", value: answer }]);
+    }
+  });
+
+  it("selects a read-only term without borrowing a neighboring date control", async () => {
+    document.body.innerHTML = `<main><div><ez-read-only-field label="New Policy Term"><span>New Policy Term</span><span id="term">12 Month</span></ez-read-only-field><label for="effective">Effective Date</label><input id="effective" value="11/28/2026"></div></main>`;
+    const picking = g.__bettersPortalPick(5000);
+    document.getElementById("term")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(await picking).toMatchObject({ fieldLabel: "New Policy Term", label: "New Policy Term: 12 Month" });
+  });
+
+  it("keeps the context of equal calculated coverage amounts and breakage flags", () => {
+    document.body.innerHTML = `<main>${["Other Structures", "Loss Of Use"].map((label, i) => `<div><mat-form-field><label>${label}</label><mat-select>10%</mat-select></mat-form-field><div class="coverage-amount"><ez-read-only-field><span>Amount</span><span id="amount${i}">$19,800</span></ez-read-only-field></div></div>`).join("")}<label for="coins">Breakage</label><input id="coins" name="coinsBreakage" type="checkbox"><label for="arts">Breakage</label><input id="arts" name="fineArtsBreakage" type="checkbox"></main>`;
+    const fields = g.__bettersPortalIngest([0, 1].map(i => ({ selector: `#amount${i}`, label: "", path: "note:property1" })), { "checkbox:coinsBreakage": "note:property1", "checkbox:fineArtsBreakage": "note:property1" }).fields.filter(f => f.mapped === "note:property1");
+    expect(fields.map(f => [f.label, f.value])).toEqual(expect.arrayContaining([
+      ["Other Structures: Amount", "$19,800"], ["Loss Of Use: Amount", "$19,800"], ["Coins: Breakage", "No"], ["Fine Arts: Breakage", "No"]
+    ]));
+  });
 });

@@ -82,6 +82,9 @@
   }
 
   function labelFor(control) {
+    const question = control.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return text(caption).slice(0, 140);
     const aria = control.getAttribute("aria-label") || control.getAttribute("data-label");
     if (aria) return aria;
     if (control.id) {
@@ -301,6 +304,10 @@
    * the left cell of a label/value row, or the text just before it */
   function noteLabel(el) {
     if (!el) return "";
+    const amount = el.closest(".coverage-amount");
+    const prior = amount && amount.previousElementSibling;
+    const caption = prior && prior.querySelector("mat-label, label");
+    if (caption) return text(caption) + ": Amount";
     const cell = el.closest("td, th");
     if (cell && cell.parentElement) {
       const row = cell.parentElement;
@@ -330,6 +337,9 @@
    * shared, so its text names nothing in particular. */
   function boxLabel(box) {
     if (!box) return "";
+    const question = box.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return stripMarks(text(caption)).slice(0, 140);
     const own = box.querySelector("label, mat-label, .k-label, legend");
     const t = own ? stripMarks(text(own)) : "";
     if (t) return t.length <= 80 ? t : "";
@@ -669,6 +679,8 @@
         if (field.mapped && /^note/.test(field.mapped)) {
           const system = /^yearUpdated(Heating|Electrical|Plumbing|Roofing)$/i.exec(control.name || control.id || "");
           if (system && labelKey(label) === "year updated") field.label = `${system[1]}: Year Updated`;
+          const scheduled = /^(coins|fineArts|furs|guns|jewelry|music|silverware)Breakage$/.exec(control.name || control.id || "");
+          if (scheduled && labelKey(label) === "breakage") field.label = scheduled[1].replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) + ": Breakage";
           noteControls.push({ field, control, key: keyOf(control) });
         }
         else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) });
