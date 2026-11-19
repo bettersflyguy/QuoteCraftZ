@@ -241,4 +241,16 @@ describe("AB#3745 CRM field list diagnostic", () => {
     await requestCatalog(async m => { sent.push(m); return { entities: [] }; }, true);
     expect(sent).toEqual([{ type: "panel/crmFieldCatalog", refresh: true }]);
   });
+
+  it("while the first load is in flight the note and Copy case are not all-failed", () => {
+    const note = diagnosticNote(null, null, "ALL-FAILED NOTE", true);
+    expect(note).toBe("Reading CRM field list…");
+    expect(note).not.toContain("ALL-FAILED");
+    const text = diagnosticText(null, { buildVersion: "1", loading: true });
+    expect(text).toContain("Case: loading");
+    expect(text).not.toContain("all-failed");
+    // once the read ends with nothing, all-failed is reported as before
+    expect(diagnosticNote(null, null, "ALL-FAILED NOTE", false)).toBe("ALL-FAILED NOTE");
+    expect(diagnosticText(null, { buildVersion: "1", loading: false })).toContain("Case: all-failed");
+  });
 });

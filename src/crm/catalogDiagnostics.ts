@@ -76,9 +76,11 @@ export function caseOf(tables: TableDiagnostic[]): CatalogCase {
 }
 
 /** Panel case label: the catalog's own, or the message round-trip failing. */
-export type PanelCase = CatalogCase | "message-failed";
+export type PanelCase = CatalogCase | "message-failed" | "loading";
 
-export function panelCase(catalog: { diagnostics?: CatalogDiagnostics; unavailable?: unknown; entities: unknown[] } | null, messageError: string | null): PanelCase {
+export function panelCase(catalog: { diagnostics?: CatalogDiagnostics; unavailable?: unknown; entities: unknown[] } | null, messageError: string | null, loading = false): PanelCase {
+  // a read in flight has no result yet: never report it as all-failed
+  if (loading) return "loading";
   if (messageError) return "message-failed";
   if (!catalog) return "all-failed";
   if (catalog.diagnostics) return catalog.diagnostics.case;
@@ -89,9 +91,11 @@ export function panelCase(catalog: { diagnostics?: CatalogDiagnostics; unavailab
 export function diagnosticNote(
   catalog: { diagnostics?: CatalogDiagnostics } | null,
   messageError: string | null,
-  allFailedNote: string
+  allFailedNote: string,
+  loading = false
 ): string | null {
-  const c = panelCase(catalog as never, messageError);
+  const c = panelCase(catalog as never, messageError, loading);
+  if (c === "loading") return "Reading CRM field list…";
   if (c === "message-failed") return `CRM field list: the request to the extension worker failed (${safeText(messageError ?? "") || "no detail"}). Showing built-in targets.`;
   if (c === "all-failed") return allFailedNote;
   const tables = catalog?.diagnostics?.tables ?? [];
@@ -112,13 +116,13 @@ const when = (ms: number) => (Number.isFinite(ms) ? new Date(ms).toISOString() :
 /** Plain-text summary for the Copy details button. */
 export function diagnosticText(
   catalog: { diagnostics?: CatalogDiagnostics; unavailable?: CatalogUnavailable; entities: unknown[] } | null,
-  opts: { buildVersion: string; messageError?: string | null }
+  opts: { buildVersion: string; messageError?: string | null; loading?: boolean }
 ): string {
   const d = catalog?.diagnostics;
   const lines = [
     "QuoteCraftZ CRM field list diagnostic (AB#3745)",
     `Extension build: ${opts.buildVersion}`,
-    `Case: ${panelCase(catalog as never, opts.messageError ?? null)}`
+    `Case: ${panelCase(catalog as never, opts.messageError ?? null, opts.loading ?? false)}`
   ];
   if (opts.messageError) lines.push(`Message error: ${safeText(opts.messageError)}`);
   if (!catalog) lines.push("Catalog: none received");

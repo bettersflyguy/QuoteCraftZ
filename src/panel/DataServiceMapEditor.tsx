@@ -81,7 +81,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
   const [catalog, setCatalog] = useState<FieldCatalog | null>(null);
   // AB#3745: the catalog request's own failure is kept and shown, not swallowed
   const [messageError, setMessageError] = useState<string | null>(null);
-  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogBusy, setCatalogBusy] = useState(true);
   const [copyNote, setCopyNote] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [open, setOpen] = useState<string | null>(null);
@@ -107,13 +107,13 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
   const buildVersion = (() => { try { return chrome.runtime.getManifest().version; } catch { return "unknown"; } })();
   const copyDetails = async () => {
     try {
-      await navigator.clipboard.writeText(diagnosticText(catalog, { buildVersion, messageError }));
+      await navigator.clipboard.writeText(diagnosticText(catalog, { buildVersion, messageError, loading: catalogBusy }));
       setCopyNote("Copied.");
     } catch {
       setCopyNote("Could not copy; select the text manually.");
     }
   };
-  const catalogNote = diagnosticNote(catalog, messageError, catalogUnavailableNote(catalog?.unavailable));
+  const catalogNote = diagnosticNote(catalog, messageError, catalogUnavailableNote(catalog?.unavailable), catalogBusy);
 
   useEffect(() => {
     const load = () => void getDataServiceMaps().then(m => setSaved(m[source] ?? {}));
@@ -217,7 +217,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
         <div className={styles.note} role="status">
           {catalogNote ?? "CRM field list read OK."}{" "}
           <Button size="small" appearance="secondary" disabled={catalogBusy} onClick={() => void loadCatalog(true)}>Retry</Button>{" "}
-          <Button size="small" appearance="subtle" onClick={() => void copyDetails()}>Copy details</Button>
+          <Button size="small" appearance="subtle" disabled={catalogBusy} onClick={() => void copyDetails()}>Copy details</Button>
           {copyNote && <> {copyNote}</>}
         </div>
       )}
