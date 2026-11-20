@@ -1329,7 +1329,9 @@ async function peekPortalTab(
     arg = {
       // the editor's service items only signal a change: the saved
       // data-service mapping is the truth
-      items: [...items.filter(i => !i.key.startsWith("service:")), ...service],
+      items: [...items.filter(i => !i.key.startsWith("service:")), ...service.map(i => ({
+        ...i, focused: items.some(selected => selected.key === i.key && selected.focused)
+      }))],
       map: {},
       payload: await getCapturedApplication(),
       pageLabels: origin === "https://app.ezlynx.com" ? coveredPageLabels((await getDataServiceMaps())["ezlynx"]) : []
@@ -1530,7 +1532,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   // labelled-field teachings ("field:vehicles|vin"): every card's field
   // with that label on that step, routed like a pick
   const labelled = Object.entries(siteMap)
-    .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v)))
+    .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v) || isSecureTarget(v)))
     .map(([k, v]) => {
       const m = FIELD_KEY_PARTS.exec(k);
       if (!m) return null;

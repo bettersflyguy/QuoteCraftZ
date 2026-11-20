@@ -11,6 +11,16 @@ export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
 /** { [origin]: { [controlKey]: rulePath | "skip" } } */
 export type FieldMaps = Record<string, Record<string, string>>;
 
+/** Apply edits from one page without dropping fields mapped on other pages. */
+export function mergeSiteFieldMap(saved: Record<string, string>, draft: Record<string, string>): Record<string, string> {
+  const merged = { ...saved };
+  for (const [key, target] of Object.entries(draft)) {
+    if (target) merged[key] = target;
+    else delete merged[key];
+  }
+  return merged;
+}
+
 /** CRM fields the mapping editor can bind a page control to, grouped by the
  * CRM entity the value lands on. The hierarchy mirrors the commit order:
  * account first, then related contacts, then policy/quote/opportunity;
@@ -73,7 +83,7 @@ export const PATH_LABEL = new Map(MAP_PATHS.map(p => [p.path, p.label]));
 /** Array relationship ("contacts[].email"): teaching ONE row's cell makes the
  * capture pull that cell from EVERY row of the repeated structure. A form
  * control (one input) maps to ONE row instead: see toRowTarget. */
-export const isArrayPath = (path: string): boolean => path.includes("[].");
+export const isArrayPath = (path: string): boolean => /\[\](?:\.|$)/.test(path);
 
 /** Concrete per-row slots an array capture fans out into ("contact2.email",
  * "vehicle5.vin"; contact1 is reserved for the primary insured). */
@@ -102,6 +112,7 @@ const ROW_SLOTS: Record<string, { slot: string; start: number }> = {
 /** "contacts[].email" + row 2 -> "contact3.email" (the one-row target a
  * form control fills from and captures into). */
 export function toRowTarget(arrayPath: string, row: number): string | null {
+  if (arrayPath === "note:properties[]") return Number.isInteger(row) && row >= 1 && row <= ARRAY_ROW_MAX ? `note:property${row}` : null;
   const m = /^((?:crm:|secure:)?[a-z]+)\[\]\.(.+)$/.exec(arrayPath);
   const cfg = m ? ROW_SLOTS[m[1]!] : undefined;
   if (!m || !cfg || !Number.isInteger(row) || row < 1 || row > ARRAY_ROW_MAX) return null;
@@ -110,6 +121,8 @@ export function toRowTarget(arrayPath: string, row: number): string | null {
 
 /** Inverse of toRowTarget: "contact3.email" -> {contacts[].email, row 2}. */
 export function rowTargetOf(path: string): { arrayPath: string; row: number } | null {
+  const propertyNote = /^note:property([1-9]|10)$/.exec(path);
+  if (propertyNote) return { arrayPath: "note:properties[]", row: Number(propertyNote[1]) };
   for (const [array, cfg] of Object.entries(ROW_SLOTS)) {
     const m = new RegExp(`^${cfg.slot.replace(":", "\\:")}(\\d+)\\.(.+)$`).exec(path);
     if (!m) continue;
@@ -186,13 +199,14 @@ export const NOTE_TARGET = "note";
 
 /** Which record's timeline a note teaching lands on ("note" = the insured
  * account, kept for mappings saved before the record choice existed). */
-export type NoteRecord = "account" | "contact" | "relatedcontact" | "opportunity" | "quote" | "policy";
+export type NoteRecord = "account" | "contact" | "relatedcontact" | "property" | "opportunity" | "quote" | "policy";
 export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[] = [
   { value: "note", record: "account", label: "Notes: Insured (account)" },
   { value: "note:contact", record: "contact", label: "Notes: Primary contact" },
   // each person's values on THEIR own timeline (resolved per row: the
   // primary insured to note:contact, others to note:contact2, note:contact3 ...)
   { value: "note:contacts[]", record: "relatedcontact", label: "Notes: Each contact's own timeline" },
+  { value: "note:properties[]", record: "property", label: "Notes: Properties (all rows)" },
   { value: "note:opportunity", record: "opportunity", label: "Notes: Opportunity" },
   { value: "note:quote", record: "quote", label: "Notes: Quote" },
   { value: "note:policy", record: "policy", label: "Notes: Policy" }
@@ -206,10 +220,15 @@ export const isPrimaryTarget = (path: string | undefined): boolean =>
 /** One related contact's note, resolved from a row ("note:contact3" = the
  * second related contact; contact1 is the primary insured). */
 const RELATED_NOTE = /^note:contact([2-9]|[1-3]\d)$/;
+const PROPERTY_NOTE = /^note:property([1-9]|[1-3]\d)$/;
 export const isNoteTarget = (path: string | undefined): boolean =>
-  NOTE_TARGETS.some(t => t.value === path) || RELATED_NOTE.test(path ?? "");
+  NOTE_TARGETS.some(t => t.value === path) || RELATED_NOTE.test(path ?? "") || PROPERTY_NOTE.test(path ?? "");
 export const noteRecordOf = (path: string | undefined): NoteRecord | null =>
-  RELATED_NOTE.test(path ?? "") ? "relatedcontact" : NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
+  PROPERTY_NOTE.test(path ?? "") ? "property" : RELATED_NOTE.test(path ?? "") ? "relatedcontact" : NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
+export const propertyNoteSlotOf = (path: string | undefined): number | null => {
+  const m = PROPERTY_NOTE.exec(path ?? "");
+  return m ? Number(m[1]) : null;
+};
 /** The related-contact slot a resolved note names (note:contact3 -> 3). */
 export const noteSlotOf = (path: string | undefined): number | null => {
   const m = RELATED_NOTE.exec(path ?? "");
@@ -217,6 +236,8 @@ export const noteSlotOf = (path: string | undefined): number | null => {
 };
 /** Display label for any note target, resolved rows included. */
 export const noteLabelOf = (path: string | undefined): string => {
+  const property = propertyNoteSlotOf(path);
+  if (property) return `Notes: Property ${property}`;
   const slot = noteSlotOf(path);
   if (slot) return `Notes: Related contact ${slot - 1}`;
   return NOTE_TARGETS.find(t => t.value === path)?.label ?? "Notes";
@@ -371,27 +392,28 @@ const PICK_SELECTOR = new RegExp(`^pick:${PICK_SEG}(?: > ${PICK_SEG})*$`);
 /** "field:<page>|<section>><label>" with page and section optional
  * ("field:details|other address>city"): lowercase words only. The section
  * names a sub-section whose fields share labels with a twin section. */
-export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?(?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80}$/;
+export const FIELD_KEY = /^field:(?:[a-z0-9 ]{1,40}\|)?(?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,140}$/;
 /** A sub-section control's label key across every section of its kind
  * ("other address" City -> "field:other address>city", which a list target
  * reads from Primary, Other and Mailing Address alike). Null outside one. */
 export function familyKeyOf(r: { fieldLabel?: string; section?: string; repeats?: number; repeatSections?: string[]; page?: string }): { key: string; label: string } | null {
-  const field = (r.fieldLabel ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80);
+  const field = (r.fieldLabel ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 140);
   const section = (r.section ?? "").slice(0, 40);
   const shown = (r.fieldLabel ?? "").replace(/^[*\s]+|[:*\s]+$/g, "");
   const kindOf = (s: string) => s.split(" ").pop() ?? "";
+  const page = (r.page ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 40);
   // repeated cards (one per driver: "Primary Insured", "Additional Driver"):
   // the label on this page step covers every card, card order = row order,
   // and each row finds its person by the name on that card. Sections of
   // one kind ("Primary / Other Address") stay the section family below.
   const sameKind = Boolean(section) && (r.repeatSections ?? []).every(s => s && kindOf(s) === kindOf(section));
   if (field && (r.repeats ?? 0) > 1 && !sameKind) {
-    const page = (r.page ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 40);
     return { key: `field:${page ? `${page}|` : ""}${field}`, label: `${shown} (every card)` };
   }
   if (!field || !section) return null;
   const kind = section.split(" ").pop()!;
-  return { key: `field:${section}>${field}`, label: `${r.fieldLabel!.replace(/^[*\s]+|[:*\s]+$/g, "")} (every ${kind})` };
+  // A dwelling address must not also teach applicant addresses on Details.
+  return { key: `field:${page ? `${page}|` : ""}${section}>${field}`, label: `${r.fieldLabel!.replace(/^[*\s]+|[:*\s]+$/g, "")} (every ${kind})` };
 }
 
 /** A scoped label's scope against an element's scopes (every titled box
@@ -409,7 +431,7 @@ export function scopeMatches(want: string, scopes: string[]): boolean {
 }
 
 /** Parses a labelled-field key: [page, "section>label" or "label"]. */
-export const FIELD_KEY_PARTS = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
+export const FIELD_KEY_PARTS = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,140})$/;
 
 /** A labelled-field key for a page step and a field label; the label may
  * carry its section ("primary address>city"). */

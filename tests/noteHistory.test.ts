@@ -68,4 +68,11 @@ describe("note history", () => {
     expect(await upsertRecordNote(ENV, "contact", "C1", SUBJECT, body("11/8/2026", "612"), undefined, today)).toBe("created");
     expect(calls[1]!.body!["objectid_contact@odata.bind"]).toBe("/contacts(C1)");
   });
+
+  it("binds property notes to the property record", async () => {
+    const calls = crm(null);
+    await upsertRecordNote(ENV, "property", "P1", SUBJECT, body("11/8/2026", "2"), undefined, today);
+    expect(calls[1]!.body!["objectid_iacrm_property@odata.bind"]).toBe("/iacrm_properties(P1)");
+    expect(calls[1]!.body).not.toHaveProperty("objectid_account@odata.bind");
+  });
 });

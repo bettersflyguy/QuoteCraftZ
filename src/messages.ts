@@ -57,7 +57,7 @@ export type PanelRequest =
   | { type: "panel/linkRiskAnswers"; accountId: string; items: { asset: string; id: string; row: string }[] }
   | { type: "panel/upsertChild"; child: string; accountId: string; parent: { asset: string; id: string }; values: Record<string, string>; fallbackName: string }
   | { type: "panel/upsertPriorCoverage"; accountId: string; opportunityId: string | null; lobId: string | null; carrierId: string | null; values: Record<string, unknown>; extra?: Record<string, string> }
-  | { type: "panel/upsertNote"; record: "account" | "contact" | "opportunity" | "quote" | "policy"; id: string; subject: string; html: string }
+  | { type: "panel/upsertNote"; record: "account" | "contact" | "property" | "opportunity" | "quote" | "policy"; id: string; subject: string; html: string }
   | { type: "panel/getStagesForLob"; lobId: string | null; insuredType?: 1 | 2 | null; lobName?: string | null }
   | { type: "panel/portalScan"; tabId: number }
   | { type: "panel/portalPick"; tabId: number }

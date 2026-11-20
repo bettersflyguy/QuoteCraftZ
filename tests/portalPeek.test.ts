@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-type Item = { key: string; label: string; kind: "mapped" | "auto" | "skip"; array?: boolean };
+type Item = { key: string; label: string; kind: "mapped" | "auto" | "skip"; array?: boolean; focused?: boolean; labels?: string[] };
 let peek: (items: Item[] | null) => { shown: number; missing: number };
 
 beforeAll(() => {
@@ -71,6 +71,26 @@ describe("peek", () => {
     expect(Array.from(document.querySelectorAll("[data-betters-peek]")).map(b => b.textContent)).toEqual(["B"]);
     expect(document.querySelector<HTMLInputElement>("input[name=a]")!.style.outline).toBe("");
     peek(null);
+  });
+
+  it("highlights the selected mapping pink across all rows and restores overlapping styles", () => {
+    document.body.innerHTML = `<input type="text" name="zip" style="outline: 1px dotted red">
+      <input type="text" name="other">
+      <table id="vehicles"><tbody><tr><td>VIN1</td></tr><tr><td>VIN2</td></tr></tbody></table>`;
+    const selected: Item = { key: "text:zip", label: "ZIP", kind: "mapped", focused: true };
+    peek([
+      selected,
+      { key: "text:zip", label: "Overlapping ZIP mapping", kind: "mapped" },
+      { key: "text:other", label: "Other", kind: "mapped" },
+      { key: "pick:#vehicles > tbody > tr:nth-of-type(1) > td:nth-of-type(1)", label: "VIN", kind: "mapped", array: true, focused: true }
+    ]);
+    const pink = (el: HTMLElement) => /255, 0, 255|#ff00ff/i.test(el.style.outline);
+    expect(pink(document.querySelector<HTMLInputElement>("input[name=zip]")!)).toBe(true);
+    expect(pink(document.querySelector<HTMLInputElement>("input[name=other]")!)).toBe(false);
+    expect(Array.from(document.querySelectorAll<HTMLElement>("#vehicles td")).every(pink)).toBe(true);
+    peek(null);
+    expect(document.querySelector<HTMLInputElement>("input[name=zip]")!.style.outline).toBe("1px dotted red");
+    expect(Array.from(document.querySelectorAll<HTMLElement>("#vehicles td")).every(el => !el.style.outline)).toBe(true);
   });
 });
 

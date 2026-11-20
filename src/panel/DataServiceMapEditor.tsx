@@ -6,8 +6,7 @@ import { captureGroups, securedGroups } from "./MapEditor";
 import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { send } from "./api";
 import type { FieldCatalog } from "@/crm/fieldCatalog";
-import { catalogUnavailableNote } from "@/crm/catalogNote";
-import { diagnosticNote, diagnosticText, requestCatalog } from "@/crm/catalogDiagnostics";
+import { catalogUnavailableNote, classifyCatalogError } from "@/crm/catalogNote";
 import type { CapturedApplication, PortalScanRow } from "@/boldpenguin/types";
 import { MAP_PATH_GROUPS, NOTE_TARGETS, scopeMatches } from "@/portal/fieldMaps";
 import { choiceColumnOf } from "@/portal/choiceRouting";
@@ -48,6 +47,7 @@ export interface DataServicePageHooks {
   onPick: () => Promise<PortalScanRow | "timeout" | null>;
   onPickCancel: () => Promise<unknown>;
   onRead: (labels: string[]) => Promise<ChoicesRead | null>;
+  onHighlight?: (key: string) => void;
   /** A picked field the service doesn't return: mapped as a page field. */
   onUnmatched?: (row: PortalScanRow) => void;
 }
@@ -74,15 +74,12 @@ const SECTION_NOTE: Record<string, string> = {
 
 /** Every field a data service returns, each routed to a CRM target, with
  * one-for-one choice mappings for CRM choice columns. Saves as you go. */
-export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { source?: string; page?: DataServicePageHooks; focusId?: { id: string } | null }) {
+export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlightKey }: { source?: string; page?: DataServicePageHooks; focusId?: { id: string } | null; highlightKey?: string | null }) {
   const styles = useStyles();
   const scope = dataServiceScope(source);
   const [saved, setSaved] = useState<Record<string, string> | undefined>(undefined);
   const [catalog, setCatalog] = useState<FieldCatalog | null>(null);
-  // AB#3745: the catalog request's own failure is kept and shown, not swallowed
-  const [messageError, setMessageError] = useState<string | null>(null);
-  const [catalogBusy, setCatalogBusy] = useState(true);
-  const [copyNote, setCopyNote] = useState<string | null>(null);
+  const [catalogNote, setCatalogNote] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [open, setOpen] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -96,31 +93,22 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
   // a field picked from the Page fields picker that the service covers
   useEffect(() => { if (focusId) setFocus(focusId.id); }, [focusId]);
 
-  const loadCatalog = async (refresh: boolean) => {
-    setCatalogBusy(true);
-    setCopyNote(null);
-    const r = await requestCatalog<FieldCatalog>(m => send<FieldCatalog>(m), refresh);
-    setCatalog(r.catalog);
-    setMessageError(r.messageError);
-    setCatalogBusy(false);
-  };
-  const buildVersion = (() => { try { return chrome.runtime.getManifest().version; } catch { return "unknown"; } })();
-  const copyDetails = async () => {
+  const loadCatalog = async () => {
     try {
-      await navigator.clipboard.writeText(diagnosticText(catalog, { buildVersion, messageError, loading: catalogBusy }));
-      setCopyNote("Copied.");
-    } catch {
-      setCopyNote("Could not copy; select the text manually.");
+      const c = await send<FieldCatalog>({ type: "panel/crmFieldCatalog" });
+      setCatalog(c);
+      setCatalogNote(c.entities.length ? null : catalogUnavailableNote(c.unavailable));
+    } catch (e) {
+      setCatalogNote(catalogUnavailableNote(classifyCatalogError(e)));
     }
   };
-  const catalogNote = diagnosticNote(catalog, messageError, catalogUnavailableNote(catalog?.unavailable), catalogBusy);
 
   useEffect(() => {
     const load = () => void getDataServiceMaps().then(m => setSaved(m[source] ?? {}));
     const loadChoices = () => void getOptionMaps().then(m => setChoices(m[scope] ?? {}));
     load();
     loadChoices();
-    void loadCatalog(false);
+    void loadCatalog();
     // values the service returned in the held capture: known source wordings
     void send<CapturedApplication | null>({ type: "panel/bpGetCaptured" }).then(app => {
       const byField: Record<string, string[]> = {};
@@ -164,7 +152,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
   // contact); account-level fields can still pick the primary contact's
   const specialsFor = (section: string) => [
     { value: "", label: "Not mapped (kept in the capture)" },
-    ...NOTE_TARGETS.filter(t => (section === "Contacts" ? t.record !== "contact" : t.record !== "relatedcontact"))
+    ...NOTE_TARGETS.filter(t => t.record !== "property" && (section === "Contacts" ? t.record !== "contact" : t.record !== "relatedcontact"))
       .map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> }))
   ];
   const labelsOf = (f: DataServiceField) => [f.label, ...(f.pageLabels ?? [])];
@@ -213,14 +201,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
           </Tooltip>
         )}
       </div>
-      {(
-        <div className={styles.note} role="status">
-          {catalogNote ?? "CRM field list read OK."}{" "}
-          <Button size="small" appearance="secondary" disabled={catalogBusy} onClick={() => void loadCatalog(true)}>Retry</Button>{" "}
-          <Button size="small" appearance="subtle" disabled={catalogBusy} onClick={() => void copyDetails()}>Copy details</Button>
-          {copyNote && <> {copyNote}</>}
-        </div>
-      )}
+      {catalogNote && <div className={styles.note} role="status">{catalogNote}</div>}
       {(picking || pickNote) && (
         <div className={styles.note}>
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
@@ -243,12 +224,15 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId }: { sou
             return (
               <Fragment key={f.id}>
                 <div
-                  className={focus === f.id ? styles.focused : styles.row}
+                  className={focus === f.id || highlightKey === `service:${f.id}` ? styles.focused : styles.row}
                   // same signal as the page peek: green mapped, red not mapped
                   style={{ borderLeft: `3px solid ${target ? "#13a10e" : "#d13438"}`, paddingLeft: 4 }}
                   ref={el => { if (el) rowRefs.current.set(f.id, el); else rowRefs.current.delete(f.id); }}
+                  onClick={() => { if (target) page?.onHighlight?.(`service:${f.id}`); }}
                 >
-                  <span className={styles.label}>{f.label}</span>
+                  <button type="button" className={styles.label} aria-label={`Highlight ${f.label} on page`}
+                    style={{ background: "none", border: 0, padding: 0, textAlign: "left", font: "inherit", cursor: "pointer" }}
+                  >{f.label}</button>
                   <TargetPicker
                     value={target}
                     onChange={v => choose(f.id, v)}

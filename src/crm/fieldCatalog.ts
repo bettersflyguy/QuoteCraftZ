@@ -367,7 +367,7 @@ export function catalogLabel(catalog: FieldCatalog | null, target: string): stri
   const col = (secure ? entity?.secured : entity?.columns)?.find(c => c.name === m[4]);
   if (!entity || !col) return null;
   const base = m[3]
-    ? `${key === "contacts" ? "Related contact" : key === "addresses" ? "Address" : "Policy"} ${Number(m[3]) - (key === "contacts" ? 1 : 0)}`
+    ? `${key === "contacts" ? "Related contact" : key === "addresses" ? "Address" : m[2]![0]!.toUpperCase() + m[2]!.slice(1)} ${Number(m[3]) - (key === "contacts" ? 1 : 0)}`
     : entity.label.replace(/ \(all rows\)$/, "");
   return `${secure ? "Secured: " : ""}${base}: ${col.label}`;
 }

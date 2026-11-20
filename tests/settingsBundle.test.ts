@@ -82,6 +82,15 @@ describe("all settings", () => {
 });
 
 describe("scoped import / export", () => {
+  it("retains local secured mappings when a share file replaces a site's ordinary mappings", async () => {
+    const origin = "https://www8.nowcerts.com";
+    const parsed = parseSettingsFile(JSON.stringify({ type: "iacrm-quote-connector-fieldmaps", version: 1,
+      maps: { [origin]: { "text:city": "crm:account.address1_city", "text:ssn": "note:account" } } }));
+    expect(await applySettings(parsed, { kind: "site", origin })).toBe(true);
+    expect((store["portal/fieldMap"] as Record<string, Record<string, string>>)[origin]).toEqual({
+      "text:city": "crm:account.address1_city", "text:ssn": "secure:primarycontact.iacrm_socialsecuritynumber"
+    });
+  });
   it("one site exports just that site, and imports only that site from a whole-settings file", async () => {
     const site = await buildSettingsFile({ kind: "site", origin: "https://app.ezlynx.com" });
     expect(Object.keys(site.maps)).toEqual(["https://app.ezlynx.com"]);

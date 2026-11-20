@@ -3,7 +3,7 @@ import { DATA_SERVICE_STORAGE_KEY, dataServicePeekItems, getDataServiceMaps } fr
 import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import type { CapturedApplication, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
-import { FIELDMAP_STORAGE_KEY, fieldKeyOf, getAllFieldMaps, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
+import { FIELDMAP_STORAGE_KEY, fieldKeyOf, getAllFieldMaps, mergeSiteFieldMap, setAllFieldMaps, type FieldMaps } from "@/portal/fieldMaps";
 import { grantActiveTab } from "./portalAccess";
 import { MapEditor, capturedTargets } from "./MapEditor";
 import type { ChoicesRead } from "./OptionMapEditor";
@@ -34,6 +34,7 @@ export function MappingsManager() {
   const [scan, setScan] = useState<PortalScanResult | null>(null);
   const [scanTabId, setScanTabId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
   // this site's one-for-one choice mappings, saved with the field mapping
   const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [app, setApp] = useState<CapturedApplication | null>(null);
@@ -56,6 +57,7 @@ export function MappingsManager() {
       const d: Record<string, string> = {};
       for (const r of s.rows) if (r.mapped) d[r.key] = r.mapped;
       setDraft(d);
+      setHighlightKey(null);
       setChoices((await getOptionMaps())[s.origin] ?? {});
       setScan(s);
       setScanTabId(tab.id);
@@ -142,8 +144,8 @@ export function MappingsManager() {
     if (!scan) return;
     setBusy("save");
     try {
-      const map: Record<string, string> = {};
-      for (const [key, v] of Object.entries(draft)) if (v) map[key] = v;
+      const saved = (await getAllFieldMaps())[scan.origin] ?? {};
+      const map = mergeSiteFieldMap(saved, draft);
       await send({ type: "panel/saveFieldMap", origin: scan.origin, map, options: choices });
       setMaps(await getAllFieldMaps());
       const n = Object.keys(map).length;
@@ -231,9 +233,11 @@ export function MappingsManager() {
             onPick: () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: dsTabId }),
             onPickCancel: () => send<null>({ type: "panel/portalPickCancel", tabId: dsTabId }),
             onRead: labels => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: dsTabId, labels }),
+            onHighlight: setHighlightKey,
             onUnmatched: row => setInjected({ ...row })
           }}
           focusId={dsFocus}
+          highlightKey={highlightKey}
         />
       )}
       {scan && (
@@ -255,6 +259,8 @@ export function MappingsManager() {
           hideAuto={dsMode}
           inject={dsMode ? injected : null}
           extraPeek={dsMode ? dsPeek : undefined}
+          highlightKey={highlightKey}
+          onHighlight={setHighlightKey}
           onPick={scanTabId === null
             ? undefined
             : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: scanTabId })}

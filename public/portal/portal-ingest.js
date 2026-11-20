@@ -48,6 +48,9 @@
    * or aria attributes. Walk up a few levels, strip the controls out, and use
    * the container's short text as the label. */
   function containerLabel(control) {
+    const question = control.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return text(caption).slice(0, 140);
     let node = control;
     for (let hops = 0; hops < 5 && node.parentElement; hops += 1) {
       node = node.parentElement;
@@ -79,6 +82,9 @@
   }
 
   function labelFor(control) {
+    const question = control.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return text(caption).slice(0, 140);
     const aria = control.getAttribute("aria-label") || control.getAttribute("data-label");
     if (aria) return aria;
     if (control.id) {
@@ -298,6 +304,21 @@
    * the left cell of a label/value row, or the text just before it */
   function noteLabel(el) {
     if (!el) return "";
+    const assignment = el.closest("#vehicle-assignment-table");
+    if (assignment) {
+      const cell = el.closest("td");
+      const row = cell && cell.parentElement;
+      const column = row && Array.prototype.indexOf.call(row.children, cell);
+      const headers = assignment.querySelectorAll("thead th");
+      if (row && column > 0 && headers[column]) return "Vehicle assignment: " + text(row.children[0]) + " / " + text(headers[column]) + " (%)";
+    }
+    const question = el.closest("icq-question");
+    const captionLabel = question && question.querySelector(":scope > label");
+    if (captionLabel) return text(captionLabel).slice(0, 140);
+    const amount = el.closest(".coverage-amount");
+    const prior = amount && amount.previousElementSibling;
+    const caption = prior && prior.querySelector("mat-label, label");
+    if (caption) return text(caption) + ": Amount";
     const cell = el.closest("td, th");
     if (cell && cell.parentElement) {
       const row = cell.parentElement;
@@ -327,6 +348,9 @@
    * shared, so its text names nothing in particular. */
   function boxLabel(box) {
     if (!box) return "";
+    const question = box.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return stripMarks(text(caption)).slice(0, 140);
     const own = box.querySelector("label, mat-label, .k-label, legend");
     const t = own ? stripMarks(text(own)) : "";
     if (t) return t.length <= 80 ? t : "";
@@ -357,7 +381,7 @@
     const ff = el.closest(FORM_FIELD);
     if (ff) {
       const t = boxLabel(ff);
-      if (t && t.length <= 80) return t;
+      if (t && t.length <= 140) return t;
     }
     const control = el.matches("input, select, textarea") ? el : el.closest("[role='combobox'], select");
     if (control && control.matches("input, select, textarea")) {
@@ -442,6 +466,9 @@
     const h = lobHeading();
     if (!h || !title) return title || h;
     return labelKey(title).indexOf(labelKey(h)) === 0 ? title : h + ": " + title;
+  }
+  function matchesTeachingPage(page) {
+    return !page || labelKey(pageTitle()) === page || labelKey(withHeading(pageTitle())) === page;
   }
   /* the line of business a page is headed by ("Auto", "Home", "Dwelling
    * Fire"...), "" when the heading isn't one */
@@ -663,7 +690,13 @@
         const field = { label, value, name: clean(control.name || control.id), section: sectionOf(control).text || section, group: "", source: "control" };
         if (path && (/^(?:crm:[a-z]+\d*|[a-z][a-zA-Z0-9]{0,30})\.[a-z][a-zA-Z0-9_]{0,99}$/.test(path) ||
             NOTE_PATH.test(path))) field.mapped = path;
-        if (field.mapped && /^note/.test(field.mapped)) noteControls.push({ field, control, key: keyOf(control) });
+        if (field.mapped && /^note/.test(field.mapped)) {
+          const system = /^yearUpdated(Heating|Electrical|Plumbing|Roofing)$/i.exec(control.name || control.id || "");
+          if (system && labelKey(label) === "year updated") field.label = `${system[1]}: Year Updated`;
+          const scheduled = /^(coins|fineArts|furs|guns|jewelry|music|silverware)Breakage$/.exec(control.name || control.id || "");
+          if (scheduled && labelKey(label) === "breakage") field.label = scheduled[1].replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) + ": Breakage";
+          noteControls.push({ field, control, key: keyOf(control) });
+        }
         else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) });
         fields.push(field);
       });
@@ -961,8 +994,27 @@
    * the primary insured, so related contacts start at 2). */
   /* timeline-note targets; "note:contacts[]" = each row's related contact
    * (row 1 -> note:contact2, like the related-contact slots) */
-  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]))?$/;
-  function noteRow(path, i) { return path === "note:contacts[]" ? "note:contact" + (i + 2) : path; }
+  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]|properties\[\]|property[1-9]\d?))?$/;
+  function contactArrayStart() {
+    // EZLynx's applicant/details and driver lists include the insured first.
+    // Generic related-contact tables keep their existing start-at-2 contract.
+    return location.hostname === "app.ezlynx.com" && /^(details|drivers)$/.test(labelKey(pageTitle())) && !activeModal() ? 1 : 2;
+  }
+  function contactArrayPath(family, column, index) {
+    const slot = contactArrayStart() + index;
+    if (family === "secure") return (slot === 1 ? "secure:primarycontact." : "secure:contact" + slot + ".") + column;
+    return withPersonSlot((family === "crm" ? "crm:contact2." : "contact2.") + column, slot);
+  }
+  function arrayRowPath(family, column, index) {
+    if (family === "contacts" || family === "crm:contacts") return contactArrayPath(family === "contacts" ? "semantic" : "crm", column, index);
+    const cfg = ARRAY_SLOTS[family];
+    return cfg.slot + (cfg.start + index) + "." + column;
+  }
+  function noteRow(path, i) {
+    const contactSlot = contactArrayStart() + i;
+    return path === "note:contacts[]" ? (contactSlot === 1 ? "note:contact" : "note:contact" + contactSlot)
+      : path === "note:properties[]" ? "note:property" + (i + 1) : path;
+  }
   /* a person's mapped path (1 = the primary insured, N = related contact
    * N-1); same grammar as src/boldpenguin/people.ts slotOf / withSlot */
   var PERSON_PATH = /^(?:(contact|crm:primarycontact)|(contact|crm:contact)(\d+))\.([a-zA-Z][a-zA-Z0-9_]{0,99})$/;
@@ -1007,6 +1059,16 @@
    * other cells of the same table stay row-aligned even when a row hides one
    * cell), or null when nothing repeats. */
   function expandTaughtRows(selector) {
+    // A read-only field contains a caption span and a value span. They are
+    // one value, never rows of a collection (even when their DOM repeats).
+    let anchor = null;
+    try { anchor = document.querySelector(selector); } catch (_e) { return null; }
+    // This is a two-dimensional driver/vehicle matrix. Capture every input;
+    // its own row and column captions identify the relationship in notes.
+    if (anchor && anchor.matches("#vehicle-assignment-table")) {
+      return Array.from(anchor.querySelectorAll('input[type="number"]')).filter(isVisible).map((el, i) => ({ n: i + 1, el }));
+    }
+    if (anchor && anchor.closest("ez-read-only-field")) return null;
     const marks = [];
     const re = /:nth-of-type\((\d+)\)/g;
     let m;
@@ -1022,20 +1084,30 @@
       }
       if (rows.filter(function (r) { return isVisible(r.el); }).length >= 2) return rows;
     }
-    return null;
+    const siblings = siblingsByLabel(anchor);
+    return siblings ? inPageOrder(siblings).map((el, i) => ({ n: i + 1, el })) : null;
   }
 
   /* one labelled-field teaching ({byLabel, page, path, section}): only on
    * its own page; every card's instance, in page order; same routing as a
-   * picked field (note table, list rows, or one routed value). Secured
-   * targets never travel this way (share files can't carry them). */
-  function labelledFields(t, out) {
+   * picked field (note table, list rows, or one routed value). Locally taught
+   * secured mappings use only the separate pass-through channel. */
+  function labelledFields(t, out, secureOut) {
     const path = typeof t.path === "string" ? t.path : "";
-    if (!path || isSecurePath(path)) return;
-    if (t.page && labelKey(pageTitle()) !== t.page) return;
-    const els = fieldsByLabel(t.byLabel, /\[\]\./.test(path));
+    if (!path) return;
+    if (!matchesTeachingPage(t.page)) return;
+    const els = fieldsByLabel(t.byLabel, /\[\](?:\.|$)/.test(path));
     if (!els.length) return;
     const label = clean(t.label) || fieldLabelText(els[0]) || t.byLabel;
+    if (isSecurePath(path)) {
+      if (PAYMENT_FIELD.test(label)) return;
+      const array = path.match(/^secure:contacts\[\]\.([a-z][a-z0-9_]{0,99})$/);
+      els.forEach((el, i) => {
+        const value = shown(el) ? fieldValue(el).slice(0, 100) : "";
+        if (value && secureOut) secureOut.push({ path: array ? contactArrayPath("secure", array[1], i) : path, value });
+      });
+      return;
+    }
     if (PAYMENT_FIELD.test(label) || sensitiveLabel(label)) return;
     const values = els.map((el) => {
       const v = fieldValue(el).slice(0, 300);
@@ -1061,7 +1133,7 @@
       const cfg = ARRAY_SLOTS[arr[1]];
       const section = clean(t.section) || pageTitle();
       values.forEach((value, i) => {
-        if (value) out.push({ label, value, section, group: "Row " + (i + 1), source: "taught", mapped: cfg.slot + (cfg.start + i) + "." + arr[2] });
+        if (value) out.push({ label, value, section, group: "Row " + (i + 1), source: "taught", mapped: arrayRowPath(arr[1], arr[2], i) });
       });
       return;
     }
@@ -1073,7 +1145,7 @@
   function taughtFields(taught, secureOut) {
     const out = [];
     (Array.isArray(taught) ? taught : []).forEach((t) => {
-      if (t && typeof t.byLabel === "string" && t.byLabel) { labelledFields(t, out); return; }
+      if (t && typeof t.byLabel === "string" && t.byLabel) { labelledFields(t, out, secureOut); return; }
       if (!t || typeof t.selector !== "string" || typeof t.label !== "string" || PAYMENT_FIELD.test(t.label)) return;
       const path = typeof t.path === "string" ? t.path : "";
       let anchor = null;
@@ -1105,7 +1177,7 @@
         if (arrSec) {
           (expandTaughtRows(t.selector) || (anchor ? [{ n: 1, el: anchor }] : [])).forEach((r) => {
             const value = sec(r.el);
-            if (value && secureOut) secureOut.push({ path: "secure:contact" + (r.n + 1) + "." + arrSec[1], value });
+            if (value && secureOut) secureOut.push({ path: contactArrayPath("secure", arrSec[1], r.n - 1), value });
           });
           return;
         }
@@ -1128,7 +1200,8 @@
           : multi ? withHeading(repeatTitle(rows.map((r) => r.el)) || pageTitle()) : sectionFor(label) || "Notes";
         rows.forEach(function (r) {
           const value = row(r.el);
-          if (value) out.push({ label, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: noteRow(path, r.n - 1) });
+          const rowLabel = r.el.closest("#vehicle-assignment-table") ? noteLabel(r.el) : label;
+          if (value) out.push({ label: rowLabel, value, section, group: multi ? "Row " + r.n : "", source: "taught", mapped: noteRow(path, r.n - 1) });
         });
         return;
       }
@@ -1144,7 +1217,7 @@
           const value = row(r.el);
           if (!value) return;
           out.push({ label: t.label, value, section, group: "Row " + r.n, source: "taught",
-            mapped: cfg.slot + (cfg.start + r.n - 1) + "." + arr[2] });
+            mapped: arrayRowPath(arr[1], arr[2], r.n - 1) });
         });
         return;
       }
@@ -1165,7 +1238,7 @@
   globalThis.__bettersExpandTaughtRows = expandTaughtRows;
   /* labelled-field keys for the filler's peek and the editor's scan */
   globalThis.__bettersFieldsByLabel = (page, key, family) =>
-    (page && labelKey(pageTitle()) !== page ? [] : fieldsByLabel(key, Boolean(family)));
+    (!matchesTeachingPage(page) ? [] : fieldsByLabel(key, Boolean(family)));
   globalThis.__bettersFieldLabelText = fieldLabelText;
   /* the label of the labelled form-field box an element sits in ("" when
    * it isn't in one) - click-to-map turns that into a label mapping */

@@ -44,6 +44,9 @@
    * ancestor container instead of label[for]/aria - mirror the harvester's
    * fallback so those fields are matchable too. */
   function containerLabel(control) {
+    const question = control.closest("icq-question");
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return clean(caption.innerText || caption.textContent).slice(0, 140);
     let node = control;
     for (let hops = 0; hops < 5 && node.parentElement; hops += 1) {
       node = node.parentElement;
@@ -71,6 +74,11 @@
 
   /* the one VISIBLE label a human would read for this control */
   function primaryLabel(element) {
+    /* EZLynx carrier selects point aria-labelledby at the selected answer.
+     * The question's own caption is the stable field identity. */
+    const question = element.tagName === "MAT-SELECT" ? element.closest("icq-question") : null;
+    const caption = question && question.querySelector(":scope > label");
+    if (caption) return clean(caption.innerText || caption.textContent).slice(0, 140);
     const fieldset = element.closest("fieldset");
     const legend = fieldset && fieldset.querySelector(":scope > legend");
     if ((element.type || "").toLowerCase() === "radio" && legend) {
@@ -273,7 +281,11 @@
    * the twins share */
   function shownLabel(element) {
     const own = controlKey(element) !== legacyControlKey(element) ? ownLabelText(element) : "";
-    return own || primaryLabel(element);
+    const label = own || primaryLabel(element);
+    const system = /^yearUpdated(Heating|Electrical|Plumbing|Roofing)$/i.exec(element.name || element.id || "");
+    if (system && normText(label) === "year updated") return `${system[1]}: Year Updated`;
+    const scheduled = /^(coins|fineArts|furs|guns|jewelry|music|silverware)Breakage$/.exec(element.name || element.id || "");
+    return scheduled && normText(label) === "breakage" ? scheduled[1].replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) + ": Breakage" : label;
   }
   /* where this control's saved mapping lives: the key made from its own
    * label first (whatever else is on the page), else its current key. When
@@ -348,7 +360,7 @@
     const s = mapper && mapper.sectionOf ? mapper.sectionOf(element) : null;
     return s && s.text && label ? s.text + ": " + label : label;
   }
-  const FIELD_KEY_RE = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,80})$/;
+  const FIELD_KEY_RE = /^field:(?:([a-z0-9 ]{1,40})\|)?((?:[a-z0-9 ]{1,40}>)?[a-z0-9 ]{1,140})$/;
 
   /* banking, payment and card fields are NEVER auto-filled - an insurance
    * application holds nothing that belongs in them */
@@ -541,10 +553,10 @@
     return null;
   }
 
-  function pageControls(fillRoot) {
+  function pageControls(fillRoot, includeReadOnly) {
     return Array.from(fillRoot.querySelectorAll("input, select, textarea"))
       .filter(visible)
-      .filter((element) => !element.disabled && !element.readOnly)
+      .filter((element) => includeReadOnly || (!element.disabled && !element.readOnly))
       .filter((element) => !["hidden", "password", "file", "submit", "button", "reset"].includes((element.type || "").toLowerCase()));
   }
 
@@ -980,6 +992,14 @@
     let el = null;
     if (key && key.indexOf("pick:") === 0) {
       try { el = document.querySelector(key.slice(5)); } catch (_e) { el = null; }
+    } else if (key && key.indexOf("field:") === 0) {
+      // Selector teachings use labelled-field keys, including every-row
+      // families. Resolve them through the same lookup used by capture/peek.
+      const m = FIELD_KEY_RE.exec(key);
+      const fields = m && typeof globalThis.__bettersFieldsByLabel === "function"
+        ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2], m[2].indexOf(">") > 0) : [];
+      const box = fields[0];
+      el = box ? (box.matches(LABELLED_FIELDS) ? box : box.querySelector(LABELLED_FIELDS)) : null;
     } else if (key) {
       el = findChoiceControl(key, hint);
     } else {
@@ -1051,7 +1071,7 @@
     const c = tick();
     if (c.repeat) return c.repeat;
     const byKey = new Map();
-    pageControls(activeModal() || document).forEach((ct) => {
+    Array.from((activeModal() || document).querySelectorAll("input, select, textarea")).filter(visible).forEach((ct) => {
       const k = controlKey(ct);
       if (!byKey.has(k)) byKey.set(k, []);
       byKey.get(k).push(ct);
@@ -1078,14 +1098,15 @@
     /* boxes sharing this control's key are the same field on every card */
     if (element) {
       const same = ctx.byKey.get(controlKey(element)) || [];
-      const twins = same;
-      if (twins.length > repeatSections.length) repeatSections = twins.map(sectionKey);
+      // Native controls with different keys can share a caption (the four
+      // home system update years). Only twins of this control are rows.
+      if (same.length) repeatSections = same.map(sectionKey);
     }
     const parts = String(document.title || "").split(" - ");
     return { repeats: repeatSections.length, repeatSections, page: parts.length > 1 ? normText(parts[parts.length - 1]).slice(0, 40) : "" };
   }
 
-  /* mapping editor's view of this frame: every fillable control with its key,
+  /* mapping editor's view of this frame: every visible control with its key,
    * visible label, what auto-matching would pick, and any saved mapping */
   function scanControls(payload, overrides) {
     const ov = overrides || {};
@@ -1095,17 +1116,20 @@
     /* saved keys of controls that now carry their own key: the key stays a
      * row of its own (below) so a Save writes it back untouched */
     const legacyShared = new Map();
-    for (const element of pageControls(activeModal() || document)) {
+    for (const element of pageControls(activeModal() || document, true)) {
       const name = fieldName(element);
       if (!name) continue;
       /* a box whose own-label key holds a mapping is listed under it even when
        * it is alone on the page and its current key is the legacy key, so a
        * Save keeps that mapping */
       const key = rowKeyOf(ov, element);
-      if (seen.has(key)) continue;
-      seen.add(key);
       const legacy = legacyControlKey(element);
       const inherited = legacyRefused(ov, element);
+      // Identify explicitly taught disabled values without advertising an
+      // ambiguous old shared key as a mapping for its disabled siblings.
+      if ((element.disabled || element.readOnly) && (!ov[key] || inherited)) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
       if (legacy !== key) {
         const hit = legacyShared.get(legacy) || { element, count: 0 };
         hit.count += 1;
@@ -1173,7 +1197,7 @@
       const m = FIELD_KEY_RE.exec(key);
       if (!m) continue;
       /* a section field on a list target reads every section of its kind */
-      const family = m[2].indexOf(">") > 0 && /\[\]\./.test(String(ov[key] || ""));
+      const family = m[2].indexOf(">") > 0 && /\[\](?:\.|$)/.test(String(ov[key] || ""));
       const els = typeof globalThis.__bettersFieldsByLabel === "function" ? globalThis.__bettersFieldsByLabel(m[1] || "", m[2], family) : [];
       const name = els.length && typeof globalThis.__bettersFieldLabelText === "function" ? globalThis.__bettersFieldLabelText(els[0]) : "";
       const kind = m[2].slice(0, m[2].indexOf(">")).split(" ").pop();
@@ -1256,6 +1280,13 @@
   /* best-effort label for a text value: its table row/column header, a
    * preceding bold/label sibling, or aria metadata */
   function inferTextLabel(el) {
+    var question = el.closest && el.closest("icq-question");
+    var questionCaption = question && question.querySelector(":scope > label");
+    if (questionCaption) return clean(questionCaption.innerText || questionCaption.textContent).slice(0, 140);
+    var amount = el.closest && el.closest(".coverage-amount");
+    var prior = amount && amount.previousElementSibling;
+    var caption = prior && prior.querySelector("mat-label, label");
+    if (caption) return clean(caption.innerText || caption.textContent) + ": Amount";
     var cell = el.closest ? el.closest("td") : null;
     if (cell) {
       var row = cell.parentElement;
@@ -1289,7 +1320,7 @@
    * (Kendo dropdowns, styled date pickers) the user clicks a wrapper span
    * while the real control sits CSS-hidden inside it, so the smallest
    * wrapper on the click path holding a couple of controls resolves too. */
-  var FIELD_BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container";
+  var FIELD_BOX = "mat-form-field, .mat-mdc-form-field, .mat-form-field, .k-floating-label-container, ez-read-only-field";
   function pickTarget(event) {
     var path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
     var i;
@@ -1346,6 +1377,8 @@
         activePickCancel = null;
         clearHover();
         document.removeEventListener("mouseover", onHover, true);
+        document.removeEventListener("pointerdown", onPointerDown, true);
+        document.removeEventListener("mousedown", onPointerDown, true);
         document.removeEventListener("click", onClick, true);
         document.removeEventListener("keydown", onKey, true);
         window.removeEventListener("message", onMessage);
@@ -1377,6 +1410,14 @@
         hoveredOffset = box.style.outlineOffset;
         box.style.outline = "2px solid #0f6cbd";
         box.style.outlineOffset = "1px";
+      }
+
+      function onPointerDown(event) {
+        // Selection must not focus/open the source control before the click
+        // is intercepted (address autocomplete can otherwise edit the form).
+        if (!pickTarget(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
       }
 
       function onClick(event) {
@@ -1419,13 +1460,17 @@
            * field by its label - it survives re-renders and covers every
            * card that repeats it; otherwise a re-locatable selector */
           var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
-          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 80) : "";
+          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
+          // A truncated label cannot match the full source question later.
+          // Long carrier captions use the stable control selector instead.
+          if (labelKey.length > 140) labelKey = "";
           /* a sub-section's field ("Other Address" City) is its own mapping,
            * never its twin's in the other section */
           var sec = mapper && mapper.sectionOf ? mapper.sectionOf(tx) : { key: "", text: "" };
+          var pickedPage = /(?:^| )address$/.test(sec.key) ? repeatInfo(boxLabel).page : "";
           finish({
-            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
-            label: (labelKey && inSection(tx, boxLabel)) || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (pickedPage ? pickedPage + "|" : "") + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
+            label: (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,
             scopes: mapper && mapper.scopesOf ? mapper.scopesOf(tx) : [],
@@ -1455,6 +1500,8 @@
       timer = setTimeout(function () { finish("timeout"); }, timeoutMs || 20000);
       activePickCancel = function () { finish(null); };
       document.addEventListener("mouseover", onHover, true);
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("mousedown", onPointerDown, true);
       document.addEventListener("click", onClick, true);
       document.addEventListener("keydown", onKey, true);
       window.addEventListener("message", onMessage);
@@ -1470,6 +1517,7 @@
    * (pointer-events: none) and every style is restored on clear. --- */
   var peekMarks = [];
   var PEEK_STYLE = {
+    focused: { outline: "4px solid #ff00ff", badge: "#d000a8" },
     mapped: { outline: "3px solid #13a10e", badge: "#13a10e" },
     /* auto-matched IS mapped: green, dashed so it reads as a guess */
     auto: { outline: "2px dashed #13a10e", badge: "#13a10e" },
@@ -1514,7 +1562,7 @@
    * extension update orphans it mid-peek): badges carry data-betters-peek;
    * outlines are tagged since, and older ones are known by their exact
    * peek colors with the 1px offset */
-  var PEEK_COLORS = /rgb\((19, 161, 14|15, 108, 189|138, 136, 134|209, 52, 56)\)|#(13a10e|0f6cbd|8a8886|d13438)/i;
+  var PEEK_COLORS = /rgb\((19, 161, 14|15, 108, 189|138, 136, 134|209, 52, 56|255, 0, 255)\)|#(13a10e|0f6cbd|8a8886|d13438|ff00ff)/i;
   function sweepStalePeek() {
     try {
       document.querySelectorAll("[data-betters-peek]").forEach(function (b) { if (b.parentNode) b.parentNode.removeChild(b); });
@@ -1546,7 +1594,19 @@
 
   function markPeek(el, kind, label) {
     var s = PEEK_STYLE[kind] || PEEK_STYLE.mapped;
-    var mark = { el: el, outline: el.style.outline, offset: el.style.outlineOffset, badge: null };
+    // A service mapping and a page mapping may cover the same element.
+    // Keep one original style so clearing the selected pink outline restores it.
+    var existing = peekMarks.find(function (m) { return m.el === el; });
+    if (existing) {
+      el.style.outline = s.outline;
+      existing.focused = kind === "focused";
+      if (existing.badge) {
+        existing.badge.style.background = s.badge;
+        if (label) existing.badge.textContent = label;
+      }
+      return;
+    }
+    var mark = { el: el, outline: el.style.outline, offset: el.style.outlineOffset, badge: null, focused: kind === "focused" };
     if (!el.hasAttribute("data-betters-peek-outline")) {
       el.setAttribute("data-betters-peek-outline", el.style.outline || "");
       el.setAttribute("data-betters-peek-offset", el.style.outlineOffset || "");
@@ -1583,6 +1643,8 @@
     });
     var shown = 0;
     var missing = 0;
+    // Selected fields are painted last so overlapping mappings stay pink.
+    items = items.filter(function (it) { return !it || !it.focused; }).concat(items.filter(function (it) { return it && it.focused; }));
     items.forEach(function (it) {
       if (!it || typeof it.key !== "string") return;
       var els = [];
@@ -1605,7 +1667,7 @@
       if (!els.length) { missing += 1; return; }
       shown += 1;
       els.forEach(function (el, i) {
-        markPeek(el, it.kind, i === 0 ? String(it.label || "") + (it.array && els.length > 1 ? " (" + els.length + " rows)" : "") : "");
+        markPeek(el, it.focused ? "focused" : it.kind, i === 0 ? String(it.label || "") + (it.array && els.length > 1 ? " (" + els.length + " rows)" : "") : "");
       });
     });
     watchBadges(true);
@@ -1621,6 +1683,7 @@
    * Only real content changes count - the badges this script adds are
    * ignored, so re-applying never feeds itself. */
   var lastPeekArg = null;
+  var lastFocusedKey = "";
   var peekObserver = null;
   var peekRedo = 0;
   function isOwnNode(n) { return n && n.nodeType === 1 && n.hasAttribute && n.hasAttribute("data-betters-peek"); }
@@ -1644,11 +1707,17 @@
     if (!redo) watchPage(true);
     clearPeek();
     var items = (arg && Array.isArray(arg.items)) ? arg.items : [];
+    var focusedKey = items.filter(function (it) { return it && it.focused; }).map(function (it) { return it.key; }).join("|");
     var r = peek(items, true);
     var map = {};
     Object.keys((arg && arg.map) || {}).forEach(function (k) { map[k] = arg.map[k]; });
     items.forEach(function (it) { if (it && typeof it.key === "string") map[it.key] = map[it.key] || (it.family ? "family" : "shown"); });
     var u = peekUnmapped({ map: map, payload: arg && arg.payload, pageLabels: arg && arg.pageLabels }, true);
+    if (focusedKey && focusedKey !== lastFocusedKey) {
+      var selected = peekMarks.find(function (m) { return m.focused; });
+      if (selected && typeof selected.el.scrollIntoView === "function") selected.el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    lastFocusedKey = focusedKey;
     watchBadges(true);
     return { shown: r.shown, missing: r.missing, unmapped: u.shown };
   }
