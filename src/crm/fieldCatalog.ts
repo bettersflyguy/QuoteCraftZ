@@ -23,7 +23,7 @@ export interface CatalogColumn {
 
 export interface CatalogEntity {
   /** Target key used in mappings: "crm:<key>.<column>". */
-  key: "account" | "primarycontact" | "contacts" | "policies" | "addresses" | "quote" | "opportunity" | "priorcoverage" | (typeof ASSET_TABLES)[number]["key"] | (typeof CHILD_TABLES)[number]["key"];
+  key: "account" | "primarycontact" | "contacts" | "policies" | "addresses" | "quote" | "opportunity" | "lead" | "priorcoverage" | (typeof ASSET_TABLES)[number]["key"] | (typeof CHILD_TABLES)[number]["key"];
   logical: string;
   set: string;
   label: string;
@@ -39,6 +39,9 @@ export const SECURE_ENTITY_KEYS = new Set(["account", "primarycontact", "contact
 
 export interface FieldCatalog {
   envId: string; fetchedAt: number; entities: CatalogEntity[];
+  /** Extension version that read this catalog: a cached copy from another
+   * build is never reused (AB#3745: refresh after an extension update). */
+  build?: string;
   /** Set only when no table could be read: why (never cached). */
   unavailable?: CatalogUnavailable;
   /** AB#3745: what the read did, per table (see catalogDiagnostics.ts). */
@@ -58,6 +61,8 @@ export const CATALOG_ENTITIES: Omit<CatalogEntity, "columns">[] = [
   { key: "addresses", logical: "customeraddress", set: "customeraddresses", label: "Addresses (all rows)", array: true },
   { key: "quote", logical: "iacrm_quote", set: "iacrm_quotes", label: "Quote", array: false },
   { key: "opportunity", logical: "opportunity", set: "opportunities", label: "Opportunity", array: false },
+  // AB#3745: Leads are loaded from the panel (Load to CRM > Lead) but had no column list
+  { key: "lead", logical: "lead", set: "leads", label: "Lead", array: false },
   /* the insured's prior (incumbent) policy, one per line: the line comes
    * from the page a value was mapped on ("Prior Auto Policy") */
   { key: "priorcoverage", logical: "iacrm_priorcoverage", set: "iacrm_priorcoverages", label: "Prior Coverage", array: false },
@@ -309,8 +314,8 @@ export async function buildFieldCatalog(env: CrmEnvironment, api: CatalogApi): P
 
 // v2: entities carry their secured (pass-through) columns; v3: addresses;
 // v4: "Contacts (all rows)"; v5: Prior Coverage; v6: assets; v7: asset children;
-// v8: per-table diagnostics (AB#3745)
-const CACHE_VERSION = "v8";
+// v8: per-table diagnostics (AB#3745); v9: Lead table added (AB#3745)
+const CACHE_VERSION = "v9";
 const CACHE_PREFIX = `crm/fieldCatalog/${CACHE_VERSION}/`;
 const TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -336,6 +341,19 @@ async function missingMappedColumns(catalog: FieldCatalog): Promise<number> {
   return missing;
 }
 
+/** The running extension's version ("unknown" outside an extension page). */
+export function extensionBuild(): string {
+  try { return chrome.runtime.getManifest().version; } catch { return "unknown"; }
+}
+
+/** Drops every cached catalog (all environments, all shape versions). Run on
+ * an extension update so the first read after it is live. */
+export async function clearFieldCatalogCache(): Promise<void> {
+  const all = await chrome.storage.local.get(null) as Record<string, unknown>;
+  const keys = Object.keys(all).filter(k => k.startsWith("crm/fieldCatalog/"));
+  if (keys.length) await chrome.storage.local.remove(keys);
+}
+
 /** Cached per environment for a day - metadata changes only with a solution
  * import; `refresh` forces a re-read. */
 export async function getFieldCatalog(env: CrmEnvironment, api: CatalogApi, refresh = false): Promise<FieldCatalog> {
@@ -346,11 +364,13 @@ export async function getFieldCatalog(env: CrmEnvironment, api: CatalogApi, refr
     // a saved mapping naming a column the cached list lacks means the CRM
     // gained columns since (a solution import): re-read, at most every 10 min
     const stale = hit && Date.now() - hit.fetchedAt > 10 * 60 * 1000 && (await missingMappedColumns(hit)) > 0;
-    if (hit && !stale && Date.now() - hit.fetchedAt < TTL_MS && hit.entities.length) {
+    // a catalog read by another extension build is never reused
+    const sameBuild = hit?.build === extensionBuild();
+    if (hit && sameBuild && !stale && Date.now() - hit.fetchedAt < TTL_MS && hit.entities.length) {
       return hit.diagnostics ? { ...hit, diagnostics: { ...hit.diagnostics, source: "cached" } } : hit;
     }
   }
-  const fresh = await buildFieldCatalog(env, api);
+  const fresh = { ...(await buildFieldCatalog(env, api)), build: extensionBuild() };
   if (fresh.entities.length) await chrome.storage.local.set({ [key]: fresh });
   return fresh;
 }

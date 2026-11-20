@@ -10,12 +10,28 @@ export interface RefusalInfo { upn?: string; dvCode?: string; dvMessage?: string
 
 export type CatalogUnavailable =
   | { kind: "signin" }
+  | ({ kind: "notMember"; status: number } & RefusalInfo)
   | ({ kind: "rejected"; status: 401 } & RefusalInfo)
   | ({ kind: "role"; status: 403 } & RefusalInfo)
   | { kind: "other"; detail: string };
 
 /** ADO task that tracks the missing CRM security role for the connector. */
 export const ROLE_TASK = "Task 3704";
+
+/** Dataverse's refusal for an account that is not a user of the org (it signed
+ * in to a different tenant, or was never added). Code 0x80072560, message
+ * "The user is not a member of the organization". Not a missing role: no role
+ * can be granted until the account is a user of the environment (AB#3745). */
+export const NOT_MEMBER_CODE = "0x80072560";
+export function isNotMemberRefusal(r: { dvCode?: string | null; dvMessage?: string | null } | null | undefined): boolean {
+  return /^0x80072560$/i.test(r?.dvCode?.trim() ?? "") || /not a member of the organi[sz]ation/i.test(r?.dvMessage ?? "");
+}
+
+/** The plain-words warning for a not-a-member refusal; `account` is the
+ * signed-in UPN when known. */
+export function notMemberText(account?: string | null): string {
+  return `Signed in as ${account || "an account"}, which is not a user of this CRM; sign out and sign in with your CRM account.`;
+}
 
 /** Classifies a failed CRM read by the error the worker raised. */
 export function classifyCatalogError(e: unknown): CatalogUnavailable {
@@ -30,6 +46,7 @@ export function classifyCatalogError(e: unknown): CatalogUnavailable {
       ...(typeof r.host === "string" && r.host ? { host: r.host } : {}),
       ...(r.claims && typeof r.claims === "object" ? { claims: r.claims } : {})
     };
+    if (isNotMemberRefusal(info)) return { kind: "notMember", status: err.status ?? 403, ...info };
     return err.status === 403 ? { kind: "role", status: 403, ...info } : { kind: "rejected", status: 401, ...info };
   }
   // never carry a URL query string (or anything after it) into the panel
@@ -43,6 +60,8 @@ export function catalogUnavailableNote(reason: CatalogUnavailable | undefined): 
   switch (reason?.kind) {
     case "signin":
       return "CRM fields unavailable: sign in to the CRM. Showing built-in targets.";
+    case "notMember":
+      return `CRM fields unavailable: ${notMemberText(reason.upn)} Showing built-in targets.`;
     case "rejected":
       return "CRM fields unavailable: the CRM rejected the sign-in (HTTP 401). Sign in again with your work account. Showing built-in targets.";
     case "role":

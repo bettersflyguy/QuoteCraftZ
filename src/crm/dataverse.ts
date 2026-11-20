@@ -1,4 +1,4 @@
-import { getAccessToken } from "./auth";
+import { getAccessToken, __store } from "./auth";
 import type { CrmEnvironment } from "./environments";
 import { parseRefusal, safeClaims, safeHost, type TokenClaims } from "./catalogDiagnostics";
 import type { AccountEnrichmentState, ContactRow, NewContact } from "./enrich";
@@ -44,6 +44,14 @@ export function claimsFromToken(token: string): TokenClaims {
     const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
     return safeClaims({ upn: json.preferred_username ?? json.upn ?? json.unique_name, oid: json.oid, tid: json.tid, aud: json.aud });
   } catch { return {}; }
+}
+
+/** The account the cached sign-in for an org belongs to (from the token's
+ * claims), or null when there is no cached token. Never refreshes, never
+ * prompts, never returns the token (AB#3745). */
+export async function signedInAccount(orgUrl: string): Promise<string | null> {
+  const cached = await __store.get(orgUrl);
+  return cached ? claimsFromToken(cached.accessToken).upn ?? null : null;
 }
 
 export interface AccountMatch { accountId: string; name: string; city: string | null; postalCode: string | null; openOppCount: number }
@@ -252,6 +260,9 @@ export interface NewLeadFields extends NewAccountFields {
   topic: string;
   /** Intake source name ("Tivly", ...) - resolved-or-created in iacrm_leadsource. */
   leadSource: string | null;
+  /** Mapped "crm:lead.*" columns from the capture (raw text); the worker
+   * coerces them against the live Lead catalog before they reach createLead. */
+  extra?: Record<string, string>;
 }
 
 /** Find-or-create an iacrm_leadsource row by name (e.g. "Tivly"). */
@@ -264,8 +275,10 @@ export async function getLeadSourceId(env: CrmEnvironment, name: string): Promis
   return r["iacrm_leadsourceid"]!;
 }
 
-export async function createLead(env: CrmEnvironment, f: NewLeadFields): Promise<{ leadId: string; name: string }> {
-  const body: Record<string, unknown> = { subject: f.topic };
+export async function createLead(env: CrmEnvironment, f: NewLeadFields, extra: Record<string, unknown> = {}): Promise<{ leadId: string; name: string }> {
+  // mapped columns first: the load's own values (subject, name, address,
+  // phone, email, source) win over a mapping of the same column
+  const body: Record<string, unknown> = { ...extra, subject: f.topic };
   if (f.leadSource) {
     // schema-cased nav prop (metadata-verified: iacrm_LeadSourceId)
     body["iacrm_LeadSourceId@odata.bind"] = `/iacrm_leadsources(${await getLeadSourceId(env, f.leadSource)})`;
