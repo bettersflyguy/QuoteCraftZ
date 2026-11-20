@@ -643,6 +643,8 @@ The physical contract below resolves implementation names, types, ranges and cho
 
 `iacrm_contactpoint` (`iacrm_ContactPoint`, entity set `iacrm_contactpoints`) is UserOwned. The primary ID and platform ownership/state/audit columns are additional to these eight authored fields. The existing CRM app includes its main form and Active, Lookup, Quick Find and Associated views. Existing forms and views keep their identities.
 
+The new Property columns are exposed on the existing Property main form's All fields tab, in Additional intake details before the final Enrichment section. Both main-form identities, the PropertyWorkbench tab and all 366 existing controls are preserved.
+
 | Logical name | Representation | Requirement |
 |---|---|---|
 | `iacrm_name` | Text (200) | Required |
@@ -678,6 +680,6 @@ GitHub Actions run **44577688798**, check **135749549720**, reports that jobs co
 
 The draft canonical package **1.3.0.379** passed managed/unmanaged packing, publisher checks and the complete pinned PAC 2.13.1 Both-format round trip. **19 focused tests and two subtests passed**. Comparison to the branch base preserved **517 existing attributes, 46 relationships and 887 privilege grants/depths**. A fresh read-only check at 18:24 CST still found dev at **1.3.0.378**, with none of the proposed columns and no Contact Point table. Artifact hashes and source digest are retained in the CRM PR's validation JSON.
 
-The Windows Python baseline was **25 failed, 2,817 passed, 6 skipped, 1 xfailed**; these are pre-existing failures, not a green baseline. Node regressions passed **1,313**, with **36 skipped**. The original export verifier fails a Windows path-string comparison; a POSIX-normalized read-only comparison matched all 17 retained inventories and contents. The full final regression comparison is still running; its outcome is recorded on Task 3756 and the CRM PR.
+The Windows Python baseline was **25 failed, 2,817 passed, 6 skipped, 1 xfailed**. The first post-change run exposed five additional failures, which were corrected in the Property form, renovation choice expectations, schema-name fixture and draft/capture version checks. The final Python check passed **2,836 tests and 239 subtests**, with six skips, one expected failure and **only the exact 25 pre-existing failure nodes deselected**. All 72 affected tests passed separately. The final Node suite passed **1,313**, with **36 skipped**. This is not a claim that the original 25 failures passed. The unmodified export verifier still fails a Windows path-string comparison; a POSIX-normalized read-only comparison matched all 17 retained inventories and contents. Evidence is recorded on Task 3756 and CRM PR 498, current schema head `2bb392cb0eb3486fcb4cb5c679f0bd5e5c7f3841`.
 
 **Mapping status:** every current fallback listed above stays in force. A schema build does not implement typed collection writers or prove a successful capture/load/read-back. Those follow-ups remain open under the related coverage, incident, Contact-name and mapping work. Do not label the 159 catalog entries fully fixed solely because a destination has been created.
