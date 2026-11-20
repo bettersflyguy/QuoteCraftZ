@@ -1039,7 +1039,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/createLead": {
         const env = await deps.getActiveEnvironment();
-        return { ok: true, data: await deps.createLead(env, msg.fields) };
+        const extra = await coercedExtras(deps, env, "lead", msg.fields.extra);
+        return { ok: true, data: await withExtrasFallback(extra, x => deps.createLead(env, msg.fields, x)) };
       }
 
       case "panel/findMatches": {

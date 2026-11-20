@@ -34,16 +34,6 @@ export interface CatalogEntity {
   secured?: CatalogColumn[];
 }
 
-/** Catalog tables with no write path yet: listed in the catalog but never
- * offered as mapping targets, so a mapped value can't be silently dropped
- * (AB#3745). Remove a key here when its load step writes the table. */
-export const READ_ONLY_ENTITY_KEYS = new Set<string>(["lead"]);
-
-/** The catalog's entities that may be offered as mapping targets. */
-export function mappableEntities(catalog: { entities: CatalogEntity[] }): CatalogEntity[] {
-  return catalog.entities.filter(e => !READ_ONLY_ENTITY_KEYS.has(e.key));
-}
-
 /** Entities whose identifier columns are offered as secured targets. */
 export const SECURE_ENTITY_KEYS = new Set(["account", "primarycontact", "contacts"]);
 

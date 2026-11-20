@@ -548,7 +548,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           state: identity.state || null, postalCode: identity.postalCode || null,
           phone: identity.phone || null, phoneIsMobile: identity.phoneIsMobile,
           email: identity.email || null,
-          leadSource: leadSourceGuess(app)
+          leadSource: leadSourceGuess(app),
+          extra: crmGroup(app, "crm:lead") ?? undefined
         }
       });
       setResults([{ key: `Lead created: ${created.name} (source: ${leadSourceGuess(app)})`, status: 204, error: null, entityId: null },

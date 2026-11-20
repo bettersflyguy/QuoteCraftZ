@@ -6,12 +6,13 @@ import { backing, reset } from "./helpers/chromeStub";
 import { __store } from "@/crm/auth";
 import { CrmAccessError, signedInAccount } from "@/crm/dataverse";
 import {
-  CATALOG_ENTITIES, READ_ONLY_ENTITY_KEYS, mappableEntities, type CatalogApi, buildFieldCatalog, clearFieldCatalogCache, getFieldCatalog, type FieldCatalog
+  CATALOG_ENTITIES, type CatalogApi, buildFieldCatalog, clearFieldCatalogCache, getFieldCatalog, type FieldCatalog
 } from "@/crm/fieldCatalog";
 import { catalogUnavailableNote, classifyCatalogError, isNotMemberRefusal, notMemberText, ROLE_TASK } from "@/crm/catalogNote";
 import { diagnosticNote, diagnosticText } from "@/crm/catalogDiagnostics";
 import { routeMessage } from "@/workerRouter";
-import { MAP_PATH_GROUPS } from "@/portal/fieldMaps";
+import { MAP_PATH_GROUPS, isCrmTarget, isRoutablePath } from "@/portal/fieldMaps";
+import { columnKeyOf } from "@/portal/optionMaps";
 import type { CrmEnvironment } from "@/crm/environments";
 
 const env = { id: "dev", name: "DEV", orgUrl: "https://x.crm.dynamics.com", color: "green" } as CrmEnvironment;
@@ -85,6 +86,7 @@ describe("account and environment status, Sign out", () => {
 
   it("signedInAccount reads the cached token's account, and null when signed out", async () => {
     expect(await signedInAccount(env.orgUrl)).toBeNull();
+    const jwt = (claims: object) => `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`;
     await __store.set(env.orgUrl, { accessToken: jwt({ preferred_username: "Nathan@bettersagency.com" }), refreshToken: "R", expiresAt: Date.now() + 1000 });
     expect(await signedInAccount(env.orgUrl)).toBe("Nathan@bettersagency.com");
     // a token that is not a JWT yields no account rather than an error
@@ -105,6 +107,7 @@ describe("account and environment status, Sign out", () => {
   });
 
   it("auth/signOut clears the active environment's cached sign-in and nothing else", async () => {
+    const jwt = (claims: object) => `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`;
     await __store.set(env.orgUrl, { accessToken: jwt({ preferred_username: WRONG }), refreshToken: "R", expiresAt: Date.now() + 1000 });
     const clearToken = vi.fn(async (o: string) => { await chrome.storage.session.remove(`token:${o}`); });
     const res = await routeMessage({ type: "auth/signOut" }, { getActiveEnvironment: async () => env, clearToken } as never);
@@ -133,14 +136,61 @@ describe("Lead in the field catalog", () => {
     expect(c.diagnostics?.tables.some(t => t.logical === "lead" && t.ok)).toBe(true);
   });
 
-  it("Lead stays in the catalog but is not offered as a mapping target (nothing writes it yet)", async () => {
+  it("Lead is not hidden: nothing filters it out of the catalog's entities (owner, D-3745-3)", async () => {
     const c = await buildFieldCatalog(env, okApi());
-    expect(c.entities.some(e => e.key === "lead")).toBe(true);
-    expect(READ_ONLY_ENTITY_KEYS.has("lead")).toBe(true);
-    const keys = mappableEntities(c).map(e => e.key);
-    expect(keys).not.toContain("lead");
-    expect(keys).toContain("account");
-    expect(keys.length).toBe(c.entities.length - 1);
+    expect(c.entities.map(e => e.key)).toContain("lead");
+    expect(c.entities.length).toBe(CATALOG_ENTITIES.length);
+  });
+
+  it("crm:lead.<column> is a valid, routable mapping target; AMS-owned and identifier columns are still refused", () => {
+    expect(isCrmTarget("crm:lead.description")).toBe(true);
+    expect(isRoutablePath("crm:lead.description")).toBe(true);
+    expect(isCrmTarget("crm:lead.iacrm_amsexternalid")).toBe(false);
+    expect(isRoutablePath("crm:lead.governmentid")).toBe(false);
+    expect(isCrmTarget("crm:leads[].description")).toBe(false); // Lead is one record, not an array
+    expect(columnKeyOf("crm:lead.leadsourcecode")).toBe("lead.leadsourcecode");
+  });
+
+  it("panel/createLead writes the mapped Lead columns, coerced against the live catalog (unknown columns dropped)", async () => {
+    const createLead = vi.fn(async () => ({ leadId: "L1", name: "N" }));
+    const catalog = { entities: [{ key: "lead", logical: "lead", set: "leads", label: "Lead", array: false,
+      columns: [{ name: "description", label: "Description", type: "String" }] }] };
+    const fields = { topic: "T", name: "N", firstName: null, lastName: null, street: null, city: null, state: null,
+      postalCode: null, phone: null, phoneIsMobile: false, email: null, leadSource: null,
+      extra: { description: "from the carrier site", notacolumn: "x" } };
+    const res = await routeMessage({ type: "panel/createLead", fields } as never,
+      { getActiveEnvironment: async () => env, getFieldCatalog: async () => catalog, createLead } as never);
+    expect(res).toEqual({ ok: true, data: { leadId: "L1", name: "N" } });
+    expect(createLead).toHaveBeenCalledWith(env, fields, { description: "from the carrier site" });
+  });
+
+  it("a Lead the CRM rejects because of a mapped column is created again without the mapped columns", async () => {
+    const createLead = vi.fn(async (_e: unknown, _f: unknown, x: Record<string, unknown>) => {
+      if (Object.keys(x).length) throw new Error("Dataverse 400: bad value");
+      return { leadId: "L2", name: "N" };
+    });
+    const catalog = { entities: [{ key: "lead", logical: "lead", set: "leads", label: "Lead", array: false,
+      columns: [{ name: "description", label: "Description", type: "String" }] }] };
+    const fields = { topic: "T", extra: { description: "x" } };
+    const res = await routeMessage({ type: "panel/createLead", fields } as never,
+      { getActiveEnvironment: async () => env, getFieldCatalog: async () => catalog, createLead } as never);
+    expect(res).toEqual({ ok: true, data: { leadId: "L2", name: "N" } });
+    expect(createLead).toHaveBeenCalledTimes(2);
+  });
+
+  it("createLead puts the mapped columns in the POST body, and the load's own values win a clash", async () => {
+    const { createLead } = await import("@/crm/dataverse");
+    const jwt = (claims: object) => `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`;
+    await __store.set(env.orgUrl, { accessToken: jwt({ preferred_username: "Nathan@bettersagency.com" }), refreshToken: "R", expiresAt: Date.now() + 3600_000 });
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body ?? "{}"));
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ leadid: "L3", fullname: "A B" }) } as unknown as Response;
+    }));
+    await createLead(env, { topic: "Subject", name: "A B", firstName: "A", lastName: "B", street: null, city: null, state: null,
+      postalCode: null, phone: null, phoneIsMobile: false, email: null, leadSource: null },
+      { description: "mapped", subject: "MAPPED SUBJECT", firstname: "MAPPED" });
+    expect(body).toMatchObject({ description: "mapped", subject: "Subject", firstname: "A", lastname: "B" });
   });
 
   it("a failing Lead table is reported as partial, not dropped silently", async () => {

@@ -260,6 +260,9 @@ export interface NewLeadFields extends NewAccountFields {
   topic: string;
   /** Intake source name ("Tivly", ...) - resolved-or-created in iacrm_leadsource. */
   leadSource: string | null;
+  /** Mapped "crm:lead.*" columns from the capture (raw text); the worker
+   * coerces them against the live Lead catalog before they reach createLead. */
+  extra?: Record<string, string>;
 }
 
 /** Find-or-create an iacrm_leadsource row by name (e.g. "Tivly"). */
@@ -272,8 +275,10 @@ export async function getLeadSourceId(env: CrmEnvironment, name: string): Promis
   return r["iacrm_leadsourceid"]!;
 }
 
-export async function createLead(env: CrmEnvironment, f: NewLeadFields): Promise<{ leadId: string; name: string }> {
-  const body: Record<string, unknown> = { subject: f.topic };
+export async function createLead(env: CrmEnvironment, f: NewLeadFields, extra: Record<string, unknown> = {}): Promise<{ leadId: string; name: string }> {
+  // mapped columns first: the load's own values (subject, name, address,
+  // phone, email, source) win over a mapping of the same column
+  const body: Record<string, unknown> = { ...extra, subject: f.topic };
   if (f.leadSource) {
     // schema-cased nav prop (metadata-verified: iacrm_LeadSourceId)
     body["iacrm_LeadSourceId@odata.bind"] = `/iacrm_leadsources(${await getLeadSourceId(env, f.leadSource)})`;

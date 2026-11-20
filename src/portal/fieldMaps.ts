@@ -126,9 +126,9 @@ export function rowTargetOf(path: string): { arrayPath: string; row: number } | 
  * re-validates every column against the live catalog before writing. */
 /** Columns owned by the AMS sync - never written by extension features. */
 const AMS_OWNED = new Set(["iacrm_amsexternalid", "iacrm_synctoams", "iacrm_lastsyncon"]);
-const CRM_TARGET = new RegExp(`^crm:(account|primarycontact|quote|opportunity|priorcoverage|contacts\\[\\]|policies\\[\\]|addresses\\[\\]|${ASSET_ARRAYS})\\.([a-z][a-z0-9_]{0,99})$`);
+const CRM_TARGET = new RegExp(`^crm:(account|primarycontact|quote|opportunity|lead|priorcoverage|contacts\\[\\]|policies\\[\\]|addresses\\[\\]|${ASSET_ARRAYS})\\.([a-z][a-z0-9_]{0,99})$`);
 /** Concrete per-row forms array teachings fan out into. */
-const CRM_ROUTABLE = new RegExp(`^crm:(account|primarycontact|quote|opportunity|priorcoverage|contact(?:[2-9]|[1-3]\\d)|policy(?:[1-9]|[1-3]\\d)|address(?:[1-9]|[1-3]\\d)|${ASSET_ROWS})\\.([a-z][a-z0-9_]{0,99})$`);
+const CRM_ROUTABLE = new RegExp(`^crm:(account|primarycontact|quote|opportunity|lead|priorcoverage|contact(?:[2-9]|[1-3]\\d)|policy(?:[1-9]|[1-3]\\d)|address(?:[1-9]|[1-3]\\d)|${ASSET_ROWS})\\.([a-z][a-z0-9_]{0,99})$`);
 
 /** Identifier-class CRM columns (SSN, government ID, driver's license
  * NUMBERS - "iacrm_driverslicense" too): secured pass-through only, never a

@@ -20,7 +20,7 @@ export const dataServiceScope = (name: string): string => `dataservice:${name}`;
 
 const ENTITY_TABLE: Record<string, string> = {
   account: "account", primarycontact: "contact", contacts: "contact", contact: "contact",
-  policies: "iacrm_policy", policy: "iacrm_policy", quote: "iacrm_quote", opportunity: "opportunity", priorcoverage: "iacrm_priorcoverage",
+  policies: "iacrm_policy", policy: "iacrm_policy", quote: "iacrm_quote", opportunity: "opportunity", lead: "lead", priorcoverage: "iacrm_priorcoverage",
   addresses: "customeraddress", address: "customeraddress",
   ...Object.fromEntries(ROW_TABLES.flatMap(a => [[a.key, a.logical], [a.slot, a.logical]]))
 };
