@@ -572,3 +572,112 @@ The browser configuration has 237 page mappings and 63 mapped Data Service field
 Home Carrier Questions/Valid exposed no additional data fields. Auto's extra Carrier Questions were gated by existing source validation errors and remain outside this inventory until rendered. Empty violations/comp-loss sections were inspected without creating records; future incident attributes above are marked when no observed source answer exists.
 
 No CRM schema was deployed and no real client load was performed to verify this handoff. QuoteCraftZ 0.1.80 passed 527 tests; Property-note binding uses mocked Dataverse tests. CRM implementation still requires pipeline deployment and actual dev browser/read-back acceptance.
+
+## Implementation build record — ADO 3756
+
+**Status: draft authored and built; NOT deployed.** [Task 3756](https://dev.azure.com/BettersAgencyLLC/D365%20Insurance%20CRM/_workitems/edit/3756) tracks the owner's request to update this wiki and build/deploy to AgentCRMDev. The canonical CRM changes are pushed in [draft PR 498](https://github.com/bettersflyguy/BettersInsuranceCRM/pull/498), branch `codex/quotecraftz-schema-additions`, based on dev `79bf6e249791a40525a56506de110f5e5ec0a38c`. The extension remains in its proper QuoteCraftZ repository.
+
+**Environment naming correction:** the current CRM repository records `https://bettersinsurance.crm.dynamics.com` as the Betters Insurance **test** environment (D-3680-21), formerly production. The earlier audit sections retain the historical production label to identify the snapshot that was read. This request authorizes dev only; none of the REUSE + DEPLOY rows authorizes a test/production release here.
+
+The physical contract below resolves implementation names, types, ranges and choice integers. It is additive to the complete source-field/fallback catalog above. **48 of the 53 existing-table columns and the eight Contact Point fields are authored in the draft.** Five new choices remain deferred until their exact source vocabularies are read: Dwelling type, Roof design, Fire detection, Animals on premises and Policy form. They are not replaced with guessed options or text. The release preflight refuses an incomplete contract.
+
+### Exact new columns on existing tables
+
+| Existing entity | New logical name | Physical representation | Draft status |
+|---|---|---|---|
+| `iacrm_property` | `iacrm_dwellingtype` | Nullable Choice: `dwelling_type`; no default | Deferred: verify source choices |
+| `iacrm_property` | `iacrm_roofdesign` | Nullable Choice: `roof_design`; no default | Deferred: verify source choices |
+| `iacrm_property` | `iacrm_fullbathroomcount` | Whole number 0–2147483647 | Authored; not deployed |
+| `iacrm_property` | `iacrm_halfbathroomcount` | Whole number 0–2147483647 | Authored; not deployed |
+| `iacrm_property` | `iacrm_woodburningstovecount` | Whole number 0–2147483647 | Authored; not deployed |
+| `iacrm_property` | `iacrm_firedivisionunitcount` | Whole number 0–2147483647 | Authored; not deployed |
+| `iacrm_property` | `iacrm_employeesonpremises` | Whole number 0–2147483647 | Authored; not deployed |
+| `iacrm_property` | `iacrm_firedetectiontype` | Nullable Choice: `fire_detection`; no default | Deferred: verify source choices |
+| `iacrm_property` | `iacrm_addressunit` | Text (100) | Authored; not deployed |
+| `iacrm_property` | `iacrm_zip4suffix` | Text (4) | Authored; not deployed |
+| `iacrm_property` | `iacrm_withinfiredistrict` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_multipolicydiscount` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_retireecredit` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_maturehomeownerdiscount` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_retirementcommunity` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_limitedaccesscommunity` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_gatedcommunity` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_adverseinsurancehistory5years` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_underconstruction` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_trampoline` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_businessordaycareonpremises` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_dogsonpremises` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_property` | `iacrm_animalsonpremises` | Nullable Choice: `animals_on_premises`; no default | Deferred: verify source choices |
+| `iacrm_priorcoverage` | `iacrm_monthswithpriorcarrier` | Whole number 0–11 | Authored; not deployed |
+| `iacrm_priorcoverage` | `iacrm_monthscontinuouscoverage` | Whole number 0–11 | Authored; not deployed |
+| `iacrm_application` | `iacrm_creditreportsauthorized` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_quote` | `iacrm_quoteaspackage` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_quote` | `iacrm_policyformtype` | Nullable Choice: `policy_form`; no default | Deferred: verify source choices |
+| `iacrm_quotecoverage` | `iacrm_quoteitemid` | Lookup → `iacrm_quoteitem`; Restrict delete | Authored; not deployed |
+| `iacrm_quotecoverage` | `iacrm_limitunit` | Nullable Choice: `limit_unit`; no default | Authored; not deployed |
+| `iacrm_quotecoverage` | `iacrm_optiontext` | Text (2000) | Authored; not deployed |
+| `iacrm_quotecoverage` | `iacrm_election` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_quotecoverage` | `iacrm_deductiblepercentage` | Decimal, precision 4; 0–100 | Authored; not deployed |
+| `iacrm_quotecoverage` | `iacrm_limitperperson` | Money, precision 2; 0–100000000000 | Authored; not deployed |
+| `iacrm_quotecoverage` | `iacrm_limitperaccident` | Money, precision 2; 0–100000000000 | Authored; not deployed |
+| `iacrm_quotecoverage` | `iacrm_breakageelection` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `iacrm_riskanswer` | `iacrm_quoteid` | Lookup → `iacrm_quote`; Restrict delete | Authored; not deployed |
+| `iacrm_riskanswer` | `iacrm_contactid` | Lookup → `contact`; Restrict delete | Authored; not deployed |
+| `iacrm_drivingincident` | `iacrm_propertydamageamount` | Money, precision 2; 0–100000000000 | Authored; not deployed |
+| `iacrm_drivingincident` | `iacrm_bodilyinjuryamount` | Money, precision 2; 0–100000000000 | Authored; not deployed |
+| `iacrm_drivingincident` | `iacrm_collisionamount` | Money, precision 2; 0–100000000000 | Authored; not deployed |
+| `iacrm_drivingincident` | `iacrm_medicalpaymentsamount` | Money, precision 2; 0–100000000000 | Authored; not deployed |
+| `iacrm_drivingincident` | `iacrm_opportunityid` | Lookup → `opportunity`; Restrict delete | Authored; not deployed |
+| `iacrm_drivingincident` | `iacrm_quoteid` | Lookup → `iacrm_quote`; Restrict delete | Authored; not deployed |
+| `account` | `iacrm_customersince` | Date only; DateOnly behavior | Authored; not deployed |
+| `account` | `iacrm_isvip` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `account` | `iacrm_address1zip4` | Text (4) | Authored; not deployed |
+| `account` | `iacrm_yearsatprimaryaddress` | Whole number 0–2147483647 | Authored; not deployed |
+| `account` | `iacrm_monthsatprimaryaddress` | Whole number 0–11 | Authored; not deployed |
+| `contact` | `iacrm_isdeceased` | Nullable Choice: `yes_no_unknown`; no default | Authored; not deployed |
+| `customeraddress` | `iacrm_zip4suffix` | Text (4) | Authored; not deployed |
+| `customeraddress` | `iacrm_yearsataddress` | Whole number 0–2147483647 | Authored; not deployed |
+| `customeraddress` | `iacrm_monthsataddress` | Whole number 0–11 | Authored; not deployed |
+
+### One new Contact Point table
+
+`iacrm_contactpoint` (`iacrm_ContactPoint`, entity set `iacrm_contactpoints`) is UserOwned. The primary ID and platform ownership/state/audit columns are additional to these eight authored fields. The existing CRM app includes its main form and Active, Lookup, Quick Find and Associated views. Existing forms and views keep their identities.
+
+| Logical name | Representation | Requirement |
+|---|---|---|
+| `iacrm_name` | Text (200) | Required |
+| `iacrm_contactid` | Lookup → `contact`; Restrict delete | Required |
+| `iacrm_channel` | Nullable Choice: `contact_channel`; no default | Required |
+| `iacrm_usagetype` | Text (100) | Optional |
+| `iacrm_value` | Text (320) | Required |
+| `iacrm_extension` | Text (30) | Optional |
+| `iacrm_sourcesequence` | Whole number 0–2147483647 | Optional |
+| `iacrm_source` | Text (100) | Optional |
+
+### Fixed option values and relationships
+
+| Local choice domain | Stable values |
+|---|---|
+| `yes_no_unknown` | Yes = 298400000; No = 298400001; Unknown / not asked = 298400002 |
+| `limit_unit` | Currency = 298400000; Percentage = 298400001; Count = 298400002; Option = 298400003 |
+| `contact_channel` | Phone = 298400000; Email = 298400001 |
+
+Yes/No facts use a nullable Choice rather than a Boolean defaulting to false. Blank means no supplied value; explicit Unknown / not asked remains separate from No. Zero is valid for counts. ZIP suffixes and phone extensions preserve leading zeros as text. Currency companions are platform base fields, not additional source answers. Incident Property Damage, Bodily Injury, Collision and Medical Payments remain separate; the existing Amount Paid is not calculated from them.
+
+Extend existing `iacrm_propertyrenovation.iacrm_extent` with **Not Updated = 298400002** and `iacrm_system` with **Cooling = 298400005**. Existing option integers and labels are preserved. Enable Connections on the existing Quote. The new solution-owned **Co-applicant** role is scoped to Contact; the mapping later connects the appropriate Contact to the specific Quote. No customer Connections or participant records are seeded.
+
+New explicit lookups are Quote Coverage → Quote Item; Risk Answer → Quote and Contact; Driving Incident → Opportunity and Quote; Contact Point → Contact. They restrict deletion and do not cascade assignment, sharing or reparenting. Existing asset/driver/coverage/servicing relationships are retained.
+
+Producer receives owner-scoped Create/Read/Write/Append/AppendTo for Contact Point and Connections, preserving any existing privilege depths; Agency Admin gets full Contact Point access. Existing role-definition read access is retained or added. No connector/service-role permission is widened. These proposed grants await the required independent security review.
+
+### Delivery and unresolved dependencies
+
+The current user-supplied GitHub pipeline instruction controls this work, despite conflicting newer repository text describing manual deployment. Changes must be reviewed and merged to dev, then deployed with the exact dev SHA and Task 3756 through Deploy dev, with Solution Checker and an exact post-attempt capture. No direct customization write/import/publish has been made by this task.
+
+GitHub Actions run **44577688798**, check **135749549720**, reports that jobs could not start because recent account payments failed or the Actions spending limit must be increased. The installed Claude CLI reports `loggedIn: false`, blocking the repository-required independent Opus reviews. EZLynx redirected to login when the five missing option lists were inspected. The draft remains incomplete until these dependencies are resolved.
+
+The draft canonical package **1.3.0.379** passed managed/unmanaged packing, publisher checks and the complete pinned PAC 2.13.1 Both-format round trip. **19 focused tests and two subtests passed**. Comparison to the branch base preserved **517 existing attributes, 46 relationships and 887 privilege grants/depths**. A fresh read-only check at 18:24 CST still found dev at **1.3.0.378**, with none of the proposed columns and no Contact Point table. Artifact hashes and source digest are retained in the CRM PR's validation JSON.
+
+The Windows Python baseline was **25 failed, 2,817 passed, 6 skipped, 1 xfailed**; these are pre-existing failures, not a green baseline. Node regressions passed **1,313**, with **36 skipped**. The original export verifier fails a Windows path-string comparison; a POSIX-normalized read-only comparison matched all 17 retained inventories and contents. The full final regression comparison is still running; its outcome is recorded on Task 3756 and the CRM PR.
+
+**Mapping status:** every current fallback listed above stays in force. A schema build does not implement typed collection writers or prove a successful capture/load/read-back. Those follow-ups remain open under the related coverage, incident, Contact-name and mapping work. Do not label the 159 catalog entries fully fixed solely because a destination has been created.
