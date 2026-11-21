@@ -442,7 +442,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
           disabled={busy !== null && busy !== "lead"}
           onClick={() => void pickLead()}
         />
-        <DestinationCart app={app} busy={busy!==null} onFill={()=>void run("fill")}/>
+        <DestinationCart app={app} busy={busy!==null||loadFlow} onFill={()=>void run("fill")} onSaved={updated=>{setApp(updated);onChanged();}}/>
         <Tooltip
           content={peekUnmapped
             ? `${mappedCount} mapped in green, ${peekCount ?? 0} unmapped in red. Click to hide.`

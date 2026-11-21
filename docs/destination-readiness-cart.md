@@ -1,4 +1,4 @@
-# Destination readiness cart — 0.1.96
+# Destination readiness cart — 0.1.97
 
 Intake has a shopping-cart icon after 1 Lead. It opens a Ready to quote
 flyout listing mapped sites and the built-in EZLynx service with a percentage,
@@ -37,3 +37,31 @@ grouped missing answers and focusing the existing Datalot tab without losing
 the held application. The sample showed Datalot 9/24 (37%) and EZLynx 13/32
 (40%) using its current mappings. No CRM records or quote forms were written
 during acceptance.
+
+## Inline missing-answer entry — 0.1.97
+
+The flyout uses a pale blue background, blue border/top edge, and a stronger
+shadow to separate it from Intake. Each missing concrete target has a compact
+right-hand entry control. Cached CRM choices/booleans use selects, DateTime
+uses a date control, and numeric columns use number controls. Other fields
+use text. Duplicate destinations for one target share the answer; one target
+appears only once per entity group within a destination.
+
+Text saves on blur or Enter; selections save immediately. Successful saves
+remove the missing item and recompute all destination percentages. Answers
+are stored on the current held application as Express entry target facts,
+retaining the lead identity, quotes, and person/asset slot. They join the
+existing reviewed Load to CRM flow; entering a value does not directly write
+CRM. Known answers are never overwritten by this missing-answer editor.
+
+Worker-side checks re-read mappings and allow only currently missing mapped
+targets, validate supported CRM types, block secured/identifier paths, and
+reject changed application revisions/lead identity. Express saves are
+serialized. Missing metadata falls back to text without inventing choices.
+Existing name-review gates remain in effect.
+
+Build and all 609 tests in 75 files pass. Edge verified the distinct flyout,
+right-hand text/date controls, and real CRM choice options (Owned, Financed,
+Leased). No unknown client answers or CRM records were entered for browser
+acceptance; saving, row identity, shared readiness updates, validation and
+stale/unmapped-request rejection are covered by automated tests.

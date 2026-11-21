@@ -88,6 +88,7 @@ export type PanelRequest =
   | { type: "panel/getPageContext" }
   | { type: "panel/bpCapture" }
   | { type: "panel/bpGetCaptured" }
+  | { type: "panel/saveApplicationAnswer"; target:string; value:string; revision:string; leadKey:string }
   | { type: "panel/confirmNameSplit"; group:string; fingerprint:string; firstName:string; lastName:string }
   | { type: "panel/bpClear" }
   | { type: "panel/portalFill"; tabId: number; overwrite: boolean; autoAdvance: boolean }

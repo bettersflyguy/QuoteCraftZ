@@ -1,3 +1,7 @@
+import {addExpressAnswer} from "@/portal/expressAnswers";
+import {mappingServices} from "@/options/mappingGraph";
+import {destinationReadiness} from "@/portal/destinationReadiness";
+import {cachedFieldCatalog} from "@/crm/fieldCatalog";
 import {getCrmAgent} from "@/crm/agent";
 import type { BridgeRequest, PanelRequest, Res } from "@/messages";
 import {confirmNameSplit,requireReviewedNames,withReviewedNames} from "@/boldpenguin/nameReview";
@@ -438,6 +442,8 @@ async function withExtrasFallback<T>(extra: Record<string, unknown>, create: (ex
   try { return await create(extra); } catch { return create({}); }
 }
 
+let expressAnswerQueue:Promise<unknown>=Promise.resolve();
+
 export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<unknown>> {
   try {
     switch (msg.type) {
@@ -765,6 +771,24 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
 
       case "panel/bpGetCaptured":
         return { ok: true, data: await deps.getCapturedApplication() };
+
+      case "panel/saveApplicationAnswer": {
+        const operation=expressAnswerQueue.then(async()=>{
+        const app=await deps.getCapturedApplication();
+        if(!app||app.capturedAt!==msg.revision||(app.source.leadKey||app.source.url)!==msg.leadKey)throw new Error("The application changed. Refresh the flyout before saving.");
+        const [maps,ds,env]=await Promise.all([getAllFieldMaps(),getDataServiceMaps(),deps.getActiveEnvironment()]);
+        const catalog=await cachedFieldCatalog(env.id);
+        const missing=destinationReadiness(mappingServices(maps,ds),app,catalog).flatMap(d=>d.missing).find(f=>f.target===msg.target);
+        if(!missing)throw new Error("This answer is no longer missing or mapped. Refresh the flyout.");
+        const next=addExpressAnswer(app,msg.target,msg.value,missing.label,catalog);
+        const latest=await deps.getCapturedApplication();
+        if(!latest||latest.capturedAt!==app.capturedAt||(latest.source.leadKey||latest.source.url)!==msg.leadKey)throw new Error("The application changed. Refresh the flyout before saving.");
+        await deps.setCapturedApplication(next);
+        return next;
+        });
+        expressAnswerQueue=operation.catch(()=>{});
+        return {ok:true,data:await operation};
+      }
 
       case "panel/confirmNameSplit": {
         const app=await deps.getCapturedApplication();

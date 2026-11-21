@@ -74,7 +74,7 @@ export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () =
 
   return (
     <div className={styles.root}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div className={styles.title}>Bold Penguin: commercial application</div><DestinationCart app={app} busy={busy}/></div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div className={styles.title}>Bold Penguin: commercial application</div><DestinationCart app={app} busy={busy} onSaved={updated=>{setApp(updated);onChanged();}}/></div>
       {error && <ErrorBar error={error} onRetry={capture} />}
       {!app && (
         <>
