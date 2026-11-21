@@ -170,13 +170,12 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   };
 
   useEffect(() => {
-    getActiveEnvironment().then(async e => {
-      setEnv(e);
-      // sticky servicing-agent default, per environment
-      const key = `owner/default:${e.orgUrl}`;
-      const d = (await chrome.storage.local.get(key))[key] as UserRow | undefined;
-      if (d) { setOwner(d); setOwnerQuery(d.fullName); }
-    }).catch(() => {});
+    let disposed=false;
+    const load=async()=>{const e=await getActiveEnvironment();const key=`owner/default:${e.orgUrl}`;const d=(await chrome.storage.local.get(key))[key] as UserRow|undefined;if(!disposed){setEnv(e);setOwner(d??null);setOwnerQuery(d?.fullName??"");}};
+    void load().catch(()=>{});
+    const changed=(changes:Record<string,unknown>)=>{if(Object.keys(changes).some(k=>k.startsWith("owner/default:")))void load().catch(()=>{});};
+    chrome.storage.onChanged.addListener(changed);
+    return()=>{disposed=true;chrome.storage.onChanged.removeListener(changed);};
   }, []);
 
   const searchOwners = async (q: string) => {

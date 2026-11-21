@@ -1,3 +1,4 @@
+import {captureDisplayFields} from "../captureDisplay";
 import { usDate } from "@/util/usDate";
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Tab, TabList, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
@@ -374,11 +375,13 @@ export function PortalFill({ onChanged, onFlowActive }: {
   };
 
   const name = businessName(app);
+  const displayFields=app?captureDisplayFields(app.fields):[];
   const namesPending=Boolean(app && pendingNameReviews(app).length);
   // values tagged for a timeline note show apart from the regular capture
   const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const policyFields = app ? app.fields.filter(f => isPolicySection(f.section)) : [];
+  const regularDisplay=captureDisplayFields(regular);
   const renderGrid = (t: GridTable, at = 0) => (
     <div key={`${at}:${t.title}`}>
       {t.label === "Fields" && <div className={styles.gridTitle}>{t.title}</div>}
@@ -461,7 +464,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
       </div>}
       {app
         ? <div className={styles.ready}>
-            {name ?? "Application ready"}: {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held
+            {name ?? "Application ready"}: {displayFields.length} field{displayFields.length === 1 ? "" : "s"} held
             {crmLink && env && (
               <>
                 {" · "}
@@ -511,7 +514,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
         <div className={styles.result}>New person detected. Started a fresh capture.</div>
       )}      {app && (
         <TabList size="small" selectedValue={view} onTabSelect={(_, d) => setView(d.value as "data" | "quotes")}>
-          <Tab value="data">Data ({app.fields.length})</Tab>
+          <Tab value="data">Data ({displayFields.length})</Tab>
           <Tab value="quotes">Quotes ({(app.quotes ?? []).length})</Tab>
         </TabList>
       )}
@@ -527,7 +530,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
               </tr>
             </thead>
             <tbody>
-              {[...new Set(regular.filter(f => !isGridRow(f)).map(f => f.section))].map(section => (
+              {[...new Set(regularDisplay.filter(f => !isGridRow(f)).map(f => f.section))].map(section => (
                 <Fragment key={section}>
                   <tr>
                     <td colSpan={2} className={styles.groupCell}>
@@ -539,7 +542,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
                       ) : (section || "Page")}
                     </td>
                   </tr>
-                  {regular.filter(f => f.section === section && !isGridRow(f)).map((f, i) => (
+                  {regularDisplay.filter(f => f.section === section && !isGridRow(f)).map((f, i) => (
                     <tr key={`${f.label}:${i}`} className={i % 2 ? styles.zebra : undefined}>
                       <td className={styles.td} title={f.group ? `${f.group}: ${f.label}` : f.label}>
                         {f.group ? `${f.group}: ` : ""}{f.label}

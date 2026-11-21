@@ -1,3 +1,4 @@
+import {getCrmAgent} from "@/crm/agent";
 import type { BridgeRequest, PanelRequest, Res } from "@/messages";
 import {confirmNameSplit,requireReviewedNames,withReviewedNames} from "@/boldpenguin/nameReview";
 import { expandedFieldMap, mappingTargets, packMappingTargets, preferredFieldMap } from "@/portal/mappingTargets";
@@ -916,6 +917,14 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         const app=withReviewedNames(held);
         const env = await deps.getActiveEnvironment();
         const results: import("@/crm/dataverse").BatchItemResult[] = [];
+        const agent=await getCrmAgent(env);
+        if(agent) {
+          try {
+            await ensureServicingAssignment(env,{accountId:msg.accountId,ownerId:agent.userId,ownerName:agent.fullName,accountCreatedByPanel:false,createdOpportunityIds:[]},{assignOwner:deps.assignOwner,hasServicingTeamMember:deps.hasServicingTeamMember,createServicingTeamMember:deps.createServicingTeamMember});
+            results.push({key:`CRM Agent: ${agent.fullName} on insured servicing team`,status:204,error:null,entityId:null});
+          }catch(e){results.push({key:"CRM Agent servicing assignment",status:0,error:(e as Error).message,entityId:null});}
+        }
+
         // same best-effort structure as the EZLynx commit: enrichment first,
         // then the knowledge write, each surfacing its own result row.
         // captured CRM-column values, coerced against the live catalog (a
