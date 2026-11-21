@@ -1227,12 +1227,15 @@ async function tabOrigin(tabId: number): Promise<string> {
 
 async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanResult> {
   const origin = await tabOrigin(tabId);
+  const selection = await leadSelection(tabId);
+  if (selection && selection.frameId < 0) return { origin, rows:[] };
+  const target = selection ? { tabId, frameIds:[selection.frameId] } : { tabId, allFrames:true };
   const overrides = origin ? await fieldMapFor(origin) : {};
   const app = await getCapturedApplication();
   // the ingester names labelled-field rows ("field:vehicles|vin")
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
+  await chrome.scripting.executeScript({ target, files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
+    target,
     func: (p: unknown, ov: unknown) =>
       (globalThis as { __bettersPortalScan?: (p: unknown, ov: unknown) => unknown }).__bettersPortalScan?.(p, ov) ?? null,
     args: [app, overrides]
@@ -1241,7 +1244,8 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
     .map(f => f.result as import("@/boldpenguin/types").PortalScanRow[] | null)
     .filter((r): r is import("@/boldpenguin/types").PortalScanRow[] => r !== null)
     .flat();
-  if (!rows.length) throw new Error("No fillable fields found on this page. Open the quote form, then retry.");
+  // Empty scans still open the editor so its click-to-map selector can teach
+  // custom text/shadow fields. A read-only lead is not a missing quote form.
   // dedupe by key; a "pick:" teaching that resolved in SOME frame beats
   // another frame's "not on this page" placeholder for the same key
   const unresolved = (r: import("@/boldpenguin/types").PortalScanRow) => r.label === "(taught text, not on this page)";

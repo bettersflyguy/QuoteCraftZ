@@ -1116,7 +1116,8 @@
     /* saved keys of controls that now carry their own key: the key stays a
      * row of its own (below) so a Save writes it back untouched */
     const legacyShared = new Map();
-    for (const element of pageControls(activeModal() || document, true)) {
+    const scanRoot = globalThis.__bettersOneLead && typeof globalThis.__bettersCaptureRoot === "function" ? globalThis.__bettersCaptureRoot() : activeModal() || document;
+    for (const element of pageControls(scanRoot, true)) {
       const name = fieldName(element);
       if (!name) continue;
       /* a box whose own-label key holds a mapping is listed under it even when
@@ -1173,6 +1174,17 @@
         options: undefined
       });
     });
+    // Read-only values must be discoverable BEFORE a mapping has been saved.
+    const readable = typeof globalThis.__bettersCaptureElements === "function" ? globalThis.__bettersCaptureElements() : [];
+    for (const element of readable) {
+      if (element.matches("input,select,textarea,[role='combobox'],[role='checkbox'],[role='switch']") || !visible(element) || !textPickable(element)) continue;
+      const label = inferTextLabel(element);
+      if (!label) continue;
+      const key = "pick:" + cssPath(element);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ key, label, type:"text", payment:PAYMENT_FIELD.test(label), autoPath:null, mapped:typeof ov[key] === "string" ? ov[key] : null });
+    }
     /* saved read-only-text teachings ("pick:<selector>" -> CRM field) show as
      * rows too, so a revisit can review/retarget/clear them */
     for (const key of Object.keys(ov)) {
@@ -1305,7 +1317,7 @@
       }
     }
     var prev = el.previousElementSibling;
-    if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV)$/.test(prev.tagName)) {
+    if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV|LI)$/.test(prev.tagName)) {
       var p = clean(prev.innerText || prev.textContent).replace(/[:*]+$/, "");
       if (p && p.length <= 60 && p !== clean(el.innerText || el.textContent)) return p;
     }

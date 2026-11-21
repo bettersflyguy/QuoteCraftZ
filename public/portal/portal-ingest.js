@@ -621,7 +621,24 @@
   }
 
   function captureRoot() {
-    return leadRoot || activeModal() || document.querySelector("main") || document;
+    return leadRoot || (globalThis.__bettersOneLead ? globalThis.__bettersLead.get().el : null) || activeModal() || document.querySelector("main") || document;
+  }
+
+  /* Read-only review fields also use UL/LI pairs (Datalot), not just inputs,
+   * DDs or tables. Return the VALUE element so scan/pick/capture share it. */
+  function readOnlyPairs(root) {
+    const pairs = [], seen = new Set();
+    root.querySelectorAll("div,li,ul,ol").forEach(row => {
+      if (!shown(row) || inConsentUi(row) || siteChrome(row) || row.children.length !== 2) return;
+      if (row.querySelector("input,select,textarea,button,a,svg,[role='combobox'],[role='radiogroup']")) return;
+      const left = row.children[0], right = row.children[1];
+      if (left.children.length > 2 || right.children.length > 3) return;
+      if (row.matches("ul,ol") && (!left.matches("li") || !right.matches("li"))) return;
+      const label = text(left).replace(/[:*]+$/, ""), value = text(right);
+      if (!label || !value || label === value || label.length > 80 || value.length > 300 || PAYMENT_FIELD.test(label) || seen.has(right)) return;
+      seen.add(right); pairs.push({ label, value, el:right });
+    });
+    return pairs;
   }
 
   const SKIP_TYPES = ["radio", "hidden", "password", "file", "submit", "button", "reset", "search"];
@@ -651,6 +668,7 @@
       if (cells.length === 2 && text(cells[0]) && text(cells[1]) && text(cells[0]) !== text(cells[1])) els.push(cells[1]);
     });
     root.querySelectorAll("dd").forEach((dd) => { if (isVisible(dd) && text(dd)) els.push(dd); });
+    readOnlyPairs(root).forEach(pair => els.push(pair.el));
     return Array.from(new Set(els));
   }
 
@@ -810,16 +828,7 @@
     /* label-left / value-right rows - servicing portals (GEICO Edge) print
      * facts as a container with exactly two text children ("Issuing State
      * (or Country)" | "MINNESOTA"). Guards keep navs and menus out. */
-    root.querySelectorAll("div, li").forEach((row) => {
-      if (!isVisible(row) || inConsentUi(row) || row.children.length !== 2) return;
-      if (row.querySelector("input, select, textarea, button, a, svg, [role='combobox'], [role='radiogroup']")) return;
-      const c0 = row.children[0], c1 = row.children[1];
-      if (c0.children.length > 2 || c1.children.length > 3) return;
-      const label = text(c0).replace(/[:*]+$/, "");
-      const value = text(c1);
-      if (!label || !value || label === value || label.length > 80 || value.length > 300) return;
-      fields.push({ label, value, section, group: "", source: "review-row" });
-    });
+    readOnlyPairs(root).forEach(pair => fields.push({ label:pair.label, value:pair.value, section, group:"", source:"review-row" }));
 
     /* bold-label prose runs - "<strong>Name Insured</strong> <span>Edward
      * Parkin</span> <br> <strong>Mailing Address</strong>…" - the standard

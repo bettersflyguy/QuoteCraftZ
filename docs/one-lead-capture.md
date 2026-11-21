@@ -21,3 +21,10 @@ and pending secured values are cleared through the existing replacement path.
 CRM writes still use the existing review/load flow. This change does not write
 to CRM when selecting a section. The scope itself stays in the page's memory;
 only its tab/frame metadata is held in extension session storage.
+
+The mapping scanner also discovers read-only label/value rows before they
+have been taught, including Datalot-style UL/LI pairs. An empty scan opens
+the mapping editor with its click-to-map picker available instead of reporting
+that a quote form is required. In One Lead mode, discovery uses the selected
+section and frame as well as capture. Reading unmapped lead text does not
+request CRM metadata or open a CRM sign-in window.
