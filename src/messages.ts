@@ -53,7 +53,7 @@ export type PanelRequest =
   | { type: "panel/getOpportunities"; accountId: string }
   | { type: "panel/getCarriers" }
   | { type: "panel/searchUsers"; query: string }
-  | { type: "panel/createAccount"; fields: NewAccountFields }
+  | { type: "panel/createAccount"; fields: NewAccountFields; fromCapture?:boolean }
   | { type: "panel/getLobs" }
   | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string; pipelineId: string | null; stageId: string | null; leadSource?: string | null; extra?: Record<string, string> }
   | { type: "panel/crmFieldCatalog"; refresh?: boolean }
@@ -88,6 +88,7 @@ export type PanelRequest =
   | { type: "panel/getPageContext" }
   | { type: "panel/bpCapture" }
   | { type: "panel/bpGetCaptured" }
+  | { type: "panel/confirmNameSplit"; group:string; fingerprint:string; firstName:string; lastName:string }
   | { type: "panel/bpClear" }
   | { type: "panel/portalFill"; tabId: number; overwrite: boolean; autoAdvance: boolean }
   | { type: "panel/portalIngest"; tabId: number }
@@ -98,7 +99,7 @@ export type PanelRequest =
       primary?: { slot: number; explicit: boolean };
       /** The address the agent picked for the account (Address 1 columns). */
       accountAddress?: Record<string, string> }
-  | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
+  | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields; fromCapture?:boolean }
   | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
   | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }
   | { type: "panel/autoCapture"; tabId: number; enable: boolean }

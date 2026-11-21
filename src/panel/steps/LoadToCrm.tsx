@@ -10,6 +10,7 @@ import { accountAddressColumns, addressChoices, otherLine, priorCoverageColumns,
 import { ARRAY_ROW_MAX, ASSET_TABLES, CHILD_TABLES } from "@/portal/fieldMaps";
 import { writePropertyNotes } from "@/crm/propertyNotes";
 import { parsePersonName } from "@/util/personName";
+import { pendingNameReviews } from "@/boldpenguin/nameReview";
 
 const useStyles = makeStyles({
   root: {
@@ -529,6 +530,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     try {
       const created = await send<{ accountId: string; name: string }>({
         type: "panel/createAccount",
+        fromCapture:true,
         fields: {
           name: query.trim() || recordName,
           street: identity.street || null, city: identity.city || null,
@@ -546,6 +548,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       const lobName = opp.lobId ? lobs?.find(l => l.lobId === opp.lobId)?.name ?? null : null;
       const created = await send<{ leadId: string; name: string }>({
         type: "panel/createLead",
+        fromCapture:true,
         fields: {
           topic: `${oppName(lobName)} - ${recordName}`,
           name: insuredType === 2 ? identity.businessName || recordName : personName,
@@ -588,7 +591,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   if (step === "closed") {
     return (
       <div className={styles.root}>
-        <Button appearance="primary" onClick={openReview}>Load into CRM ({app.fields.length} fields)</Button>
+        {pendingNameReviews(app).length > 0 && <div className={styles.hint}>Confirm the name split above before loading CRM.</div>}
+        <Button appearance="primary" disabled={pendingNameReviews(app).length > 0} onClick={openReview}>Load into CRM ({app.fields.length} fields)</Button>
       </div>
     );
   }

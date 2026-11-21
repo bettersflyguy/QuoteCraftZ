@@ -2,8 +2,8 @@
 
 Select the first target, then click **Add target** below its dropdown to add
 another. For a personal-lines lead, the same Name value can feed **Account name**
-under Insured (account) and **Full name** under Primary contact. The two-surname
-name transformation can also be one of the targets. Each target receives the
+under Insured (account) and **Full name** under Primary contact. Ambiguous name
+splits are confirmed per captured person in Intake. Each target receives the
 same source value on capture and applies its own routing and choice mapping.
 
 The filled star marks the **preferred fill source**. Click another target's

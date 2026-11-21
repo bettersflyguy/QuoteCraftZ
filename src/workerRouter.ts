@@ -1,4 +1,5 @@
 import type { BridgeRequest, PanelRequest, Res } from "@/messages";
+import {confirmNameSplit,requireReviewedNames,withReviewedNames} from "@/boldpenguin/nameReview";
 import { expandedFieldMap, mappingTargets, packMappingTargets, preferredFieldMap } from "@/portal/mappingTargets";
 import type { CrmEnvironment } from "@/crm/environments";
 import { getEnvironments, getActiveEnvironment, setActiveEnvironment } from "@/crm/environments";
@@ -497,6 +498,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       }
 
       case "panel/createAccount": {
+        if (msg.fromCapture) {
+          const app=await deps.getCapturedApplication();
+          if (!app) throw new Error("Capture the person again before creating an account.");
+          requireReviewedNames(app);
+        }
         const env = await deps.getActiveEnvironment();
         return { ok: true, data: await deps.createAccount(env, msg.fields) };
       }
@@ -759,6 +765,14 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/bpGetCaptured":
         return { ok: true, data: await deps.getCapturedApplication() };
 
+      case "panel/confirmNameSplit": {
+        const app=await deps.getCapturedApplication();
+        if (!app) throw new Error("Capture the person again before reviewing the name.");
+        const reviewed=confirmNameSplit(app,msg);
+        await deps.setCapturedApplication(reviewed);
+        return {ok:true,data:reviewed};
+      }
+
       case "panel/bpClear":
         await deps.setCapturedApplication(null);
         await chrome.storage.session.remove("bp/crmLink");
@@ -789,7 +803,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         if (!app) {
           return { ok: false, error: "The captured application is no longer available. Capture it again in Bold Penguin.", kind: "session" };
         }
-        return { ok: true, data: await deps.fillPortalTab(msg.tabId, app, msg.overwrite, msg.autoAdvance) };
+        requireReviewedNames(app);
+        return { ok: true, data: await deps.fillPortalTab(msg.tabId, withReviewedNames(app), msg.overwrite, msg.autoAdvance) };
       }
 
       case "panel/portalScan":
@@ -893,10 +908,12 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       }
 
       case "panel/appCommit": {
-        const app = await deps.getCapturedApplication();
-        if (!app) {
+        const held = await deps.getCapturedApplication();
+        if (!held) {
           return { ok: false, error: "The captured application is no longer available. Capture or ingest it again.", kind: "session" };
         }
+        requireReviewedNames(held);
+        const app=withReviewedNames(held);
         const env = await deps.getActiveEnvironment();
         const results: import("@/crm/dataverse").BatchItemResult[] = [];
         // same best-effort structure as the EZLynx commit: enrichment first,
@@ -1054,6 +1071,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       }
 
       case "panel/createLead": {
+        if (msg.fromCapture) {
+          const app=await deps.getCapturedApplication();
+          if (!app) throw new Error("Capture the person again before creating a lead.");
+          requireReviewedNames(app);
+        }
         const env = await deps.getActiveEnvironment();
         return { ok: true, data: await deps.createLead(env, msg.fields) };
       }

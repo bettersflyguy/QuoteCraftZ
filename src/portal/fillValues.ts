@@ -7,6 +7,7 @@
 import type { CapturedApplication } from "@/boldpenguin/types";
 import { CRM_BRIDGE } from "@/boldpenguin/normalize";
 import { parsePersonName } from "@/util/personName";
+import { withReviewedNames } from "@/boldpenguin/nameReview";
 
 /** CRM date text ("2026-03-11", "2026-03-11T05:00:00Z") -> "3/11/2026"; the
  * filler turns M/D/YYYY into whatever a date input wants. */
@@ -19,6 +20,7 @@ export function displayDate(v: string): string {
 export function buildFillValues(app: CapturedApplication | null): Record<string, string> {
   const out: Record<string, string> = {};
   if (!app) return out;
+  app=withReviewedNames(app);
   for (const [group, values] of Object.entries(app.normalized ?? {})) {
     if (group.startsWith("secure:")) continue;
     for (const [key, raw] of Object.entries(values ?? {})) {

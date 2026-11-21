@@ -1,46 +1,47 @@
-# Full names from lead sources
+# One full-name mapping for mixed lead formats
 
-When a source supplies one person-name field, map it to **Full name** under
-Primary contact (or Primary insured when CRM metadata is unavailable). For a source known to use two family
-names, choose **Full name (two surnames)**. A repeating contacts section has
-the corresponding **Related contact full name (two surnames)** target under
-**Contacts (all rows)**. This is a capture transformation, not a new CRM column.
+Map Datalot's Name field to **Primary contact → Full name**. Use **Add target**
+for Account name if the complete name should also feed the personal account.
+Keep one contact-name target for the site. A list uses **Related contact full
+name** under **Contacts (all rows)**.
 
-| Captured text | Mapping | Given name(s) | Surname(s) |
+Full name supports variability between leads:
+
+| Captured text | Handling | Given names | Surnames |
 | --- | --- | --- | --- |
-| Raymond Hendricks | Full name | Raymond | Hendricks |
-| José Luis García Márquez | Full name (two surnames) | José Luis | García Márquez |
-| Carlos García Márquez | Full name (two surnames) | Carlos | García Márquez |
-| João Pedro da Silva Santos | Full name (two surnames) | João Pedro | da Silva Santos |
-| María del Carmen de la Cruz | Full name | María del Carmen | de la Cruz |
-| García Márquez, José Luis | Full name | José Luis | García Márquez |
+| Raymond Hendricks | Automatic two-part split | Raymond | Hendricks |
+| Carlos García Márquez | Confirm Two surnames for this person | Carlos | García Márquez |
+| José Luis García Márquez | Confirm Two surnames for this person | José Luis | García Márquez |
+| John Michael Smith | Confirm One surname for this person | John Michael | Smith |
+| María del Carmen de la Cruz | Confirm One surname for this person | María del Carmen | de la Cruz |
+| García Márquez, José Luis | Explicit surname-first order | José Luis | García Márquez |
 
-Both given names are kept together in CRM's first-name field for the two-surname
-mapping. Family-name particles and connectors stay with the surname. Accents,
-hyphens, apostrophes and case remain unchanged. Comparison keys fold accents
-without changing captured or displayed values. Explicit first/last name fields
-take precedence over a split from a full name.
+When a full name is ambiguous, Intake shows **Name split** above the captured
+data. It shows the original name, **One surname** and **Two surnames** buttons,
+editable **Given name(s)** and **Surname(s)** fields, and **Confirm name split**.
+These buttons propose boundaries; the fields remain editable for other patterns.
+This choice belongs to that captured person, not the Datalot mapping. Related
+contacts can each use a different split. A changed source name, identity context,
+or selected lead invalidates an old confirmation. Re-reading the same person
+preserves it. **Edit split** changes a previously confirmed boundary.
 
-The original full name remains in the capture and raw field record. Recognized
-titles are excluded from the split; Jr., Sr. and Roman-numeral suffixes are
-retained separately by the parser. These suffixes are shown in identity review
-and retained in the captured original; this change does not write a dedicated
-CRM suffix column. Automatic mode retains a middle name in the parser and original
-capture while retaining the existing first/last CRM projection for plain names.
+Unconfirmed ambiguous names cannot be used for form fill or a capture-driven
+CRM load. Confirmed parts feed the contact's first/last name fields and later
+form fills. The original full name and the independent Account name target
+remain unchanged. A two-word name or already structured first/last fields do
+not require this review. Separately captured name fields take precedence.
 
-A string cannot prove where given names end and family names begin. The tool
-does not infer a person's culture from accents or spelling. Two-surname mode
-uses the last two family-name units; choose it only when that matches the source's
-format, and check the editable given names and surnames in CRM review. For example,
-María del Carmen de la Cruz has one compound family name and uses the ordinary
-Full name target. Joint-person strings such as “José & María García” require
-manual identification; the parser does not silently treat them as one person.
+Accents, case, hyphens and apostrophes are preserved. Matching folds accents
+without changing stored values. The confirmed given names stay together in
+the contact's first-name field. Recognized suffixes remain in the original
+capture; this change does not write a separate CRM suffix column. A string
+alone cannot prove its intended boundary, and the tool does not infer a person's
+culture from spelling or accents.
 
-The same parser handles capture identity, cross-source person matching, related
-contacts, secured-record alignment and form-fill values. An output mapped to
-either full-name target receives the held full name, or the joined structured
-given names and surnames when CRM is the source.
+Older **Full name (two surnames)** bindings remain readable for compatibility,
+but are no longer offered as a site-wide choice. Their ambiguous names also
+require per-person confirmation. New mappings use **Full name**.
 
-Author the parser in `src/util/personName.ts`. `npm run build` and `npm run dev`
-generate the injected `public/portal/person-name.js` from that source before
-building the extension. Do not hand-edit the generated file.
+Author the parser in `src/util/personName.ts` and per-capture review handling
+in `src/boldpenguin/nameReview.ts`. The build generates the injected parser
+from the TypeScript source; do not edit `public/portal/person-name.js` by hand.

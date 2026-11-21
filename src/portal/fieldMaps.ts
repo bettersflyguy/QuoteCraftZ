@@ -260,7 +260,7 @@ export const isCaptureTarget = (path: string): boolean =>
 /** MAP_PATHS partitioned into ordered entity groups for the editor's
  * target dropdowns. */
 export const MAP_PATH_GROUPS: { group: string; paths: { path: string; label: string }[] }[] =
-  MAP_PATHS.reduce<{ group: string; paths: { path: string; label: string }[] }[]>((acc, p) => {
+  MAP_PATHS.filter(p=>!p.path.endsWith(".latinFullName")).reduce<{ group: string; paths: { path: string; label: string }[] }[]>((acc, p) => {
     const last = acc[acc.length - 1];
     if (last && last.group === p.group) last.paths.push(p);
     else acc.push({ group: p.group, paths: [p] });

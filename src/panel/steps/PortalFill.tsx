@@ -8,6 +8,8 @@ import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
+import { NameReview } from "../NameReview";
+import { pendingNameReviews } from "@/boldpenguin/nameReview";
 import { QuotesView } from "../QuotesView";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult, LeadSelection } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
@@ -366,6 +368,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
   };
 
   const name = businessName(app);
+  const namesPending=Boolean(app && pendingNameReviews(app).length);
   // values tagged for a timeline note show apart from the regular capture
   const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
@@ -410,9 +413,9 @@ export function PortalFill({ onChanged, onFlowActive }: {
           onClick={() => run("ingest")}
         />
         <ActionIcon
-          tip={app ? "Fill this page from the capture" : "Fill this page (capture or ingest something first)"}
+          tip={namesPending ? "Confirm the name split below before filling" : app ? "Fill this page from the capture" : "Fill this page (capture or ingest something first)"}
           icon={busy === "fill" ? <Spinner size="tiny" /> : <FormRegular />}
-          disabled={busy !== null || !app}
+          disabled={busy !== null || !app || namesPending}
           onClick={() => run("fill")}
         />
         <ActionIcon
@@ -461,6 +464,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
             )}
           </div>
         : <div className={styles.hint}>Nothing captured yet.</div>}
+      {app && <NameReview app={app} onChange={next=>{setApp(next);onChanged();}}/>}
       {awaitingGrant && (
         <Text size={200} style={{ display: "block", marginTop: 6, fontWeight: 600 }}>
           Waiting for browser approval to access {awaitingGrant}. Look for the permission

@@ -1,5 +1,6 @@
 import { usDate } from "@/util/usDate";
 import { parsePersonName } from "@/util/personName";
+import { withReviewedNames } from "@/boldpenguin/nameReview";
 /** CRM load for a captured application (Bold Penguin or portal ingest) -
  * the non-EZLynx twin of the quote commit: insured enrichment from the
  * normalized projection, plus every captured field logged to the
@@ -136,6 +137,7 @@ function emailFromCapture(app: CapturedApplication): string {
 }
 
 export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
+  app=withReviewedNames(app);
   const businessName = str(app, "business", "legalName") ?? "";
   const bizCanon = canonical(businessName);
   let firstName = stripNameDecorations(str(app, "contact", "firstName") ?? "");
@@ -242,6 +244,7 @@ export function primarySlots(app: CapturedApplication): number[] {
  * the PRIMARY insured (NowCerts lists them among related contacts) is
  * skipped - the primary contact is a one-to-one handled separately. */
 export function coApplicantsFromCapture(app: CapturedApplication): CapturedApplicant["coApplicants"] {
+  app=withReviewedNames(app);
   const isPrimaryRow = primaryMatcher(app);
   const slots = [...new Set(Object.keys(app.normalized)
     .map(k => /^(?:crm:)?contact(\d+)$/.exec(k))
