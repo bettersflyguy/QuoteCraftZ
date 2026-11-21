@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, makeStyles, tokens } from "@fluentui/react-components";
 import { HomeRegular } from "@fluentui/react-icons";
 import {CrmAgentPicker} from "./CrmAgentPicker";
+import {CrmConnection} from "./CrmConnection";
 import { EnvBadge } from "./EnvBadge";
 import { MappingsManager } from "./MappingsManager";
 import { CommercialCapture } from "./steps/CommercialCapture";
@@ -75,9 +76,10 @@ export function App() {
   // active tab, and following it would unmount the in-flight flow and dump
   // the user onto another screen mid-commit.
   const [agentBusy,setAgentBusy]=useState(false);
+  const [connectionBusy,setConnectionBusy]=useState(false);
   const [flowActive, setFlowActive] = useState(false);
   const [showMappings, setShowMappings] = useState(false);  const lastModeRef = useRef(rawMode);
-  const mode = flowActive || agentBusy ? lastModeRef.current : rawMode;
+  const mode = flowActive || agentBusy || connectionBusy ? lastModeRef.current : rawMode;
   lastModeRef.current = mode;
 
   return (
@@ -91,6 +93,7 @@ export function App() {
         </div>
         <CrmAgentPicker onBusy={setAgentBusy}/>
         <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+          <CrmConnection onBusy={setConnectionBusy}/>
           <Button
             appearance="subtle"
             icon={<HomeRegular />}

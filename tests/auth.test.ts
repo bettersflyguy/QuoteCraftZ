@@ -47,7 +47,7 @@ describe("getAccessToken", () => {
     Object.assign(chrome,{identity:{getRedirectURL:()=>"https://test.chromiumapp.org/",launchWebAuthFlow:launch}});
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({access_token:"SECOND",expires_in:3600})})));
     const first=getAccessToken("https://one.crm.dynamics.com");
-    const failure=expect(first).rejects.toThrow("cancelled");
+    const failure=expect(first).rejects.toThrow("CRM sign-in did not finish");
     const second=getAccessToken("https://two.crm.dynamics.com");
     await vi.waitFor(()=>expect(launch).toHaveBeenCalledTimes(1));
     rejectFirst(new Error("cancelled"));await failure;

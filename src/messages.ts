@@ -112,6 +112,7 @@ export type PanelRequest =
   | { type: "panel/getCrmLink" }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
+  | { type: "auth/status" }
   | { type: "auth/signIn" };
 
 export interface CaptureRunResponse { run: CapturedRun; aliases: Record<number, string> }

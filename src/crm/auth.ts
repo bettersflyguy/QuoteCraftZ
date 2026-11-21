@@ -1,7 +1,7 @@
 import { APP_CONFIG } from "@/config/appConfig";
 
 export class AuthRequiredError extends Error {
-  constructor() { super("Interactive sign-in required"); this.name = "AuthRequiredError"; }
+  constructor(message = "Interactive sign-in required") { super(message); this.name = "AuthRequiredError"; }
 }
 
 interface TokenSet { accessToken: string; refreshToken: string | null; expiresAt: number }
@@ -69,7 +69,12 @@ async function tokenRequest(body: URLSearchParams): Promise<TokenSet> {
 async function interactiveSignIn(orgUrl: string): Promise<TokenSet> {
   const redirectUri = chrome.identity.getRedirectURL();
   const { verifier, challenge } = await pkcePair();
-  const cb = await chrome.identity.launchWebAuthFlow({ url: buildAuthorizeUrl(orgUrl, redirectUri, challenge), interactive: true });
+  let cb: string | undefined;
+  try {
+    cb = await chrome.identity.launchWebAuthFlow({ url: buildAuthorizeUrl(orgUrl, redirectUri, challenge), interactive: true });
+  } catch {
+    throw new AuthRequiredError("CRM sign-in did not finish. Complete the Microsoft sign-in window, or close it and reconnect.");
+  }
   const code = cb ? new URL(cb).searchParams.get("code") : null;
   if (!code) throw new AuthRequiredError();
   return tokenRequest(new URLSearchParams({

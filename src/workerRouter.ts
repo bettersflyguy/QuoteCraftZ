@@ -1156,6 +1156,14 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: { quoteId, linesWritten } };
       }
 
+      case "auth/status": {
+        const env = await deps.getActiveEnvironment();
+        // A status check can refresh an existing session, but must never open
+        // an account picker merely because the panel mounted after a reload.
+        await deps.getAccessToken(env.orgUrl, { interactive: false });
+        await deps.dvQuery(env, "WhoAmI");
+        return { ok: true, data: { environment: env.name } };
+      }
       case "auth/signIn": {
         const env = await deps.getActiveEnvironment();
         // force a fresh interactive sign-in: the cached token may be VALID but
@@ -1179,7 +1187,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         : "This is usually the wrong account picked at sign-in. Use Sign in and choose your work account.";
       return { ok: false, error: `${who} was rejected by ${envName} (${err.orgUrl}, HTTP ${err.status}). ${why}`, kind: "auth" };
     }
-    if (err.name === "AuthRequiredError") return { ok: false, error: "Sign-in required", kind: "auth" };
+    if (err.name === "AuthRequiredError") return { ok: false, error: err.message || "Sign-in required", kind: "auth" };
     return { ok: false, error: String(err.message ?? err), kind: "unknown" };
   }
 }

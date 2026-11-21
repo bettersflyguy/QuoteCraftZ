@@ -3,6 +3,19 @@ import "./helpers/chromeStub";
 import { routeMessage } from "@/workerRouter";
 
 describe("routeMessage", () => {
+  it("checks a restored CRM session without opening interactive sign-in", async () => {
+    const env = {id:"dev",name:"DEV",orgUrl:"https://o.crm.dynamics.com"};
+    const deps = {getActiveEnvironment:vi.fn(async()=>env),getAccessToken:vi.fn(async()=>"TOKEN"),dvQuery:vi.fn(async()=>({UserId:"u"}))};
+    expect(await routeMessage({type:"auth/status"},deps as never)).toEqual({ok:true,data:{environment:"DEV"}});
+    expect(deps.getAccessToken).toHaveBeenCalledWith(env.orgUrl,{interactive:false});
+    expect(deps.dvQuery).toHaveBeenCalledWith(env,"WhoAmI");
+  });
+  it("offers reconnection when reload has cleared the session", async () => {
+    const deps = {getActiveEnvironment:vi.fn(async()=>({name:"DEV",orgUrl:"https://o.crm.dynamics.com"})),
+      getAccessToken:vi.fn(async()=>{const e=new Error("Interactive sign-in required");e.name="AuthRequiredError";throw e;}),dvQuery:vi.fn()};
+    expect(await routeMessage({type:"auth/status"},deps as never)).toMatchObject({ok:false,kind:"auth"});
+    expect(deps.dvQuery).not.toHaveBeenCalled();
+  });
   it("returns a typed error for unknown message types", async () => {
     const res = await routeMessage({ type: "nope" } as never, {} as never);
     expect(res).toEqual({ ok: false, error: expect.stringContaining("unknown"), kind: "unknown" });

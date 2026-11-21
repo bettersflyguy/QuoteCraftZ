@@ -31,7 +31,7 @@ export function CrmAgentPicker({onBusy}:{onBusy:(busy:boolean)=>void}) {
   };
   const pick=async(id:string)=>{const selected=options.find(o=>o.userId===id);if(!selected||!env)return;try{await chrome.storage.local.set({[crmAgentKey(env.orgUrl)]:selected});setAgent(selected);setQuery(selected.fullName);setOptions([]);setError("");}catch(e){setError((e as Error).message);}};
   return <div style={{flex:1,minWidth:80,maxWidth:210}} title={error||`CRM Agent${env?` · ${env.name}`:""}: ${agent?.fullName??"Select an agent"}. Owns newly created records and joins the insured servicing team.`}>
-    <Combobox listbox={{style:{minWidth:320,maxWidth:350}}} size="small" aria-label="CRM Agent" placeholder="CRM Agent" value={query} selectedOptions={agent?[agent.userId]:[]} style={{minWidth:0,width:"100%"}}
+    <Combobox input={{style:{minWidth:0,width:0,flex:1}}} listbox={{style:{minWidth:320,maxWidth:350}}} size="small" aria-label="CRM Agent" placeholder="CRM Agent" value={query} selectedOptions={agent?[agent.userId]:[]} style={{minWidth:0,width:"100%",boxSizing:"border-box",overflow:"hidden"}}
       onInput={e=>void search((e.target as HTMLInputElement).value)} onOptionSelect={(_,d)=>{if(d.optionValue)void pick(d.optionValue);}}>
       {options.map(u=><Option key={u.userId} value={u.userId} text={u.fullName}>{u.fullName}{u.email?` (${u.email})`:""}</Option>)}
       {!options.length&&<Option disabled value="hint">{error||(searching?"Searching CRM…":query.trim().length>=2?"No matching CRM users":"Type at least two letters to find a CRM Agent")}</Option>}
