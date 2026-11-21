@@ -847,7 +847,10 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         const existing = await deps.getCapturedApplication();
         // this site's wording for choices -> the exact CRM choice
         const pageOrigin = (() => { try { return new URL(harvested.url).origin; } catch { return ""; } })();
-        harvested.fields = translateCapturedChoices(harvested.fields, (await getOptionMaps())[pageOrigin], await catalogOrNull(deps));
+        // A read-only lead with no CRM-column mappings needs no metadata or
+        // interactive CRM sign-in just to hold its visible data.
+        const catalog = harvested.fields.some(f => f.mapped?.startsWith("crm:")) ? await catalogOrNull(deps) : null;
+        harvested.fields = translateCapturedChoices(harvested.fields, (await getOptionMaps())[pageOrigin], catalog);
         const outcome = mergeLeadCapture(existing, harvested.fields, {
           system: new URL(harvested.url).hostname,
           url: harvested.url,
@@ -1682,7 +1685,9 @@ const isMappedField = (f: import("@/boldpenguin/types").CapturedAppField): boole
 async function autoIngestMapped(tabId: number): Promise<AutoOutcome | null> {
   const page = await realDeps.ingestPortalTab(tabId);
   const origin = (() => { try { return new URL(page.url).origin; } catch { return ""; } })();
-  const fields = translateCapturedChoices(page.fields.filter(f => isMappedField(f) && String(f.value ?? "").trim()), (await getOptionMaps())[origin], await catalogOrNull(realDeps));
+  const mappedFields = page.fields.filter(f => isMappedField(f) && String(f.value ?? "").trim());
+  const catalog = mappedFields.some(f => f.mapped?.startsWith("crm:")) ? await catalogOrNull(realDeps) : null;
+  const fields = translateCapturedChoices(mappedFields, (await getOptionMaps())[origin], catalog);
   const secure = page.secure ?? [];
   if (!fields.length && !secure.length) return null;
   const existing = await getCapturedApplication();
