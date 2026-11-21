@@ -1,7 +1,7 @@
 import { usDate } from "@/util/usDate";
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Tab, TabList, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
-import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, LockClosedRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
+import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, LockClosedRegular, NotepadRegular, RecordRegular, RecordStopRegular, PersonRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { grantActiveTab } from "../portalAccess";
 import { send, PanelError } from "../api";
@@ -9,7 +9,7 @@ import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
 import { QuotesView } from "../QuotesView";
-import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
+import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult, LeadSelection } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { isGridRow } from "@/boldpenguin/normalize";
 import { recordTables } from "@/boldpenguin/recordTables";
@@ -27,6 +27,8 @@ const useStyles = makeStyles({
     padding: "8px"
   },
   buttons: { display: "flex", gap: "8px", flexWrap: "wrap" },
+  leadIcon: { position: "relative", display: "inline-flex", paddingRight: "5px" },
+  leadBadge: { position: "absolute", right: "-2px", bottom: "-3px", fontSize: "10px", fontWeight: 600, lineHeight: "12px", backgroundColor: tokens.colorNeutralBackground1, color: tokens.colorBrandForeground1 },
   // spreadsheet-style capture grid: sticky header, cell borders, zebra rows
   grid: {
     maxHeight: "260px",
@@ -139,6 +141,48 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const [ingestResult, setIngestResult] = useState<IngestOutcome | null>(null);
 
   const [autoCap, setAutoCap] = useState(false);
+  const [lead, setLead] = useState<LeadSelection | null>(null);
+  const leadPicking = useRef(false);
+  const leadTab = useRef<number | null>(null);
+  const refreshLead = useCallback(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    setLead(tab?.id ? await send<LeadSelection | null>({ type: "panel/leadStatus", tabId: tab.id }) : null);
+  }, []);
+  useEffect(() => {
+    const refreshSelection = () => { void refreshLead().catch(() => {}); };
+    refreshSelection();
+    chrome.tabs.onActivated.addListener(refreshSelection);
+    return () => {
+      chrome.tabs.onActivated.removeListener(refreshSelection);
+      leadPicking.current = false;
+      if (leadTab.current !== null) void send({ type: "panel/leadCancel", tabId: leadTab.current }).catch(() => {});
+    };
+  }, [refreshLead]);
+  const pickLead = async () => {
+    if (leadPicking.current) {
+      leadPicking.current = false;
+      if (leadTab.current !== null) await send({ type: "panel/leadCancel", tabId: leadTab.current }).catch(() => {});
+      return;
+    }
+    setBusy("lead");setError(null);leadPicking.current = true;
+    try {
+      const tab = await grantActiveTab(setAwaitingGrant);
+      leadTab.current = tab.id;
+      while (leadPicking.current) {
+        const result = await send<LeadSelection | "timeout" | null>({ type: "panel/leadPick", tabId: tab.id });
+        if (result !== "timeout") break;
+      }
+      await refreshLead();
+    } catch (e) { setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message))); }
+    finally { leadPicking.current = false;setBusy(null); }
+  };
+  const clearLead = async () => {
+    try {
+      const tab = await grantActiveTab(setAwaitingGrant);
+      await send({ type: "panel/leadClear", tabId: tab.id });
+      setLead(null);setAutoCap(false);setLive(null);setError(null);
+    } catch (e) { setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message))); }
+  };
   const [live, setLive] = useState<CaptureUpdatedBroadcast | null>(null);
   const [crmOpen, setCrmOpen] = useState(false);
   // move between the captured data and the quotes held for import
@@ -218,6 +262,13 @@ export function PortalFill({ onChanged, onFlowActive }: {
     send<PageContext>({ type: "panel/getPageContext" }).then(c => setAutoCap(c.autoCapturing)).catch(() => {});
     // live merges from the auto-capture driver while the agent works the site
     const onMsg = (m: unknown) => {
+      const paused = m as { type?: string; tabId?: number; error?: string };
+      if (paused?.type === "portal/leadPaused") {
+        void chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
+          if (tab?.id === paused.tabId) setError(new PanelError("session", paused.error || "1 Lead paused. Select the lead again."));
+        });
+        return;
+      }
       const b = m as CaptureUpdatedBroadcast;
       if (b?.type === "portal/captureUpdated") {
         setLive(b);
@@ -371,6 +422,13 @@ export function PortalFill({ onChanged, onFlowActive }: {
           disabled={busy !== null}
           onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}
         />
+        <ActionIcon
+          tip={busy === "lead" ? "1 Lead: click one expanded lead on the page. Click again to cancel." : "1 Lead: select one lead section to ingest"}
+          icon={busy === "lead" ? <Spinner size="tiny" /> : <span className={styles.leadIcon}><PersonRegular /><span className={styles.leadBadge}>1</span></span>}
+          active={lead !== null || busy === "lead"}
+          disabled={busy !== null && busy !== "lead"}
+          onClick={() => void pickLead()}
+        />
         <Tooltip
           content={peekUnmapped
             ? `${mappedCount} mapped in green, ${peekCount ?? 0} unmapped in red. Click to hide.`
@@ -388,6 +446,10 @@ export function PortalFill({ onChanged, onFlowActive }: {
           />
         </Tooltip>
       </div>
+      {lead && <div className={styles.match}>
+        <span className={styles.matchText}>1 Lead · {lead.label}. Ingest and auto-capture use this section only.</span>
+        <Button appearance="subtle" size="small" disabled={busy !== null} onClick={() => void clearLead()}>Clear selection</Button>
+      </div>}
       {app
         ? <div className={styles.ready}>
             {name ?? "Application ready"}: {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held

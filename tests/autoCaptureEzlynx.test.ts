@@ -28,6 +28,21 @@ const held = () => backing["s:bp/captured"] as { fields: { label: string }[] } |
 beforeEach(() => { reset(); query.mockClear(); executeScript.mockClear(); backing["s:autocap/tabs"] = [7]; });
 
 describe("auto-capture", () => {
+  it("One Lead reads only its selected iframe with the scope guard enabled", async () => {
+    backing["s:portal/lead/7"] = { frameId:12, label:"Lead A", key:"A" };
+    await handleAutoCaptured({ url: harvest.url }, 7);
+    const read = executeScript.mock.calls.map(c=>c[0]).find(o=>o.func) as unknown as { target: unknown; args: unknown[] };
+    expect(read.target).toEqual({ tabId:7, frameIds:[12] });
+    expect(read.args[2]).toBe(true);
+  });
+
+  it("One Lead pending/reloaded selection pauses without a whole-page capture", async () => {
+    backing["s:portal/lead/7"] = { frameId:-1, label:"Select lead", key:"" };
+    await handleAutoCaptured({ url: harvest.url }, 7);
+    expect(executeScript).not.toHaveBeenCalled();
+    expect(held()).toBeUndefined();
+    expect((g.chrome.runtime as { sendMessage: ReturnType<typeof vi.fn> }).sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type:"portal/leadPaused",tabId:7 }));
+  });
   it("EZLynx: asks the data service, never scrapes the page", async () => {
     await handleAutoCaptured({ url: "https://app.ezlynx.com/web/account/123/details" }, 7);
     expect(query).toHaveBeenCalledWith({ url: "https://app.ezlynx.com/*" });

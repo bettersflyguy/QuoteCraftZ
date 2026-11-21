@@ -9,12 +9,14 @@
 
   if (globalThis.__bettersPortalIngestLoaded) return;
   globalThis.__bettersPortalIngestLoaded = true;
+  let leadRoot = null;
 
   function clean(value) {
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
   }
 
   function isVisible(element) {
+    if (leadRoot && (!element || !leadRoot.contains(element))) return false;
     if (!element || element.closest("[hidden], [aria-hidden='true']")) return false;
     const style = getComputedStyle(element);
     return style.display !== "none" && style.visibility !== "hidden";
@@ -619,7 +621,7 @@
   }
 
   function captureRoot() {
-    return activeModal() || document.querySelector("main") || document;
+    return leadRoot || activeModal() || document.querySelector("main") || document;
   }
 
   const SKIP_TYPES = ["radio", "hidden", "password", "file", "submit", "button", "reset", "search"];
@@ -658,7 +660,7 @@
   function collect(controlMap, secureOut) {
     const modal = activeModal();
     const section = pageSection(modal);
-    const root = modal || document.querySelector("main") || document;
+    const root = leadRoot || modal || document.querySelector("main") || document;
     const fields = [];
     const map = controlMap || {};
     const baseKeyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
@@ -850,7 +852,7 @@
     /* "Label: value" LINES inside composite cells - Tivly's Lead Details
      * renders "Contact Name: Katsuyoshi Murano" as plain lines inside a
      * multi-line value cell, invisible to the row collectors */
-    const lineSource = String((modal || document.body).innerText || "").split(String.fromCharCode(10)).slice(0, 400);
+    const lineSource = String((leadRoot || modal || document.body).innerText || "").split(String.fromCharCode(10)).slice(0, 400);
     for (const rawLine of lineSource) {
       const line = clean(rawLine);
       const m = line.match(/^([A-Za-z][A-Za-z /()'&#.-]{1,39}):\s+(.{1,200})$/);
@@ -863,7 +865,7 @@
     /* sale/confirmation facts are usually PROSE, not form fields ("GEICO Auto
      * Policy Number: 6277201270", "Your coverage is effective 9/27/2026",
      * "Your 6 Month Auto Premium is $922.00") - pattern-match the page text */
-    const bodyText = clean(((modal || document.body).innerText || "").slice(0, 150000));
+    const bodyText = clean(((leadRoot || modal || document.body).innerText || "").slice(0, 150000));
     const saleSeen = new Set();
     const salePush = (label, value) => {
       if (value && !saleSeen.has(label)) { saleSeen.add(label); fields.push({ label, value: clean(value), section, group: "", source: "sale" }); }
@@ -1082,7 +1084,9 @@
         if (!el) break; /* nth-of-type runs are contiguous */
         rows.push({ n: n, el: el });
       }
-      if (rows.filter(function (r) { return isVisible(r.el); }).length >= 2) return rows;
+      const visibleRows = rows.filter(function (r) { return isVisible(r.el); });
+      if (leadRoot && visibleRows.length) return visibleRows.map((r, i) => ({ n:i + 1, el:r.el }));
+      if (visibleRows.length >= 2) return rows;
     }
     const siblings = siblingsByLabel(anchor);
     return siblings ? inPageOrder(siblings).map((el, i) => ({ n: i + 1, el })) : null;
@@ -1150,6 +1154,10 @@
       const path = typeof t.path === "string" ? t.path : "";
       let anchor = null;
       try { anchor = document.querySelector(t.selector); } catch (_e) { return; }
+      if (leadRoot && (!anchor || !leadRoot.contains(anchor))) {
+        anchor = leadRoot.querySelector(t.selector);
+        if (!anchor) anchor = expandTaughtRows(t.selector)?.[0]?.el || null;
+      }
       const row = (el) => {
         if (!el || !shown(el)) return null;
         const value = valueOf(el).slice(0, 300);
@@ -1252,7 +1260,12 @@
   globalThis.__bettersCaptureRoot = captureRoot;
   /* `controls`: the page's saved control mappings. `secure` comes back
    * separately and is never merged into the capture by the worker. */
-  globalThis.__bettersPortalIngest = (taught, controls) => {
+  globalThis.__bettersPortalIngest = (taught, controls, oneLead) => {
+    oneLead = oneLead || globalThis.__bettersOneLead;
+    const scope = oneLead ? globalThis.__bettersLead?.get() : null;
+    if (oneLead && !scope) throw new Error("1 Lead paused: select a lead section again.");
+    leadRoot = scope?.el || null;
+    try {
     const secure = [];
     const fields = taughtFields(taught, secure)
       .concat(collect(controls, secure).filter((f) => !identifierField(f)))
@@ -1263,6 +1276,7 @@
      * headed by: "Prior Auto Policy" and "Prior Home Policy" stay apart */
     const line = lineOfPage();
     if (line) fields.forEach((f) => { if (f.mapped && /^crm:priorcoverage\./.test(f.mapped)) f.section = "Prior " + line + " Policy"; });
-    return { fields, secure, title: document.title, url: location.href };
+    return { fields, secure, title: document.title, url: location.href, ...(scope ? { leadKey:scope.key } : {}) };
+    } finally { leadRoot = null; }
   };
 })();

@@ -25,7 +25,7 @@ export interface CapturedApplication {
   schemaVersion: "1.1";
   capturedAt: string;
   /** "Bold Penguin" for application captures; the site hostname for portal ingests. */
-  source: { system: string; url: string; title: string };
+  source: { system: string; url: string; title: string; leadKey?: string };
   completion: { likelyCompleted: boolean; matchedPhrases: string[]; hasReviewStep: boolean };
   scannedSections: string[];
   normalized: NormalizedApplication;

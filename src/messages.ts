@@ -26,6 +26,7 @@ export interface CrmLink {
   id: string;
   name: string;
 }
+export interface LeadSelection { frameId: number; label: string; key: string }
 
 export interface CaptureUpdatedBroadcast {
   type: "portal/captureUpdated";
@@ -41,6 +42,10 @@ export type BridgeRequest =
   | { type: "ezlynx/getApplicant"; applicantId: number };
 
 export type PanelRequest =
+  | { type: "panel/leadPick"; tabId: number }
+  | { type: "panel/leadCancel"; tabId: number }
+  | { type: "panel/leadClear"; tabId: number }
+  | { type: "panel/leadStatus"; tabId: number }
   | { type: "panel/getEzlynxContext" }
   | { type: "panel/listRuns"; applicantId: number }
   | { type: "panel/captureRun"; applicantId: number; run: RunListItem }
