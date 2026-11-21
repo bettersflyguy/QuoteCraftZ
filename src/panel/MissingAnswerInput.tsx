@@ -16,11 +16,11 @@ export function MissingAnswerInput({field,catalog,disabled,onSave}:{field:Missin
     catch(e){setError((e as Error).message);}
     finally{setSaving(false);}
   };
-  return <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 140px",gap:6,alignItems:"start",marginTop:4}}>
-    <label htmlFor={inputId} style={{fontSize:11,lineHeight:"23px"}} title={field.target}>{field.label}{field.row?` · ${field.row}`:""}</label>
+  return <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 120px",gap:4,alignItems:"start",marginTop:1,borderBottom:"1px solid #edf1f6"}}>
+    <label htmlFor={inputId} style={{fontSize:11,lineHeight:"22px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={`${field.label}${field.row?` · ${field.row}`:""} — ${field.target}`}>{field.label}{field.row?` · ${field.row}`:""}</label>
     <div style={{minWidth:0}}>
-      {options?<select id={inputId} aria-label={`${field.label}${field.row?` ${field.row}`:""}`} value={value} disabled={disabled||saving} onChange={e=>{setValue(e.target.value);void save(e.target.value);}} style={{width:"100%",height:24,fontSize:11,background:"white",border:"1px solid #8eabc9",borderRadius:2}}><option value="">Select…</option>{options.map(option=><option key={option} value={option}>{option}</option>)}</select>:
-        <input id={inputId} aria-label={`${field.label}${field.row?` ${field.row}`:""}`} type={type} step={col?.type==="Integer"||col?.type==="BigInt"?1:"any"} maxLength={col?.maxLength??4000} value={value} disabled={disabled||saving} onChange={e=>{setValue(e.target.value);setError("");}} onBlur={()=>void save()} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void save();}}} style={{width:"100%",boxSizing:"border-box",height:24,fontSize:11,background:"white",border:"1px solid #8eabc9",borderRadius:2,padding:"2px 4px"}}/>}
+      {options?<select id={inputId} aria-label={`${field.label}${field.row?` ${field.row}`:""}`} value={value} disabled={disabled||saving} onChange={e=>{setValue(e.target.value);void save(e.target.value);}} style={{width:"100%",height:22,fontSize:11,background:"white",border:"1px solid #8eabc9",borderRadius:2}}><option value="">—</option>{options.map(option=><option key={option} value={option}>{option}</option>)}</select>:
+        <input id={inputId} aria-label={`${field.label}${field.row?` ${field.row}`:""}`} type={type} step={col?.type==="Integer"||col?.type==="BigInt"?1:"any"} maxLength={col?.maxLength??4000} value={value} disabled={disabled||saving} onChange={e=>{setValue(e.target.value);setError("");}} onBlur={()=>void save()} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void save();}}} style={{width:"100%",boxSizing:"border-box",height:22,fontSize:11,background:"white",border:"1px solid #8eabc9",borderRadius:2,padding:"2px 4px"}}/>}
       {saving&&<small role="status">Saving…</small>}{error&&<div role="alert" style={{fontSize:10,color:"#a4262c"}}>{error}</div>}
     </div>
   </div>;

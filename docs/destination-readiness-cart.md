@@ -1,4 +1,4 @@
-# Destination readiness cart — 0.1.97
+# Destination readiness cart — 0.1.98
 
 Intake has a shopping-cart icon after 1 Lead. It opens a Ready to quote
 flyout listing mapped sites and the built-in EZLynx service with a percentage,
@@ -65,3 +65,16 @@ right-hand text/date controls, and real CRM choice options (Owned, Financed,
 Leased). No unknown client answers or CRM records were entered for browser
 acceptance; saving, row identity, shared readiness updates, validation and
 stale/unmapped-request rejection are covered by automated tests.
+
+## Compact presentation — 0.1.98
+
+Removed visible helper paragraphs and replaced destination Open/Fill buttons
+with small icons and accessible hover labels. The header has compact Info and
+Close icons; saving guidance remains available on Info. Counts and percentages
+share the destination header row. Missing answers use 22px controls, tighter
+spacing, single-line labels and subtle row dividers. Full field context remains
+on hover. The flyout retains its distinct pale blue background and border.
+
+Production build passed. Edge verified the installed compact flyout and expanded
+missing-answer rows with the existing held application preserved. This change
+is presentational; the 609-test suite passed for the preceding entry behavior.
