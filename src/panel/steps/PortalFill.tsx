@@ -466,7 +466,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
       </div>}
       {app
         ? <div className={styles.ready}>
-            {name ?? "Application ready"}: {displayFields.length} field{displayFields.length === 1 ? "" : "s"} held
+            {busy === "lead" || busy === "ingest" ? "Capture pending · previous data shown" : `${name ?? "Application ready"}: ${displayFields.length} field${displayFields.length === 1 ? "" : "s"} held`}
             {crmLink && env && (
               <>
                 {" · "}

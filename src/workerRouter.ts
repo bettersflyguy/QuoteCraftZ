@@ -1,4 +1,5 @@
 import {addExpressAnswer} from "@/portal/expressAnswers";
+import {pickLeadFrame} from "@/portal/pickLeadFrame";
 import {mappingServices} from "@/options/mappingGraph";
 import {destinationReadiness} from "@/portal/destinationReadiness";
 import {cachedFieldCatalog} from "@/crm/fieldCatalog";
@@ -1599,16 +1600,12 @@ async function pickLead(tabId: number): Promise<LeadSelection | "timeout" | null
   // fall back to the whole dashboard after losing its live DOM boundary.
   await chrome.storage.session.set({ [leadStorageKey(tabId)]: { frameId: -1, label: "Select one lead section", key: "" } });
   await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-lead.js"] });
-  const frames = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: () =>
-    (globalThis as { __bettersLead?: { pick(): Promise<{ label: string; key: string } | "timeout" | null> } }).__bettersLead?.pick() ?? null
-  });
-  const hit = frames.find(frame => frame.result && frame.result !== "timeout");
-  if (hit) {
-    const result = { ...(hit.result as { label: string; key: string }), frameId: hit.frameId };
+  const result = await pickLeadFrame(tabId);
+  if (result && result !== "timeout") {
     await chrome.storage.session.set({ [leadStorageKey(tabId)]: result });
     return result;
   }
-  return frames.some(frame => frame.result === "timeout") ? "timeout" : null;
+  return result;
 }
 
 async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string; leadKey?: string; secure: { path: string; value: string }[] }> {
