@@ -34,3 +34,7 @@ dashboard table's header. The mapping list shows Name, Home Number and Street
 instead of calling all of them Call Time. Mapping and Intake actions use the
 side panel's browser window, so a CRM sign-in popup cannot redirect the site
 being mapped to login.microsoftonline.com.
+
+Click-to-map gives a recognized read-only label/value pair priority over
+nearby composite controls, so clicking Name inside an expanded lead cannot
+select the disposition-notes textarea in the same outer detail wrapper.

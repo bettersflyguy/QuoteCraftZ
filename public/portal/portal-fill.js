@@ -1342,6 +1342,15 @@
       var hit = pickable(path[i]);
       if (hit) return { control: hit, box: hit };
     }
+    // A known read-only pair is its own field. Do not climb into a broad
+    // expanded-lead wrapper and steal its unrelated notes textarea.
+    if (typeof globalThis.__bettersLocalTextLabel === "function") {
+      for (i = 0; i < path.length; i += 1) {
+        var leaf = textPickable(path[i]);
+        if (leaf && globalThis.__bettersLocalTextLabel(leaf)) return { control:null, textEl:leaf, box:leaf };
+        if (path[i]?.tagName && PICK_STOP[path[i].tagName.toLowerCase()]) break;
+      }
+    }
     for (i = 0; i < path.length; i += 1) {
       var node = path[i];
       if (!node || !node.tagName || !node.querySelectorAll) continue;
