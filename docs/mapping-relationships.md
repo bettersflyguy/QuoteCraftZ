@@ -1,6 +1,8 @@
-# Mapping relationships — 0.1.89
+# Mapping relationships — 0.1.90
 
-Environments and Pages Mapped are visible at the top of Settings, followed by
+A compact header and side-by-side Environments / Pages Mapped sections sit
+at the top of Settings. Environment switching stays visible; Configure
+environments expands the full editable table. They are followed by
 the relationship diagram: mapped services on
 the left, CRM destinations in the center, and Output columns on the right.
 The graph reads the saved page mappings and effective built-in data-service mappings and
@@ -46,3 +48,9 @@ acceptance verified the installed page, separate hiding/restoring and
 persisted visibility. Version 0.1.89 acceptance verified top section ordering,
 inline searchable target selection and automatic saving without a dialog, and
 tracing with All connections off while all 57 destination nodes remain. No CRM records were written.
+
+Version 0.1.90 uses 24px single-line CRM and Output rows showing display names
+only. Hover titles retain entity-qualified display names, stored mapping paths,
+canonical CRM paths when different, and source keys for output fields. Green
+mapping indicators and pink tracing remain. The production build passes;
+browser acceptance verified the compact top sections and single-line rows.
