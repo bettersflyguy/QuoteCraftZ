@@ -1,5 +1,6 @@
 import {it,expect} from "vitest";
-import {resolveOpportunitySelections} from "@/crm/opportunitySelection";
+import {resolveOpportunitySelections,suggestedOpportunityLines} from "@/crm/opportunitySelection";
+import type {CapturedApplication} from "@/boldpenguin/types";
 const routes=[{source:"Home",lobId:"home"},{source:"Auto",lobId:"auto"}];
 const open=[
   {opportunityId:"h1",name:"Renewal",lobId:"home",lobName:"Homeowners",desiredEffectiveDate:"2027-01-01"},
@@ -23,5 +24,10 @@ it("rejects a closed, other-account, or wrong-line opportunity instead of silent
 it("requires explicit new choices for new accounts and a line for every group",()=>{
   expect(resolveOpportunitySelections(routes,[],{Home:"new",Auto:"new"})).toHaveLength(2);
   expect(()=>resolveOpportunitySelections([{source:"Home",lobId:null}],[],{Home:"new"})).toThrow("Choose a CRM line");
+});
+it("suggests Auto from vehicle capture alongside Home quotes and supports arbitrary CRM lines",()=>{
+  const app:Pick<CapturedApplication,"fields"|"normalized">={fields:["Travel: Application","Life: Insured","Auto: Vehicles"].map(section=>({section,label:"",value:"",group:"",source:"taught"})),normalized:{"crm:vehicle1":{}}};
+  const rows=suggestedOpportunityLines(app,[{lobId:"home",name:"Homeowners"},{lobId:"auto",name:"Personal Auto"},{lobId:"travel",name:"Travel"},{lobId:"life",name:"Life"}],["home"]);
+  expect(rows.map(r=>r.lobId).sort()).toEqual(["auto","life","travel"]);
 });
 
