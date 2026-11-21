@@ -627,16 +627,19 @@
   }
   // An expanded detail panel lives inside a colspan cell of the call grid.
   // Its own "Name / value" pair wins over the ancestor's "Call Time" header.
-  function localTextLabel(el) {
+  function localTextPair(el) {
     for (let node = el, depth = 0; node && depth < 4; node = node.parentElement, depth += 1) {
       if (node.matches("td,th,tr,table,body,html")) break;
       const row = node.parentElement;
       if (!row || !row.matches("ul,ol,div,li,dd") || row.children.length !== 2 || row.children[1] !== node) continue;
       if (row.querySelector("input,select,textarea,button,a,svg")) continue;
       const label = text(row.children[0]).replace(/[:*]+$/, "");
-      if (label && label.length <= 80 && label !== text(node)) return label;
+      if (label && label.length <= 80 && label !== text(node)) return { label, el:node };
     }
-    return "";
+    return null;
+  }
+  function localTextLabel(el) {
+    return localTextPair(el)?.label || "";
   }
 
   /* Read-only review fields also use UL/LI pairs (Datalot), not just inputs,
@@ -1280,6 +1283,7 @@
   };
   globalThis.__bettersCaptureElements = captureElements;
   globalThis.__bettersLocalTextLabel = localTextLabel;
+  globalThis.__bettersLocalTextValue = el => localTextPair(el)?.el || null;
   /* the root a capture reads (the open dialog, else main, else the page): the
    * filler groups same-name boxes over the same root */
   globalThis.__bettersCaptureRoot = captureRoot;

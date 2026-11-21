@@ -24,14 +24,14 @@ const click = (el: Element) => el.dispatchEvent(new MouseEvent("click", { bubble
 
 describe("picking inside grid rows", () => {
   it("picks a lead's Name value instead of its neighboring disabled notes textarea", async () => {
-    document.body.innerHTML = `<table><tr><td colspan="6"><div class="lead"><div><ul><div><li>Name</li><li id="leadName">Alex Rivera</li></div></ul></div><div><textarea disabled placeholder="Select disposition to edit notes"></textarea></div></div></td></tr></table>`;
+    document.body.innerHTML = `<table><tr><td colspan="6"><div class="lead"><div><ul><div><li>Name</li><li id="leadName"><span>Alex Rivera</span></li></div></ul></div><div><textarea disabled placeholder="Select disposition to edit notes"></textarea></div></div></td></tr></table>`;
     const notes = document.querySelector("textarea")!;
     notes.getBoundingClientRect = () => ({x:500,y:100,left:500,top:100,right:700,bottom:200,width:200,height:100,toJSON:()=>({})});
     const name = document.querySelector("#leadName")!;
     name.getBoundingClientRect = () => ({x:100,y:100,left:100,top:100,right:300,bottom:124,width:200,height:24,toJSON:()=>({})});
     const scan = (globalThis as unknown as { __bettersPortalScan(app:unknown,map:unknown): Exclude<Row,"timeout"|null>[] }).__bettersPortalScan(null, {});
     const pending = pick(5000);
-    click(document.querySelector("#leadName")!);
+    click(document.querySelector("#leadName span")!);
     const row = await pending as Exclude<Row,"timeout"|null>;
     expect(row.type).toBe("text");
     expect(row.key).toBe("pick:#leadName");

@@ -1347,7 +1347,10 @@
     if (typeof globalThis.__bettersLocalTextLabel === "function") {
       for (i = 0; i < path.length; i += 1) {
         var leaf = textPickable(path[i]);
-        if (leaf && globalThis.__bettersLocalTextLabel(leaf)) return { control:null, textEl:leaf, box:leaf };
+        if (leaf && globalThis.__bettersLocalTextLabel(leaf)) {
+          var value = typeof globalThis.__bettersLocalTextValue === "function" ? globalThis.__bettersLocalTextValue(leaf) || leaf : leaf;
+          return { control:null, textEl:value, box:value };
+        }
         if (path[i]?.tagName && PICK_STOP[path[i].tagName.toLowerCase()]) break;
       }
     }
