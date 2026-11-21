@@ -12,6 +12,8 @@ import { writePropertyNotes } from "@/crm/propertyNotes";
 import { parsePersonName } from "@/util/personName";
 import { pendingNameReviews } from "@/boldpenguin/nameReview";
 import {quoteLobMatch} from "@/crm/lobMatch";
+import {resolveOpportunitySelections} from "@/crm/opportunitySelection";
+import {OpportunityChoices} from "../OpportunityChoices";
 
 const useStyles = makeStyles({
   root: {
@@ -57,8 +59,8 @@ interface PolicyRow {
   extra?: Record<string, string>;
 }
 interface PolicyState { create: boolean; rows: PolicyRow[] }
-interface QuoteGroupChoice { lobId: string | null; mode: "reuse" | "new" }
-interface PendingOpp { accountId: string; accountName: string; opps: OppSummary[] }
+interface QuoteGroupChoice { lobId: string | null }
+interface PendingOpp { accountId: string | null; accountName: string; opps: OppSummary[]; returnStep: "review" | "target"; created?:boolean }
 
 /** Loads the held captured application into the active CRM environment.
  * Step 1 reviews and EDITS the identity (captured data is a starting point,
@@ -69,7 +71,7 @@ const MATCH_LABEL = { email: "email match", phone: "phone match", name: "name ma
 
 export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplication; onFlowActive?: (active: boolean) => void; onLoaded?: () => void }) {
   const styles = useStyles();
-  const [step, setStep] = useState<"closed" | "review" | "target">("closed");
+  const [step, setStep] = useState<"closed" | "review" | "target" | "opportunity">("closed");
   const [identity, setIdentity] = useState<CaptureIdentity>(() => identityFromCapture(app));
   const sourceFullName = String(app.normalized["contact"]?.["fullName"] || "");
   const sourceNameParts = parsePersonName(sourceFullName, app.normalized["contact"]?.["latinFullName"] ? "two-surnames" : "auto");
@@ -125,7 +127,9 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   const quoteLobs = [...new Set(heldQuotes.map(q => q.lob))];
   const [quoteGroups, setQuoteGroups] = useState<Record<string, QuoteGroupChoice>>({});
   const setGroup = (lob: string, patch: Partial<QuoteGroupChoice>) =>
-    setQuoteGroups(g => ({ ...g, [lob]: { lobId: null, mode: "reuse", ...g[lob], ...patch } }));
+    setQuoteGroups(g => ({ ...g, [lob]: { lobId: null, ...g[lob], ...patch } }));
+  const [pendingOpp,setPendingOpp]=useState<PendingOpp|null>(null);
+  const [opportunityChoices,setOpportunityChoices]=useState<Record<string,string>>({});
   // servicing agent (record owner) - required when quotes are written; shared
   // rating logins make the signed-in identity no safe default
   const [owner, setOwner] = useState<UserRow | null>(null);
@@ -296,12 +300,15 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lobs]);
 
-  /** Load an account: `existingOppId` attaches the quote to that opportunity,
-   * `createOpp` forces one even when the review checkbox is off (the picker's
-   * "create new" path). */
-  const commit = async (accountId: string, accountName: string, opts?: { existingOppId?: string; createOpp?: boolean; created?: boolean }) => {
+  /** Validate opportunity choices before any enrichment or quote write. */
+  const commit = async (accountId: string, accountName: string, opts?: { createOpp?: boolean; created?: boolean; choices?:Record<string,string> }) => {
     setBusy(accountId); setError(null);
     try {
+      if(target==="insured"&&heldQuotes.length&&!owner)throw new Error("Select the servicing agent before loading quotes.");
+      const planned = target === "insured" && heldQuotes.length
+        ? resolveOpportunitySelections(quoteLobs.map(source=>({source,lobId:quoteGroups[source]?.lobId??null})),
+            await send<OppSummary[]>({type:"panel/getOpportunities",accountId}),opts?.choices??{})
+        : [];
       const rows = await send<BatchItemResult[]>({
         type: "panel/appCommit",
         accountId,
@@ -314,7 +321,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       });
       let createdOppId: string | null = null;
       const oppLobId = opp.lobId;
-      if ((opp.create || opts?.createOpp) && oppLobId) {
+      if (!heldQuotes.length && (opp.create || opts?.createOpp) && oppLobId) {
         const lobName = lobs?.find(l => l.lobId === oppLobId)?.name ?? null;
         const name = opp.name.trim() || oppName(lobName);
         try {
@@ -366,16 +373,15 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         }
       }
       if (target === "insured" && heldQuotes.length) {
-        // one opportunity per line of business: the open one for that line
-        // (re-captures update it) unless the agent asked for a new one
+        // Each quote group uses the explicitly reviewed opportunity or creates
+        // a new one. Never choose the first matching open opportunity.
         try {
-          const open = await send<OppSummary[]>({ type: "panel/getOpportunities", accountId });
           const groups: { lob: string; opportunityId: string; lobId: string | null; desiredEffectiveDate: string | null; created: boolean }[] = [];
           for (const lob of quoteLobs) {
             const g = quoteGroups[lob];
             const lobId = g?.lobId ?? null;
             const lobName = lobs?.find(l => l.lobId === lobId)?.name ?? lob;
-            const hit = g?.mode !== "new" && lobId ? open.find(o => o.lobId === lobId) : undefined;
+            const hit = planned.find(p=>p.source===lob)?.opportunity;
             if (hit) {
               groups.push({ lob, opportunityId: hit.opportunityId, lobId, desiredEffectiveDate: hit.desiredEffectiveDate?.slice(0, 10) ?? null, created: false });
               continue;
@@ -525,11 +531,25 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
   };
 
-  const loadAccount = (accountId: string, accountName: string) => commit(accountId, accountName);
+  const loadAccount = async (accountId: string, accountName: string) => {
+    if(!heldQuotes.length)return commit(accountId,accountName);
+    setBusy(accountId);setError(null);
+    try {
+      const opps=await send<OppSummary[]>({type:"panel/getOpportunities",accountId});
+      setPendingOpp({accountId,accountName,opps,returnStep:step==="review"?"review":"target"});
+      setOpportunityChoices({});setStep("opportunity");
+    }catch(e){setError(asPanelError(e));}finally{setBusy(null);}
+  };
 
-  const createAndCommit = async () => {
+  const createAndCommit = async (choices?:Record<string,string>) => {
+    if(heldQuotes.length&&!choices){
+      setPendingOpp({accountId:null,accountName:query.trim()||recordName,opps:[],returnStep:"target"});
+      setOpportunityChoices({});setError(null);setStep("opportunity");return;
+    }
     setBusy("create"); setError(null);
     try {
+      if(heldQuotes.length&&!owner)throw new Error("Select the servicing agent before loading quotes.");
+      if(heldQuotes.length)resolveOpportunitySelections(quoteLobs.map(source=>({source,lobId:quoteGroups[source]?.lobId??null})),[],choices??{});
       const created = await send<{ accountId: string; name: string }>({
         type: "panel/createAccount",
         fromCapture:true,
@@ -540,7 +560,10 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           phone: identity.phone || null, email: identity.email || null
         }
       });
-      await commit(created.accountId, created.name, { created: true });
+      // If later enrichment fails, retry against this account rather than
+      // creating another account from the same opportunity screen.
+      setPendingOpp(p=>p?{...p,accountId:created.accountId,accountName:created.name,created:true}:p);
+      await commit(created.accountId, created.name, { created: true, choices });
     } catch (e) { setError(asPanelError(e)); setBusy(null); }
   };
 
@@ -754,15 +777,6 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 >
                   {(lobs ?? []).map(l => <Option key={l.lobId} value={l.lobId}>{l.name}</Option>)}
                 </Dropdown>
-                <select
-                  aria-label="Opportunity"
-                  style={{ fontSize: 12, width: "100%", minWidth: 0, height: 26 }}
-                  value={quoteGroups[lob]?.mode ?? "reuse"}
-                  onChange={e => setGroup(lob, { mode: e.target.value as "reuse" | "new" })}
-                >
-                  <option value="reuse">Open opportunity, else new</option>
-                  <option value="new">New opportunity</option>
-                </select>
               </div>
             ))}
             <Combobox
@@ -855,6 +869,24 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     );
   }
 
+  if(step==="opportunity"&&pendingOpp){
+    const routes=quoteLobs.map(source=>({source,lobId:quoteGroups[source]?.lobId??null,label:lobs?.find(l=>l.lobId===quoteGroups[source]?.lobId)?.name??source??"Quote"}));
+    const complete=Boolean(owner)&&routes.every(r=>r.lobId&&(opportunityChoices[r.source]==="new"||pendingOpp.opps.some(o=>o.opportunityId===opportunityChoices[r.source]&&o.lobId===r.lobId)));
+    return <div className={styles.root}>
+      <div className={styles.title}>Opportunities · {pendingOpp.accountName}</div>
+      {error&&<ErrorBar error={error}/>}
+      <OpportunityChoices routes={routes} open={pendingOpp.opps} choices={opportunityChoices} disabled={busy!==null}
+        onChange={(source,value)=>setOpportunityChoices(c=>({...c,[source]:value}))}/>
+      {!owner&&<div className={styles.warn}>Select a servicing agent in Review before loading quotes.</div>}
+      <div className={styles.row}>
+        <Button appearance="primary" disabled={busy!==null||!complete} onClick={()=>pendingOpp.accountId
+          ?void commit(pendingOpp.accountId,pendingOpp.accountName,{choices:opportunityChoices,created:pendingOpp.created})
+          :void createAndCommit(opportunityChoices)}>{busy?<Spinner size="tiny"/>:"Load"}</Button>
+        <Button disabled={busy!==null} onClick={()=>{setError(null);setStep(pendingOpp.returnStep);}}>Back</Button>
+      </div>
+    </div>;
+  }
+
   return (
     <div className={styles.root}>
       <div className={styles.title}>{target === "insured" ? "Pick the insured account" : "Create the lead"}</div>
@@ -916,7 +948,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             </div>
           ))}
           {matches && matches.length === 0 && <div className={styles.hint}>No matching accounts.</div>}
-          <Button disabled={busy !== null} onClick={createAndCommit}>
+          <Button disabled={busy !== null} onClick={()=>void createAndCommit()}>
             {busy === "create" ? <Spinner size="tiny" /> : `Create "${query.trim() || recordName}"${dupes.length ? " anyway" : ""} and load`}
           </Button>
         </>
