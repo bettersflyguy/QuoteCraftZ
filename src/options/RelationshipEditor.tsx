@@ -21,7 +21,7 @@ export function RelationshipEditor({service,field,catalog}:{service:GraphService
   };
   return <div className="qr-inline-editor">
     <fieldset disabled={busy} aria-label={`Mapping for ${field.label}`}>
-      <MultiTargetPicker value={binding} onChange={next=>void save(next)} groups={captureGroups(catalog)}
+      <MultiTargetPicker value={binding} allowAdd={false} onChange={next=>void save(next)} groups={captureGroups(catalog)}
         specials={[{value:"",label:"Not mapped"},...NOTE_TARGETS]}
         currentText={t=>isNoteTarget(t)?noteLabelOf(t):PATH_LABEL.get(t)||catalogLabel(catalog,t)||t}/>
     </fieldset>
