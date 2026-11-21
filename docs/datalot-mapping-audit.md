@@ -66,5 +66,6 @@ The receipt code is captured in an account note and remains the lead-selection i
 - Imported the site-only file successfully: 39 saved label bindings. Exported the prior eight mappings before replacing this site's configuration.
 - Live simple-record ingest held 30 fields; the two detailed vehicle records held 75 and 73 fields independently. Switching the selected receipt replaced the held client rather than merging their data.
 - The detailed sample's coverage overlay reported **37 mapped, 0 unmapped**. Gender M became Male; Some College became Some College - No Degree. Reported vehicle count 2 remained a note while the one supplied vehicle-detail set became one vehicle row.
-- `npm run build` passes. All 583 tests in 67 files pass. Regression coverage includes optional fields, reordered records, scoped repeated vehicle rows, scan/pick key agreement and refusal of an unscoped multi-lead capture.
+- `npm run build` passes. All 585 tests in 68 files pass. Regression coverage includes optional fields, reordered records, scoped repeated vehicle rows, scan/pick key agreement, refusal of an unscoped multi-lead capture and propagation of frame errors even when another frame returns an empty capture.
+- Live fractional-year capture retained 0.5 and did not inherit the missing street from another client. After the final reload, unscoped ingest displayed the instruction to use 1 Lead and held no combined client data.
 - Installed 0.1.86 in both existing extension folders. No CRM record writes or Datalot disposition changes were performed.

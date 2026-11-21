@@ -1627,10 +1627,18 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   const controls = Object.fromEntries(Object.entries(siteMap).filter(([k, v]) => !k.startsWith("pick:") && !k.startsWith("field:") && v !== "skip"));
   const frames = await chrome.scripting.executeScript({
     target,
-    func: (t: unknown, c: unknown, one: boolean) => (globalThis as { __bettersPortalIngest?: (t: unknown, c: unknown, one: boolean) => unknown }).__bettersPortalIngest?.(t, c, one) ?? null,
+    // Return intentional capture failures as data: Chromium can omit a
+    // frame's result when the injected function throws, leaving a blank
+    // iframe to look like a successful zero-field capture.
+    func: (t: unknown, c: unknown, one: boolean) => {
+      try { return (globalThis as { __bettersPortalIngest?: (t: unknown, c: unknown, one: boolean) => unknown }).__bettersPortalIngest?.(t, c, one) ?? null; }
+      catch (error) { return { captureError:String((error as Error)?.message || error) }; }
+    },
     args: [taught, controls, Boolean(selection)]
   });
-  const results = frames.map(f => f.result as FrameHarvest | null).filter((r): r is FrameHarvest => r !== null);
+  const failure = frames.map(f => f.result as {captureError?:string} | null).find(r => r?.captureError);
+  if (failure?.captureError) throw new Error(failure.captureError);
+  const results = frames.map(f => f.result as FrameHarvest | null).filter((r): r is FrameHarvest => Boolean(r && Array.isArray(r.fields)));
   const top = results[0];
   if (!top) throw new Error("The page did not respond. Reload it and retry.");
   // the top frame names the capture; every frame (iframed quote forms included)
