@@ -170,11 +170,17 @@ export function PortalFill({ onChanged, onFlowActive }: {
     try {
       const tab = await grantActiveTab(setAwaitingGrant);
       leadTab.current = tab.id;
+      let chosen:LeadSelection|null=null;
       while (leadPicking.current) {
         const result = await send<LeadSelection | "timeout" | null>({ type: "panel/leadPick", tabId: tab.id });
-        if (result !== "timeout") break;
+        if (result !== "timeout") {chosen=result;break;}
       }
       await refreshLead();
+      if(chosen&&leadPicking.current) {
+        setBusy("ingest");setFillResult(null);setIngestResult(null);
+        const outcome=await send<IngestOutcome>({type:"panel/portalIngest",tabId:tab.id});
+        setIngestResult(outcome);setApp(outcome.app);refresh();onChanged();
+      }
     } catch (e) { setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message))); }
     finally { leadPicking.current = false;setBusy(null); }
   };
@@ -426,7 +432,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
           onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}
         />
         <ActionIcon
-          tip={busy === "lead" ? "1 Lead: click one expanded lead on the page. Click again to cancel." : "1 Lead: select one lead section to ingest"}
+          tip={busy === "lead" ? "1 Lead: click one expanded lead on the page. Click again to cancel." : "1 Lead: select a lead section and ingest it immediately"}
           icon={busy === "lead" ? <Spinner size="tiny" /> : <span className={styles.leadIcon}><PersonRegular /><span className={styles.leadBadge}>1</span></span>}
           active={lead !== null || busy === "lead"}
           disabled={busy !== null && busy !== "lead"}
@@ -450,7 +456,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
         </Tooltip>
       </div>
       {lead && <div className={styles.match}>
-        <span className={styles.matchText}>1 Lead · {lead.label}. Ingest and auto-capture use this section only.</span>
+        <span className={styles.matchText}>1 Lead · {lead.label}. Selected section only. Click 1 Lead to select and ingest another lead.</span>
         <Button appearance="subtle" size="small" disabled={busy !== null} onClick={() => void clearLead()}>Clear selection</Button>
       </div>}
       {app

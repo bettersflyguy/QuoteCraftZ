@@ -1,14 +1,19 @@
-# One Lead capture — 0.1.82
+# One Lead capture — 0.1.94
 
 Intake has a **1 Lead** icon after Fill from CRM. Select an expanded lead's
-detail section on the page; it receives a bright pink outline. Arrow Up
+detail section on the page; selection immediately ingests it into Intake.
+The full selected area receives a translucent pink highlight and border. Arrow Up
 expands the candidate boundary, and Escape (or the icon again) cancels picking.
 The panel shows the selected receipt code and a Clear selection action.
 
 Manual Ingest and auto-capture use the same reader, restricted to that live
 element and its frame. Read-only label/value text is supported. Existing field
 mappings apply inside the boundary; selected records are not permanent mapping
-roles or saved row numbers. Picking a smaller section captures that subset.
+roles or saved row numbers. The picker prefers the largest single-lead ancestor below the dashboard/list
+boundary, including sibling policy and high-value sections. Multiple receipt
+codes or a dashboard heading stop expansion. The overlay measures descendant
+rectangles too, so floated or overflowing fields such as DOB stay inside the
+highlight, and it follows scrolling and resizing without modifying page styles.
 
 The selection pauses on navigation, collapse, replacement, or changed identity.
 It never resolves an old row position to a new lead or falls back to the full
@@ -38,3 +43,10 @@ being mapped to login.microsoftonline.com.
 Click-to-map gives a recognized read-only label/value pair priority over
 nearby composite controls, so clicking Name inside an expanded lead cannot
 select the disposition-notes textarea in the same outer detail wrapper.
+
+Version 0.1.94 acceptance: reloaded the installed extension and Datalot page,
+clicked 1 Lead and selected the expanded sample once. Intake automatically
+held 30 fields, including policy and high-value data, without a separate Ingest
+click. The highlight covered the full expanded section. No CRM write occurred.
+Build and all 595 tests in 71 files pass, including full-panel selection and
+overflowing descendant highlight regression coverage.

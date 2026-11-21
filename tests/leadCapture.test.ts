@@ -34,6 +34,21 @@ describe("One Lead capture boundary", () => {
     expect(result.fields.some(f => f.value === "Safeco")).toBe(true);
     expect(result.fields.some(f => /Jordan|Miller|Progressive|2175550148/.test(f.value))).toBe(false);
   });
+  it("selects the complete single-lead panel and highlights overflowing content without changing page styles",async()=>{
+    document.body.innerHTML=`<table><tbody><tr><td>Call Time Caller Name</td></tr><tr><td colspan="3" id="whole"><div id="driver" style="outline:1px solid blue">Receipt Code: FULLLEAD1<dl><dt>Name</dt><dd>Jordan Miller</dd><dt>Street</dt><dd>Example Street</dd></dl></div><div id="policy"><dl><dt>Current Carrier</dt><dd>Progressive</dd><dt>Years Insured</dt><dd>3</dd></dl></div></td></tr><tr><td>Another caller</td></tr></tbody></table>`;
+    const whole=document.querySelector("#whole")!;
+    const driver=document.querySelector("#driver")! as HTMLElement;
+    const policy=document.querySelector("#policy")!;
+    whole.getClientRects=()=>[new DOMRect(10,20,500,50)] as unknown as DOMRectList;
+    policy.getClientRects=()=>[new DOMRect(300,100,300,250)] as unknown as DOMRectList;
+    await select("#driver dd");
+    expect(g.__bettersLead.get().el.contains(policy)).toBe(true);
+    const box=document.querySelector<HTMLElement>('[data-quotecraftz-lead-highlight="selected"]')!;
+    expect(box.style.left).toBe("10px");expect(box.style.width).toBe("590px");expect(box.style.height).toBe("330px");
+    expect(box.style.pointerEvents).toBe("none");expect(driver.style.outline).toBe("1px solid blue");
+    expect(g.__bettersPortalIngest(undefined,undefined,true).fields.some(f=>f.value==="Progressive")).toBe(true);
+    g.__bettersLead.clear();expect(box.isConnected).toBe(false);
+  });
   it("does not harvest taught/secured values outside the selected root", async () => {
     page(); await select("#lead1 dd");
     const result = g.__bettersPortalIngest([{ selector:"#lead0 dd", label:"Secret", path:"secure:contacts1.iacrm_ssn" }], undefined, true);
