@@ -1479,11 +1479,15 @@
           var hostLabel = host !== tx ? primaryLabel(host) : "";
           var inferred = hostLabel || inferTextLabel(tx);
           var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
+          // The scanner already gives a read-only pair its value selector.
+          // Reuse that key when picking, rather than adding a second
+          // label-based teaching for the same value.
+          var localPair = !hostLabel && typeof globalThis.__bettersLocalTextLabel === "function" && globalThis.__bettersLocalTextLabel(tx);
           /* inside a LABELLED form field (any site's design system): map the
            * field by its label - it survives re-renders and covers every
            * card that repeats it; otherwise a re-locatable selector */
           var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
-          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
+          var labelKey = !localPair && boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
           // A truncated label cannot match the full source question later.
           // Long carrier captions use the stable control selector instead.
           if (labelKey.length > 140) labelKey = "";
@@ -1493,7 +1497,7 @@
           var pickedPage = /(?:^| )address$/.test(sec.key) ? repeatInfo(boxLabel).page : "";
           finish({
             key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (pickedPage ? pickedPage + "|" : "") + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
-            label: (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            label: localPair || (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,
             scopes: mapper && mapper.scopesOf ? mapper.scopesOf(tx) : [],

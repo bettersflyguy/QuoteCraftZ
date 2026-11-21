@@ -12,6 +12,7 @@ type Row = { key: string; label: string; type: string } | "timeout" | null;
 let pick: (timeoutMs?: number) => Promise<Row>;
 
 beforeAll(() => {
+  new Function(readFileSync(path.resolve(__dirname, "../public/portal/portal-mapper.js"), "utf8"))();
   new Function(readFileSync(path.resolve(__dirname, "../public/portal/portal-ingest.js"), "utf8"))();
   const src = readFileSync(path.resolve(__dirname, "../public/portal/portal-fill.js"), "utf8");
   // eslint-disable-next-line no-new-func
@@ -26,12 +27,16 @@ describe("picking inside grid rows", () => {
     document.body.innerHTML = `<table><tr><td colspan="6"><div class="lead"><div><ul><div><li>Name</li><li id="leadName">Alex Rivera</li></div></ul></div><div><textarea disabled placeholder="Select disposition to edit notes"></textarea></div></div></td></tr></table>`;
     const notes = document.querySelector("textarea")!;
     notes.getBoundingClientRect = () => ({x:500,y:100,left:500,top:100,right:700,bottom:200,width:200,height:100,toJSON:()=>({})});
+    const name = document.querySelector("#leadName")!;
+    name.getBoundingClientRect = () => ({x:100,y:100,left:100,top:100,right:300,bottom:124,width:200,height:24,toJSON:()=>({})});
+    const scan = (globalThis as unknown as { __bettersPortalScan(app:unknown,map:unknown): Exclude<Row,"timeout"|null>[] }).__bettersPortalScan(null, {});
     const pending = pick(5000);
     click(document.querySelector("#leadName")!);
     const row = await pending as Exclude<Row,"timeout"|null>;
     expect(row.type).toBe("text");
     expect(row.key).toBe("pick:#leadName");
-    expect(row.label).toContain("Name");
+    expect(row.label).toBe("Name");
+    expect(scan.find(r => r.key === row.key)?.label).toBe(row.label);
     expect(row.label).not.toContain("disposition");
   });
   it("resolves the clicked name cell as a text teaching, not the row's checkbox", async () => {
