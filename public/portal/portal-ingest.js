@@ -716,11 +716,13 @@
         const label = clean(labelFor(control));
         if (PAYMENT_FIELD.test(label) || PAYMENT_FIELD.test(clean(control.name || control.id))) return;
         if (isGridChrome(control, label)) return;
-        let path = null;
+        let binding = null;
         if (keyOf && control.matches("input, select, textarea")) {
-          try { path = map[keyOf(control)] || null; } catch (_e) { path = null; }
+          try { binding = map[keyOf(control)] || null; } catch (_e) { binding = null; }
         }
         const value = valueFor(control);
+        const paths = binding ? (globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.mappingTargets(binding) : [binding]) : [null];
+        paths.forEach(path => {
         if (isSecurePath(path)) {
           if (value && secureOut) secureOut.push({ path, value });
           return;
@@ -733,10 +735,11 @@
           if (system && labelKey(label) === "year updated") field.label = `${system[1]}: Year Updated`;
           const scheduled = /^(coins|fineArts|furs|guns|jewelry|music|silverware)Breakage$/.exec(control.name || control.id || "");
           if (scheduled && labelKey(label) === "breakage") field.label = scheduled[1].replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) + ": Breakage";
-          noteControls.push({ field, control, key: keyOf(control) });
+          noteControls.push({ field, control, key: keyOf(control) + "|" + path });
         }
-        else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) });
+        else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) + "|" + path });
         fields.push(field);
+        });
       });
     /* one person mapping on a box every driver card shares ("First Name" on
      * Primary Insured and Additional Driver): each card is its own person,

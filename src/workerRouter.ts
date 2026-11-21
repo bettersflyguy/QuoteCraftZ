@@ -1,4 +1,5 @@
 import type { BridgeRequest, PanelRequest, Res } from "@/messages";
+import { expandedFieldMap, mappingTargets, packMappingTargets, preferredFieldMap } from "@/portal/mappingTargets";
 import type { CrmEnvironment } from "@/crm/environments";
 import { getEnvironments, getActiveEnvironment, setActiveEnvironment } from "@/crm/environments";
 import { getAccessToken, clearToken } from "@/crm/auth";
@@ -800,7 +801,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/portalChoices": {
         // one field's current value and options (styled dropdowns opened,
         // read and closed); the first frame holding the field answers
-        await chrome.scripting.executeScript({ target: { tabId: msg.tabId, allFrames: true }, files: ["portal/person-name.js", "portal/portal-mapper.js", "portal/portal-fill.js"] });
+        await chrome.scripting.executeScript({ target: { tabId: msg.tabId, allFrames: true }, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-fill.js"] });
         const frames = await chrome.scripting.executeScript({
           target: { tabId: msg.tabId, allFrames: true },
           func: (k: string, l: string[], h: { label?: string; section?: string } | null) =>
@@ -1233,7 +1234,7 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
   const overrides = origin ? await fieldMapFor(origin) : {};
   const app = await getCapturedApplication();
   // the ingester names labelled-field rows ("field:vehicles|vin")
-  await chrome.scripting.executeScript({ target, files: ["portal/person-name.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
+  await chrome.scripting.executeScript({ target, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
     target,
     func: (p: unknown, ov: unknown) =>
@@ -1266,7 +1267,7 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
 async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanRow | "timeout" | null> {
   // the ingester supplies form-field labels, so a click inside a labelled
   // field maps it by label (robust on any site's design system)
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/person-name.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
   // the site's saved mappings, so a picked box is keyed the way its mapping is
   const origin = await tabOrigin(tabId);
   const overrides = origin ? await fieldMapFor(origin) : {};
@@ -1314,6 +1315,7 @@ function arrayTableOf(path: string, catalog: FieldCatalog | null): { title: stri
  * missing), so missing = items found nowhere. */
 /** A saved target as the peek's badge text. */
 function peekLabel(target: string, catalog: FieldCatalog | null): string {
+  if (mappingTargets(target).length > 1) return mappingTargets(target).map(t=>peekLabel(t,catalog)).join(" + ");
   if (target === "skip") return "Never fill";
   if (isNoteTarget(target)) return noteLabelOf(target);
   if (target.startsWith("label:")) return target.slice(6);
@@ -1343,7 +1345,7 @@ async function peekPortalTab(
   if (items) {
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      files: ["portal/person-name.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"]
+      files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"]
     });
     const origin = await tabOrigin(tabId);
     let catalog: FieldCatalog | null = null;
@@ -1434,12 +1436,12 @@ async function fillPortalTab(
   autoAdvance: boolean
 ): Promise<import("@/boldpenguin/types").PortalFillResult> {
   const origin = await tabOrigin(tabId);
-  const overrides = origin ? await fieldMapFor(origin) : {};
+  const overrides = preferredFieldMap(origin ? await fieldMapFor(origin) : {});
   // On-demand injection: the filler ships as plain scripts (public/portal/) so it
   // can run on ANY carrier portal the user granted, without a declared match.
   // allFrames: agent portals (Progressive FAO among them) often render the quote
   // form inside an iframe - every frame fills its own fields.
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/person-name.js", "portal/portal-mapper.js", "portal/portal-fill.js"] });
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-fill.js"] });
   // every value any mapping target can name (CRM columns, row slots...);
   // secured values are NOT in here
   let catalog: FieldCatalog | null = null;
@@ -1559,20 +1561,22 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   if (selection && selection.frameId < 0) throw new Error("1 Lead paused: select one expanded lead section first.");
   const target = selection ? { tabId, frameIds: [selection.frameId] } : { tabId, allFrames: true };
   // the filler supplies controlKey, so saved control mappings route on capture
-  await chrome.scripting.executeScript({ target, files: ["portal/person-name.js", "portal/portal-mapper.js", "portal/portal-fill.js", "portal/portal-ingest.js", "portal/portal-lead.js"] });
+  await chrome.scripting.executeScript({ target, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-fill.js", "portal/portal-ingest.js", "portal/portal-lead.js"] });
   type FrameHarvest = { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string; leadKey?: string; secure?: { path: string; value: string }[] };
   // agent-taught read-only-text extractions for this site: "pick:<selector>"
   // entries resolve to the taught CRM field's display label, which the
   // normalizer recognizes - the page never chooses its own labels
   const origin = await tabOrigin(tabId);
-  const siteMap = Object.fromEntries(Object.entries(origin ? await fieldMapFor(origin) : {}).map(([k, v]) => [k, securedIfIdentifier(v)]));
+  const rawMap = origin ? await fieldMapFor(origin) : {};
+  const entries = expandedFieldMap(rawMap).map(([k,v])=>[k,securedIfIdentifier(v)] as [string,string]);
+  const siteMap = Object.fromEntries(Object.keys(rawMap).map(k=>[k,packMappingTargets(entries.filter(([key])=>key===k).map(([,v])=>v))]));
   // CRM-column teachings label themselves from the cached catalog (falling
   // back to the column's logical name when the catalog isn't loaded yet)
   let catalog: FieldCatalog | null = null;
-  if (Object.values(siteMap).some(v => isCrmTarget(v))) {
+  if (entries.some(([,v]) => isCrmTarget(v))) {
     try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
   }
-  const taught = Object.entries(siteMap)
+  const taught = entries
     .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v) || isSecureTarget(v)))
     .map(([k, v]) => {
       // note teachings are labeled on the page (column header / field label)
@@ -1587,7 +1591,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
     });
   // labelled-field teachings ("field:vehicles|vin"): every card's field
   // with that label on that step, routed like a pick
-  const labelled = Object.entries(siteMap)
+  const labelled = entries
     .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v) || isSecureTarget(v)))
     .map(([k, v]) => {
       const m = FIELD_KEY_PARTS.exec(k);
@@ -1626,7 +1630,7 @@ async function autoCapTabs(): Promise<number[]> {
 async function injectAutoCapture(tabId: number): Promise<void> {
   await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    files: ["portal/person-name.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-autocap.js"]
+    files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-autocap.js"]
   });
   await chrome.tabs.sendMessage(tabId, { type: "portal/autoCaptureStart" }).catch(() => {});
 }

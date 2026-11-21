@@ -4,6 +4,7 @@
 
 import { COLUMN_KEY, sanitizeColumnMap, type OptionMaps } from "./optionMaps";
 import { ROW_TABLES } from "./assetTables";
+import { mappingTargets, packMappingTargets } from "./mappingTargets";
 export { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, type AssetTable, type ChildTable } from "./assetTables";
 
 export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
@@ -133,6 +134,13 @@ export function rowTargetOf(path: string): { arrayPath: string; row: number } | 
     return { arrayPath: `${array}[].${m[2]}`, row };
   }
   return null;
+}
+
+/** Moving a repeated control to an every-card teaching moves all its row
+ * targets together, so adding an array target cannot pin an older target
+ * to one contact/vehicle/property slot. */
+export function arrayFamilyTargets(binding:string):string {
+  return packMappingTargets(mappingTargets(binding).map(t=>rowTargetOf(t)?.arrayPath || t));
 }
 
 /** CRM column targets taught in the capture editor ("crm:account.address1_city",
@@ -309,7 +317,7 @@ export interface FieldMapExport {
  * all rows), a CRM column (record or all rows) or a timeline note. Never a
  * secured target (each agent maps those locally). */
 export const isDataServiceTarget = (t: string): boolean =>
-  t === "" || PATH_LABEL.has(t) || isRoutablePath(t) || isCrmTarget(t) || isNoteTarget(t);
+  t === "" || (mappingTargets(t).length > 0 && mappingTargets(t).every(p=>PATH_LABEL.has(p) || isRoutablePath(p) || isCrmTarget(p) || isNoteTarget(p)));
 
 export function buildFieldMapExport(
   maps: FieldMaps, options?: OptionMaps, dataServices?: Record<string, Record<string, string>>
@@ -466,8 +474,8 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
     const originLabels = new Set<string>();
     let originPicks = 0;
     for (const [key, path] of Object.entries(entries as Record<string, unknown>)) {
-      const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path) &&
-        !isSensitiveLabel(path.slice(6));
+      const targets = typeof path === "string" ? mappingTargets(path) : [];
+      const isLabel = (p:string) => /^label:[a-z0-9 ]{1,100}$/.test(p) && !isSensitiveLabel(p.slice(6));
       // "pick:<selector>" keys teach read-only-text CAPTURE: selectors run
       // deeper than control keys (hence the longer cap), must fit cssPath's
       // own restricted grammar, and may only target known CRM fields - a
@@ -477,16 +485,16 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
       const pickKey = typeof key === "string" && (key.startsWith("pick:") || fieldKey);
       // secured targets never travel in share files: each agent maps them on
       // their own machine, so a tampered file can't aim an SSN at a field
-      if (typeof path === "string" && path.startsWith(SECURE_PREFIX)) { dropped += 1; secured += 1; continue; }
+      if (targets.some(p=>p.startsWith(SECURE_PREFIX))) { dropped += 1; secured += 1; continue; }
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
-          typeof path !== "string" ||
-          (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) &&
-            !(pickKey ? isCaptureTarget(path) : isRoutablePath(path) || isNoteTarget(path))) ||
-          (pickKey && (!(fieldKey ? FIELD_KEY.test(key) : PICK_SELECTOR.test(key)) || (path !== "skip" && !isCaptureTarget(path))))) {
+          typeof path !== "string" || !targets.length ||
+          targets.some(p=>p !== "skip" && !isLabel(p) && !PATH_LABEL.has(p) &&
+            !(pickKey ? isCaptureTarget(p) : isRoutablePath(p) || isNoteTarget(p))) ||
+          (pickKey && (!(fieldKey ? FIELD_KEY.test(key) : PICK_SELECTOR.test(key)) || targets.some(p=>p !== "skip" && !isCaptureTarget(p))))) {
         dropped += 1;
         continue;
       }
-      if (labelTarget) { labelTargets.add(path.slice(6)); originLabels.add(path.slice(6)); }
+      targets.filter(isLabel).forEach(p=>{labelTargets.add(p.slice(6));originLabels.add(p.slice(6));});
       if (pickKey && path !== "skip") originPicks += 1;
       clean[key] = path;
     }
@@ -510,7 +518,7 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
 export function withoutSecured(maps: FieldMaps): FieldMaps {
   const out: FieldMaps = {};
   for (const [origin, entries] of Object.entries(maps)) {
-    const kept = Object.fromEntries(Object.entries(entries).filter(([, v]) => !v.startsWith(SECURE_PREFIX)));
+    const kept = Object.fromEntries(Object.entries(entries).filter(([, v]) => mappingTargets(v).length && mappingTargets(v).every(p=>!p.startsWith(SECURE_PREFIX))));
     if (Object.keys(kept).length) out[origin] = kept;
   }
   return out;

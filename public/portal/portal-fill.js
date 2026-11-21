@@ -656,7 +656,7 @@
     return dropRadioKeys;
   }
   async function fillPass(payload, overwrite, autoAdvance, overrides) {
-    const ov = overrides || {};
+    const ov = globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.preferredFieldMap(overrides || {}) : overrides || {};
     const candidates = mapper.buildCandidates(payload);
     const fillRoot = activeModal() || document;
     const controls = pageControls(fillRoot);

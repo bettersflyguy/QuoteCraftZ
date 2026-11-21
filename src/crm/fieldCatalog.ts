@@ -8,6 +8,7 @@ import { canonical, clean } from "@/boldpenguin/normalize";
 import { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, isSensitiveLabel } from "@/portal/fieldMaps";
 import { autoMatchOption } from "@/portal/optionMaps";
 import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
+import { mappingTargets } from "@/portal/mappingTargets";
 import type { CrmEnvironment } from "./environments";
 import { classifyCatalogError, type CatalogUnavailable } from "./catalogNote";
 import { caseOf, describeCatalogError, safeAccount, safeHost, statusOf, type CatalogDiagnostics, type PicklistProbe, type TableDiagnostic } from "./catalogDiagnostics";
@@ -325,7 +326,7 @@ async function missingMappedColumns(catalog: FieldCatalog): Promise<number> {
     ...Object.values(effectiveTargets(services["ezlynx"]))
   ];
   let missing = 0;
-  for (const t of new Set(targets)) {
+  for (const t of new Set(targets.flatMap(mappingTargets))) {
     const m = /^(crm|secure):([a-z]+?)(\d*)(?:\[\])?\.([a-z0-9_]+)$/.exec(t);
     if (!m) continue;
     const key = m[3] ? slotEntityKey(m[2]!) ?? m[2] : m[2];

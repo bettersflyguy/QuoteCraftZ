@@ -74,7 +74,7 @@ export function identityConflict(existing: NormalizedApplication, incoming: Norm
 }
 
 function fieldKey(field: CapturedAppField): string {
-  return [field.section, field.group, canonical(field.label), field.value].join("|");
+  return [field.section, field.group, canonical(field.label), field.value, field.mapped ?? ""].join("|");
 }
 
 function sanitize(fields: CapturedAppField[]): CapturedAppField[] {
