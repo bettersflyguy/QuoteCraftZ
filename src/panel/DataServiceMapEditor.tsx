@@ -84,6 +84,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlig
   const [catalogNote, setCatalogNote] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => { setOpen(null); }, [search]);
   const [focus, setFocus] = useState<string | null>(null);
   const [heldValues, setHeldValues] = useState<Record<string, string[]>>({});
   const [picking, setPicking] = useState(false);

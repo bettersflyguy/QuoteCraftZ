@@ -150,10 +150,11 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   }, [focusKey]);
 
   const [choicesOpen, setChoicesOpen] = useState<Set<string>>(() => new Set());
+  // Filtering must not remount previously opened readers: opening several
+  // styled menus together mixes their option inventories on the source page.
+  useEffect(() => { setChoicesOpen(new Set()); }, [search]);
   const toggleChoices = (key: string) => setChoicesOpen(s => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
+    return s.has(key) ? new Set() : new Set([key]);
   });
   const stopRequested = useRef(false);
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
