@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useState } from "react";
-import { DataServicesSection } from "./DataServicesSection";
 import { MappingRelationships } from "./MappingRelationships";
 import { useSettingsTransfer } from "./SettingsTransfer";
 import {
@@ -185,9 +184,6 @@ export function OptionsApp() {
         {allTransfer.icons}
       </div>
       {allTransfer.panel}
-      <MappingRelationships />
-      <details style={{marginTop:24}}>
-      <summary style={{cursor:"pointer",fontSize:16,fontWeight:600}}>Environments and mapping editors</summary>
       <Text as="h2" size={500} weight="semibold" block style={{ marginTop: 24 }}>Environments</Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">
@@ -274,8 +270,7 @@ export function OptionsApp() {
       </Text>
 
       <FieldMapsSection />
-      <DataServicesSection />
-      </details>
+      <MappingRelationships />
     </div>
   );
 }
