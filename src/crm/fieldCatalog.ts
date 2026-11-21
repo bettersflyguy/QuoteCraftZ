@@ -315,6 +315,13 @@ const CACHE_VERSION = "v8";
 const CACHE_PREFIX = `crm/fieldCatalog/${CACHE_VERSION}/`;
 const TTL_MS = 24 * 60 * 60 * 1000;
 
+/** Settings can describe saved relationships without initiating sign-in. */
+export async function cachedFieldCatalog(envId:string):Promise<FieldCatalog|null> {
+  const key=CACHE_PREFIX+envId;
+  const value=(await chrome.storage.local.get(key))[key] as FieldCatalog|undefined;
+  return value?.entities?.length ? value : null;
+}
+
 /** How many CRM columns the saved mappings (page sites and data services,
  * defaults included) name that the catalog doesn't list. */
 async function missingMappedColumns(catalog: FieldCatalog): Promise<number> {

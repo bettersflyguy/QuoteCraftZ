@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { DataServicesSection } from "./DataServicesSection";
+import { MappingRelationships } from "./MappingRelationships";
 import { useSettingsTransfer } from "./SettingsTransfer";
 import {
   Button,
@@ -92,7 +93,7 @@ function makeId(): string {
 const useStyles = makeStyles({
   root: {
     padding: "24px",
-    maxWidth: "1040px",
+    maxWidth: "1800px",
     fontFamily: tokens.fontFamilyBase
   },
   /* one shared grid for header + rows so the columns always line up and
@@ -184,6 +185,9 @@ export function OptionsApp() {
         {allTransfer.icons}
       </div>
       {allTransfer.panel}
+      <MappingRelationships />
+      <details style={{marginTop:24}}>
+      <summary style={{cursor:"pointer",fontSize:16,fontWeight:600}}>Environments and mapping editors</summary>
       <Text as="h2" size={500} weight="semibold" block style={{ marginTop: 24 }}>Environments</Text>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">
@@ -271,6 +275,7 @@ export function OptionsApp() {
 
       <FieldMapsSection />
       <DataServicesSection />
+      </details>
     </div>
   );
 }
