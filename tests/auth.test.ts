@@ -28,6 +28,14 @@ describe("buildAuthorizeUrl", () => {
 });
 
 describe("getAccessToken", () => {
+  it("identifies an already-open Microsoft flow without hiding the remedy", async()=>{
+    Object.assign(chrome,{identity:{getRedirectURL:()=>"https://test.chromiumapp.org/",launchWebAuthFlow:vi.fn(async()=>{throw new Error("Only one web auth flow is allowed at a time.");})}});
+    await expect(getAccessToken("https://blocked.crm.dynamics.com")).rejects.toThrow("Another Microsoft sign-in is already open. Close that window");
+  });
+  it("reports OAuth refusal codes from the redirect rather than waiting indefinitely", async()=>{
+    Object.assign(chrome,{identity:{getRedirectURL:()=>"https://test.chromiumapp.org/",launchWebAuthFlow:vi.fn(async()=>"https://test.chromiumapp.org/?error=access_denied")}});
+    await expect(getAccessToken("https://denied.crm.dynamics.com")).rejects.toThrow("Microsoft sign-in failed (access_denied)");
+  });
   it("shares simultaneous sign-in requests for the same org",async()=>{
     let finish!:(url:string)=>void;
     const launch=vi.fn(()=>new Promise<string>(resolve=>{finish=resolve;}));
@@ -47,7 +55,7 @@ describe("getAccessToken", () => {
     Object.assign(chrome,{identity:{getRedirectURL:()=>"https://test.chromiumapp.org/",launchWebAuthFlow:launch}});
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({access_token:"SECOND",expires_in:3600})})));
     const first=getAccessToken("https://one.crm.dynamics.com");
-    const failure=expect(first).rejects.toThrow("CRM sign-in did not finish");
+    const failure=expect(first).rejects.toThrow("Microsoft sign-in was cancelled or could not open");
     const second=getAccessToken("https://two.crm.dynamics.com");
     await vi.waitFor(()=>expect(launch).toHaveBeenCalledTimes(1));
     rejectFirst(new Error("cancelled"));await failure;

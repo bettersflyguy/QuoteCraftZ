@@ -72,10 +72,19 @@ async function interactiveSignIn(orgUrl: string): Promise<TokenSet> {
   let cb: string | undefined;
   try {
     cb = await chrome.identity.launchWebAuthFlow({ url: buildAuthorizeUrl(orgUrl, redirectUri, challenge), interactive: true });
-  } catch {
-    throw new AuthRequiredError("CRM sign-in did not finish. Complete the Microsoft sign-in window, or close it and reconnect.");
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    if (/only one web auth flow|already.*(?:auth|sign.in).*progress/i.test(reason)) {
+      throw new AuthRequiredError("Another Microsoft sign-in is already open. Close that window, then click Reconnect to CRM again.");
+    }
+    throw new AuthRequiredError("Microsoft sign-in was cancelled or could not open. Click Reconnect to CRM to try again.");
   }
-  const code = cb ? new URL(cb).searchParams.get("code") : null;
+  const params = cb ? new URL(cb).searchParams : null;
+  const code = params?.get("code");
+  if (!code && params?.has("error")) {
+    const error = params.get("error") ?? "unknown_error";
+    throw new AuthRequiredError(`Microsoft sign-in failed (${/^[a-z_]+$/.test(error) ? error : "unknown_error"}). Reconnect to CRM to try again.`);
+  }
   if (!code) throw new AuthRequiredError();
   return tokenRequest(new URLSearchParams({
     client_id: APP_CONFIG.clientId, grant_type: "authorization_code", code,
