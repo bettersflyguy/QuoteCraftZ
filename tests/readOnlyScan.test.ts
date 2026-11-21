@@ -38,3 +38,13 @@ it("does not turn navigation links or editable controls into read-only discoveri
   const rows=g.__bettersPortalScan(null,{});
   expect(rows.some(r=>r.key.startsWith("pick:"))).toBe(false);
 });
+it("uses the detail labels inside a colspan row rather than the ancestor Call Time header",()=>{
+  document.body.innerHTML=`<table><thead><tr><th>Call Time</th><th>Caller Name</th><th>Caller #</th></tr></thead><tbody><tr><td>Today</td><td>Jordan Miller</td><td>2175550148</td></tr><tr><td colspan=3><section id=detail>${markup("Jordan Miller")}</section></td></tr></tbody></table>`;
+  g.__bettersOneLead=true;g.__bettersLead={get:()=>({el:document.querySelector("#detail")!,key:"detail"})};
+  const rows=g.__bettersPortalScan(null,{});
+  expect(rows.map(r=>r.label)).toEqual(["Name","Home Number","Street"]);
+  expect(rows.some(r=>r.label==="Call Time")).toBe(false);
+  const name=rows.find(r=>r.label==="Name")!;
+  const result=g.__bettersPortalIngest([{selector:name.key.slice(5),label:"",path:"note"}],undefined,true);
+  expect(result.fields).toEqual(expect.arrayContaining([expect.objectContaining({label:"Name",value:"Jordan Miller"})]));
+});

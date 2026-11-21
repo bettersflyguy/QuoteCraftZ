@@ -1,4 +1,4 @@
-# One Lead capture — 0.1.81
+# One Lead capture — 0.1.82
 
 Intake has a **1 Lead** icon after Fill from CRM. Select an expanded lead's
 detail section on the page; it receives a bright pink outline. Arrow Up
@@ -28,3 +28,9 @@ the mapping editor with its click-to-map picker available instead of reporting
 that a quote form is required. In One Lead mode, discovery uses the selected
 section and frame as well as capture. Reading unmapped lead text does not
 request CRM metadata or open a CRM sign-in window.
+
+In 0.1.82 a detail field's own label takes precedence over the surrounding
+dashboard table's header. The mapping list shows Name, Home Number and Street
+instead of calling all of them Call Time. Mapping and Intake actions use the
+side panel's browser window, so a CRM sign-in popup cannot redirect the site
+being mapped to login.microsoftonline.com.

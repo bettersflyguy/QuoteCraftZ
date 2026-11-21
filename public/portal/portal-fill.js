@@ -1299,6 +1299,8 @@
     var prior = amount && amount.previousElementSibling;
     var caption = prior && prior.querySelector("mat-label, label");
     if (caption) return clean(caption.innerText || caption.textContent) + ": Amount";
+    const local = typeof globalThis.__bettersLocalTextLabel === "function" ? globalThis.__bettersLocalTextLabel(el) : "";
+    if (local) return local;
     var cell = el.closest ? el.closest("td") : null;
     if (cell) {
       var row = cell.parentElement;

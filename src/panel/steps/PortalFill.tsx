@@ -145,7 +145,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const leadPicking = useRef(false);
   const leadTab = useRef<number | null>(null);
   const refreshLead = useCallback(async () => {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     setLead(tab?.id ? await send<LeadSelection | null>({ type: "panel/leadStatus", tabId: tab.id }) : null);
   }, []);
   useEffect(() => {
@@ -264,7 +264,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
     const onMsg = (m: unknown) => {
       const paused = m as { type?: string; tabId?: number; error?: string };
       if (paused?.type === "portal/leadPaused") {
-        void chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
+        void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
           if (tab?.id === paused.tabId) setError(new PanelError("session", paused.error || "1 Lead paused. Select the lead again."));
         });
         return;

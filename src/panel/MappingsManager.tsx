@@ -80,7 +80,7 @@ export function MappingsManager() {
   const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
   useEffect(() => {
     const read = () => {
-      void chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
+      void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
         const url = tab?.url ?? "";
         setCurrentOrigin(/^https:\/\//i.test(url) ? new URL(url).origin : null);
       }).catch(() => setCurrentOrigin(null));

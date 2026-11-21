@@ -321,6 +321,8 @@
     const prior = amount && amount.previousElementSibling;
     const caption = prior && prior.querySelector("mat-label, label");
     if (caption) return text(caption) + ": Amount";
+    const local = localTextLabel(el);
+    if (local) return local;
     const cell = el.closest("td, th");
     if (cell && cell.parentElement) {
       const row = cell.parentElement;
@@ -622,6 +624,19 @@
 
   function captureRoot() {
     return leadRoot || (globalThis.__bettersOneLead ? globalThis.__bettersLead.get().el : null) || activeModal() || document.querySelector("main") || document;
+  }
+  // An expanded detail panel lives inside a colspan cell of the call grid.
+  // Its own "Name / value" pair wins over the ancestor's "Call Time" header.
+  function localTextLabel(el) {
+    for (let node = el, depth = 0; node && depth < 4; node = node.parentElement, depth += 1) {
+      if (node.matches("td,th,tr,table,body,html")) break;
+      const row = node.parentElement;
+      if (!row || !row.matches("ul,ol,div,li,dd") || row.children.length !== 2 || row.children[1] !== node) continue;
+      if (row.querySelector("input,select,textarea,button,a,svg")) continue;
+      const label = text(row.children[0]).replace(/[:*]+$/, "");
+      if (label && label.length <= 80 && label !== text(node)) return label;
+    }
+    return "";
   }
 
   /* Read-only review fields also use UL/LI pairs (Datalot), not just inputs,
@@ -1264,6 +1279,7 @@
     return box ? boxLabel(box) : "";
   };
   globalThis.__bettersCaptureElements = captureElements;
+  globalThis.__bettersLocalTextLabel = localTextLabel;
   /* the root a capture reads (the open dialog, else main, else the page): the
    * filler groups same-name boxes over the same root */
   globalThis.__bettersCaptureRoot = captureRoot;

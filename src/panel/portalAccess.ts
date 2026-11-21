@@ -4,7 +4,9 @@ import { PanelError } from "./api";
  * why this lives in the panel) and returns the tab. Portals aren't in the
  * manifest's host list; each site is granted individually at click time. */
 export async function grantActiveTab(onAwaitingGrant?: (origin: string | null) => void): Promise<{ id: number; url: string }> {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  // The side panel's browser window owns the action. An identity popup may
+  // be last-focused while CRM metadata loads; it must never become the site.
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url || !/^https:/i.test(tab.url)) {
     throw new PanelError("session", "The active tab is not a readable page. Open the page to map, then retry.");
   }
