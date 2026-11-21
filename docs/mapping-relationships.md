@@ -1,4 +1,4 @@
-# Mapping relationships — 0.1.90
+# Mapping relationships — 0.1.91
 
 A compact header and side-by-side Environments / Pages Mapped sections sit
 at the top of Settings. Environment switching stays visible; Configure
@@ -54,3 +54,13 @@ only. Hover titles retain entity-qualified display names, stored mapping paths,
 canonical CRM paths when different, and source keys for output fields. Green
 mapping indicators and pink tracing remain. The production build passes;
 browser acceptance verified the compact top sections and single-line rows.
+
+Version 0.1.91 adds independent CRM / Output column resize handles. Drag the
+right dotted edge, or focus it and use Left / Right arrows. Column widths
+(180–900px) and the Arrow space slider (40–240px) persist independently of
+hidden sections and mappings. Connectors redraw during resizing. CRM fields
+are grouped by their stored destination entity with display-label dividers and
+logical table names from cached metadata or the runtime catalog. Primary and
+array contacts, account fields, individual row slots, and notes remain distinct.
+Build and eight focused graph/save/layout tests pass. Edge verified widening
+CRM and one output independently, adjusting arrow gaps, and refreshing.

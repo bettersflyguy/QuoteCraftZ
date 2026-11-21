@@ -56,3 +56,11 @@
 .qr-crm .qr-node, .qr-fields>.qr-node { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; height:24px; padding:2px 6px; }
 .qr-settings-title { min-height:26px; }
 @media(max-width:800px) { .qr-config-top { grid-template-columns:1fr; } }
+
+.qr-resizer { position:absolute; top:0; bottom:0; right:-7px; width:10px; cursor:col-resize; touch-action:none; z-index:3; border-right:2px dotted #96a4b9; }
+.qr-resizer:hover, .qr-resizer:focus-visible { background:#073a8933; outline:1px solid #073a89; }
+.qr-entity-block { margin:0 0 8px; }
+.qr-entity-block h4 { margin:0; padding:4px 6px; background:#dce7f6; border-top:2px solid #7893b6; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qr-entity-block h4 small { display:block; font-size:10px; font-weight:400; color:#59677d; }
+.qr-gap-control { display:flex; align-items:center; gap:4px; font-size:11px; }
+.qr-gap-control input { width:90px; }

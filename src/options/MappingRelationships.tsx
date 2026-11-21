@@ -6,6 +6,8 @@ import {cachedFieldCatalog,catalogLabel,type FieldCatalog} from "@/crm/fieldCata
 import {getActiveEnvironment} from "@/crm/environments";
 import {mappingServices,type GraphService} from "./mappingGraph";
 import { RelationshipEditor } from "./RelationshipEditor";
+import {ResizableLane} from "./ResizableLane";
+import {entityGroup,LAYOUT_KEY,readLayout,type Layout} from "./relationshipLayout";
 import "./mappingRelationships.css";
 
 const VIEW_KEY="settings/relationshipView";
@@ -17,6 +19,7 @@ export function MappingRelationships() {
   const [catalog,setCatalog]=useState<FieldCatalog|null>(null);
   const [environment,setEnvironment]=useState("");
   const [view,setView]=useState<View>({inputs:[],outputs:[]});
+  const [layout,setLayout]=useState<Layout>(readLayout(null));
   const [query,setQuery]=useState("");
   const [selected,setSelected]=useState<string|null>(null);
   const [all,setAll]=useState(true);
@@ -29,10 +32,11 @@ export function MappingRelationships() {
     let disposed=false;
     const load=async()=>{
       try {
-        const [maps,ds,env,prefs]=await Promise.all([getAllFieldMaps(),getDataServiceMaps(),getActiveEnvironment(),chrome.storage.local.get(VIEW_KEY)]);
+        const [maps,ds,env,prefs]=await Promise.all([getAllFieldMaps(),getDataServiceMaps(),getActiveEnvironment(),chrome.storage.local.get([VIEW_KEY,LAYOUT_KEY])]);
         const meta=await cachedFieldCatalog(env.id);
         if(disposed)return;
         setServices(mappingServices(maps,ds));setCatalog(meta);setEnvironment(env.name);
+        setLayout(readLayout(prefs[LAYOUT_KEY]));
         const saved=prefs[VIEW_KEY] as Partial<View>|undefined;
         setView({inputs:safeList(saved?.inputs),outputs:safeList(saved?.outputs)});setError("");setLoaded(true);
       }catch(e){if(!disposed){setError(String((e as Error).message||e));setLoaded(true);}}
@@ -56,6 +60,14 @@ export function MappingRelationships() {
       return !q || `${label(target)} ${target} ${services.flatMap(s=>s.fields.filter(f=>f.canonical===key).map(f=>`${s.name} ${f.label}`)).join(" ")}`.toLowerCase().includes(q);
     }).sort((a,b)=>label(a[1]).localeCompare(label(b[1])));
   },[services,catalog,query,selected,all]);
+  const groups=useMemo(()=>{
+    const grouped=new Map<string,{id:string;label:string;logical:string;nodes:typeof nodes}>();
+    for(const node of nodes){const group=entityGroup(node[1],catalog);if(!grouped.has(group.id))grouped.set(group.id,{...group,nodes:[]});grouped.get(group.id)!.nodes.push(node);}
+    return [...grouped.values()].sort((a,b)=>a.label.localeCompare(b.label));
+  },[nodes,catalog]);
+  const resize=(id:string,width:number)=>setLayout(prev=>({...prev,widths:{...prev.widths,[id]:width}}));
+  const commitLayout=async(next:Layout)=>{setLayout(next);try{await chrome.storage.local.set({[LAYOUT_KEY]:next});}catch(e){setError(String(e));}};
+  const commitWidth=(id:string,width:number)=>void commitLayout({...layout,widths:{...layout.widths,[id]:width}});
   const shown=new Set(nodes.map(([key])=>key));
   const inputs=services.filter(s=>!view.inputs.includes(s.id));
   const outputs=services.filter(s=>!view.outputs.includes(s.id));
@@ -80,7 +92,7 @@ export function MappingRelationships() {
     };
     const observer=new ResizeObserver(draw);observer.observe(el);draw();
     return()=>observer.disconnect();
-  },[services,view,query,all,selected,catalog]);
+  },[services,view,query,all,selected,catalog,layout,groups]);
   const serviceCard=(s:GraphService,lane:"input"|"output")=><article key={s.id} className="qr-service">
     <header><strong>{s.name}</strong><Button size="small" appearance="subtle" onClick={()=>void toggle(lane==="input"?"inputs":"outputs",s.id)} aria-label={`Hide ${s.name} ${lane}`}>Hide</Button></header>
     <div className="qr-fields">{s.fields.filter((f,i,fields)=>
@@ -96,21 +108,21 @@ export function MappingRelationships() {
   </article>;
   return <section className="qr-workspace" aria-label="Mapping relationships">
     <div className="qr-title"><div><Text as="h2" size={600} weight="semibold">Mapping relationships</Text><p>Any mapped service can supply inputs. CRM stores the data and supplies mapped outputs when you change sites.</p></div><span className="qr-badge">CRM · {environment}</span></div>
-    <div className="qr-toolbar"><Input aria-label="Find a mapping" placeholder="Find a field or service…" value={query} onChange={(_,d)=>setQuery(d.value)}/><Button onClick={()=>setAll(!all)} aria-pressed={all}>All connections: {all?"on":"off"}</Button>{selected&&<Button onClick={()=>setSelected(null)}>Clear selection</Button>}<span>{nodes.length} CRM destinations · {services.length} service{services.length===1?"":"s"}</span></div>
+    <div className="qr-toolbar"><Input aria-label="Find a mapping" placeholder="Find a field or service…" value={query} onChange={(_,d)=>setQuery(d.value)}/><Button onClick={()=>setAll(!all)} aria-pressed={all}>All connections: {all?"on":"off"}</Button>{selected&&<Button onClick={()=>setSelected(null)}>Clear selection</Button>}<label className="qr-gap-control">Arrow space <input type="range" aria-label="Arrow spacing" min={40} max={240} step={10} value={layout.gap} onChange={e=>void commitLayout({...layout,gap:Number(e.target.value)})}/></label><span>{nodes.length} CRM destinations · {services.length} service{services.length===1?"":"s"}</span></div>
     {error&&<p role="alert">{error}</p>}
     {!loaded?<p>Loading saved mappings…</p>:!services.length?<p>Map a field on a site using the extension’s field selector. Its relationships will appear here automatically.</p>:<>
       <div className="qr-hidden">
         <section aria-label="Hidden inputs"><strong>Hidden inputs</strong>{services.filter(s=>view.inputs.includes(s.id)).map(s=><Button size="small" key={s.id} onClick={()=>void toggle("inputs",s.id)}>Show {s.name}</Button>)}{!view.inputs.some(id=>services.some(s=>s.id===id))&&<span>None</span>}</section>
         <section aria-label="Hidden outputs"><strong>Hidden outputs</strong>{services.filter(s=>view.outputs.includes(s.id)).map(s=><Button size="small" key={s.id} onClick={()=>void toggle("outputs",s.id)}>Show {s.name}</Button>)}{!view.outputs.some(id=>services.some(s=>s.id===id))&&<span>None</span>}</section>
       </div>
-      <div className="qr-scroll"><div className="qr-canvas" ref={canvas} style={{gridTemplateColumns:`${inputs.length?"450px 48px ":""}260px${outputs.map(()=>" 48px 290px").join("")}`}}>
+      <div className="qr-scroll"><div className="qr-canvas" ref={canvas} style={{gridTemplateColumns:`${inputs.length?`450px ${layout.gap}px `:""}${layout.widths.crm??260}px${outputs.map(s=>` ${layout.gap}px ${layout.widths[s.id]??290}px`).join("")}`}}>
         <svg className="qr-edges" aria-hidden="true"><defs><marker id={marker} markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="context-stroke"/></marker></defs>{paths.filter(p=>all||p.target===selected).map((p,i)=><path key={i} d={p.d} fill="none" stroke={selected===p.target?"#e000b0":"#96a4b9"} strokeWidth={selected===p.target?3:1.3} opacity={selected&&selected!==p.target?0.18:0.8} markerEnd={`url(#${marker})`}/>)}</svg>
         {inputs.length>0&&<><div className="qr-lane qr-inputs"><h3>Inputs</h3>{inputs.map(s=>serviceCard(s,"input"))}</div><div/></>}
-        <div className="qr-lane qr-crm"><h3>CRM data storage</h3>{nodes.map(([key,target])=><button type="button" key={key} data-crm={key} className={`qr-node qr-mapped ${isNoteTarget(target)?"qr-note":""} ${selected===key?"qr-selected":""}`} onClick={()=>setSelected(selected===key?null:key)} aria-pressed={selected===key} title={`${label(target)}\n${target}${key!==target?`\n${key}`:""}${isNoteTarget(target)?"\nCapture only · labelled note entries":""}`}>{displayName(target)}</button>)}</div>
-        {outputs.map(s=><FragmentColumn key={s.id} service={s} card={serviceCard(s,"output")}/>)}
+        <ResizableLane id="crm" label="CRM column" width={layout.widths.crm??260} onResize={resize} onCommit={commitWidth} className="qr-crm"><h3>CRM data storage</h3>{groups.map(group=><section className="qr-entity-block" key={group.id}><h4 title={group.logical}>{group.label}{group.logical&&<small>{group.logical}</small>}</h4>{group.nodes.map(([key,target])=><button type="button" key={key} data-crm={key} className={`qr-node qr-mapped ${isNoteTarget(target)?"qr-note":""} ${selected===key?"qr-selected":""}`} onClick={()=>setSelected(selected===key?null:key)} aria-pressed={selected===key} title={`${label(target)}\n${target}${key!==target?`\n${key}`:""}${isNoteTarget(target)?"\nCapture only · labelled note entries":""}`}>{displayName(target)}</button>)}</section>)}</ResizableLane>
+        {outputs.map(s=><FragmentColumn key={s.id} service={s} width={layout.widths[s.id]??290} onResize={resize} onCommit={commitWidth} card={serviceCard(s,"output")}/>)}
       </div></div>
       <p className="qr-muted">Click a mapping cell to change its target; changes save automatically. Green bars mark mapped fields. Click a field label to trace its relationships; other fields remain visible. Output lists use each field’s preferred fill source. Read-only fields can be captured; filling skips them. Notes retain captured answers and do not fill output fields. Hidden sections stay mapped.</p>
     </>}
   </section>;
 }
-function FragmentColumn({service,card}:{service:GraphService;card:ReactNode}) {return <><div/><div className="qr-lane"><h3>Output · {service.name}</h3>{card}</div></>;}
+function FragmentColumn({service,card,width,onResize,onCommit}:{service:GraphService;card:ReactNode;width:number;onResize:(id:string,width:number)=>void;onCommit:(id:string,width:number)=>void}) {return <><div/><ResizableLane id={service.id} label={`${service.name} output column`} width={width} onResize={onResize} onCommit={onCommit}><h3>Output · {service.name}</h3>{card}</ResizableLane></>;}
