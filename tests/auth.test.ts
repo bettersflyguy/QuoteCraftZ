@@ -3,9 +3,9 @@ import "./helpers/chromeStub";
 import { reset } from "./helpers/chromeStub";
 import { pkcePair, buildAuthorizeUrl, getAccessToken, AuthRequiredError, __store } from "@/crm/auth";
 
-beforeEach(() => {
+beforeEach(async () => {
   reset();
-  __store.clear();
+  await __store.clear();
 });
 
 describe("pkce", () => {
@@ -28,6 +28,31 @@ describe("buildAuthorizeUrl", () => {
 });
 
 describe("getAccessToken", () => {
+  it("shares simultaneous sign-in requests for the same org",async()=>{
+    let finish!:(url:string)=>void;
+    const launch=vi.fn(()=>new Promise<string>(resolve=>{finish=resolve;}));
+    Object.assign(chrome,{identity:{getRedirectURL:()=>"https://test.chromiumapp.org/",launchWebAuthFlow:launch}});
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({access_token:"TOKEN",expires_in:3600})})));
+    const first=getAccessToken("https://same.crm.dynamics.com");
+    const second=getAccessToken("https://same.crm.dynamics.com");
+    await vi.waitFor(()=>expect(launch).toHaveBeenCalledTimes(1));
+    finish("https://test.chromiumapp.org/?code=test");
+    expect(await Promise.all([first,second])).toEqual(["TOKEN","TOKEN"]);
+    expect(launch).toHaveBeenCalledTimes(1);
+  });
+  it("serializes different-org web auth and releases the queue after cancellation",async()=>{
+    let rejectFirst!:(error:Error)=>void;
+    const launch=vi.fn().mockImplementationOnce(()=>new Promise((_,reject)=>{rejectFirst=reject;}))
+      .mockResolvedValueOnce("https://test.chromiumapp.org/?code=second");
+    Object.assign(chrome,{identity:{getRedirectURL:()=>"https://test.chromiumapp.org/",launchWebAuthFlow:launch}});
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({access_token:"SECOND",expires_in:3600})})));
+    const first=getAccessToken("https://one.crm.dynamics.com");
+    const failure=expect(first).rejects.toThrow("cancelled");
+    const second=getAccessToken("https://two.crm.dynamics.com");
+    await vi.waitFor(()=>expect(launch).toHaveBeenCalledTimes(1));
+    rejectFirst(new Error("cancelled"));await failure;
+    expect(await second).toBe("SECOND");expect(launch).toHaveBeenCalledTimes(2);
+  });
   beforeEach(() => __store.clear());
 
   it("returns cached token when unexpired", async () => {

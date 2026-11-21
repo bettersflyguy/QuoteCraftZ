@@ -11,6 +11,7 @@ import { ARRAY_ROW_MAX, ASSET_TABLES, CHILD_TABLES } from "@/portal/fieldMaps";
 import { writePropertyNotes } from "@/crm/propertyNotes";
 import { parsePersonName } from "@/util/personName";
 import { pendingNameReviews } from "@/boldpenguin/nameReview";
+import {quoteLobMatch} from "@/crm/lobMatch";
 
 const useStyles = makeStyles({
   root: {
@@ -25,6 +26,8 @@ const useStyles = makeStyles({
   label: { fontSize: "11px", color: tokens.colorNeutralForeground3, marginBottom: "-6px" },
   row: { display: "flex", gap: "6px" },
   grow: { flex: 1, minWidth: 0 },
+  quoteRoute: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "4px", paddingBottom: "4px" },
+  quoteSelect: { width: "100%", minWidth: 0, maxWidth: "100%", boxSizing: "border-box" },
   match: {
     display: "flex",
     justifyContent: "space-between",
@@ -250,7 +253,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
 
   const loadLobs = async () => {
     if (lobs !== null) return;
-    try { setLobs(await send<LobRow[]>({ type: "panel/getLobs" })); } catch { setLobs([]); }
+    try { setLobs(await send<LobRow[]>({ type: "panel/getLobs" })); } catch (e) { setError(asPanelError(e)); }
   };
 
   const toggleOpp = async (create: boolean) => {
@@ -287,7 +290,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     if (!lobs) return;
     for (const lob of quoteLobs) {
       if (quoteGroups[lob]?.lobId) continue;
-      const match = lob ? lobs.find(l => l.name.toLowerCase().includes(lob.toLowerCase())) : undefined;
+      const match = quoteLobMatch(lobs, lob);
       if (match) setGroup(lob, { lobId: match.lobId });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -736,13 +739,14 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           <>
             <div className={styles.label}>Quotes: {heldQuotes.length} selected (choose on the Quotes tab)</div>
             {quoteLobs.map(lob => (
-              <div key={lob || "none"} className={styles.row}>
-                <span style={{ width: 64, flexShrink: 0, fontSize: 12 }}>
+              <div key={lob || "none"} className={styles.quoteRoute}>
+                <span style={{ fontSize: 11 }}>
                   {lob || "Quote"} ({heldQuotes.filter(q => q.lob === lob).length})
                 </span>
                 <Dropdown
-                  className={styles.grow}
-                  style={{ minWidth: 0 }}
+                  className={styles.quoteSelect}
+                  style={{ minWidth: 0, width: "100%" }}
+                  aria-label={`${lob || "Quote"}: CRM line of business`}
                   placeholder="CRM line of business"
                   value={lobs?.find(l => l.lobId === quoteGroups[lob]?.lobId)?.name ?? ""}
                   selectedOptions={quoteGroups[lob]?.lobId ? [quoteGroups[lob]!.lobId!] : []}
@@ -752,7 +756,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 </Dropdown>
                 <select
                   aria-label="Opportunity"
-                  style={{ fontSize: 12 }}
+                  style={{ fontSize: 12, width: "100%", minWidth: 0, height: 26 }}
                   value={quoteGroups[lob]?.mode ?? "reuse"}
                   onChange={e => setGroup(lob, { mode: e.target.value as "reuse" | "new" })}
                 >

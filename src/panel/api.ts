@@ -28,7 +28,7 @@ export async function send<T>(msg: PanelRequest): Promise<T> {
   // any first CRM call of a browser session can trigger the INTERACTIVE
   // sign-in inside the worker - those must wait on a human, not 25s
   const CRM_WRITE_TYPES = new Set([
-    "auth/signIn", "panel/searchUsers", "panel/appCommit", "panel/createLead", "panel/createPolicy",
+    "auth/signIn", "panel/searchUsers", "panel/getLobs", "panel/getCarriers", "panel/getOpportunities", "panel/getStagesForLob", "panel/searchAccounts", "panel/appCommit", "panel/createLead", "panel/createPolicy",
     "panel/crmPull", "panel/findMatches", "panel/createAccount", "panel/createOpportunity"
   ]);
   const timeoutMs =

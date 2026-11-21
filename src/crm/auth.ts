@@ -85,7 +85,22 @@ export async function clearToken(orgUrl: string): Promise<void> {
   await chrome.storage.session.remove(`token:${orgUrl}`);
 }
 
-export async function getAccessToken(orgUrl: string, opts: { interactive?: boolean } = {}): Promise<string> {
+// Chrome allows one interactive flow across the extension, including requests
+// for different environments. Share same-org work and serialize other orgs.
+const acquisitions = new Map<string, Promise<string>>();
+let interactiveQueue: Promise<unknown> = Promise.resolve();
+export function getAccessToken(orgUrl: string, opts: { interactive?: boolean } = {}): Promise<string> {
+  const key = `${orgUrl}|${opts.interactive ?? true}`;
+  const existing = acquisitions.get(key);
+  if (existing) return existing;
+  const pending = acquireToken(orgUrl, opts).finally(() => {
+    if (acquisitions.get(key) === pending) acquisitions.delete(key);
+  });
+  acquisitions.set(key, pending);
+  return pending;
+}
+
+async function acquireToken(orgUrl: string, opts: { interactive?: boolean }): Promise<string> {
   const interactive = opts.interactive ?? true;
   const cached = await __store.get(orgUrl);
   if (cached && cached.expiresAt > Date.now()) return cached.accessToken;
@@ -102,7 +117,14 @@ export async function getAccessToken(orgUrl: string, opts: { interactive?: boole
   }
 
   if (!interactive) throw new AuthRequiredError();
-  const t = await interactiveSignIn(orgUrl);
-  await __store.set(orgUrl, t);
-  return t.accessToken;
+  const pending = interactiveQueue.then(async () => {
+    // Another request may have completed sign-in while this one was queued.
+    const latest = await __store.get(orgUrl);
+    if (latest && latest.expiresAt > Date.now()) return latest.accessToken;
+    const t = await interactiveSignIn(orgUrl);
+    await __store.set(orgUrl, t);
+    return t.accessToken;
+  });
+  interactiveQueue = pending.catch(() => {});
+  return pending;
 }
