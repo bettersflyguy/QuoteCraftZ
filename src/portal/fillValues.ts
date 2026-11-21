@@ -6,6 +6,7 @@
  * they travel on their own pass-through channel (see secureFill.ts). */
 import type { CapturedApplication } from "@/boldpenguin/types";
 import { CRM_BRIDGE } from "@/boldpenguin/normalize";
+import { parsePersonName } from "@/util/personName";
 
 /** CRM date text ("2026-03-11", "2026-03-11T05:00:00Z") -> "3/11/2026"; the
  * filler turns M/D/YYYY into whatever a date input wants. */
@@ -46,6 +47,24 @@ export function buildFillValues(app: CapturedApplication | null): Record<string,
       const col = Object.entries(CONTACT).find(([, s]) => s === m[3])?.[0];
       if (col && !out[`crm:contact${m[2]}.${col}`]) out[`crm:contact${m[2]}.${col}`] = out[key]!;
     }
+  }
+  // Derive after bridging: a CRM-origin capture may initially carry only
+  // crm:primarycontact / crm:contactN columns, with no semantic groups.
+  const people = new Set(Object.keys(out).map(k => /^(contact(?:\d+)?)\./.exec(k)?.[1]).filter((g):g is string => Boolean(g)));
+  for (const group of people) {
+    const get = (key: string) => out[`${group}.${key}`] || "";
+    const full = get("fullName") || get("latinFullName") || [get("firstName"), get("lastName")].filter(Boolean).join(" ");
+    if (!full) continue;
+    out[`${group}.fullName`] ||= full;
+    out[`${group}.latinFullName`] ||= full;
+    if (!get("firstName") && !get("lastName")) {
+      const parts = parsePersonName(full, app.normalized[group]?.["latinFullName"] ? "two-surnames" : "auto");
+      if (parts.firstName) out[`${group}.firstName`] = parts.firstName;
+      if (parts.lastName) out[`${group}.lastName`] = parts.lastName;
+    }
+    const crm = group === "contact" ? "primarycontact" : group;
+    if (get("firstName")) out[`crm:${crm}.firstname`] ||= get("firstName");
+    if (get("lastName")) out[`crm:${crm}.lastname`] ||= get("lastName");
   }
   return out;
 }

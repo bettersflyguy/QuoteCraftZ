@@ -1,8 +1,9 @@
 (function (root, factory) {
-  const api = factory();
+  const names = root.BettersPersonNames || (typeof module === "object" && module.exports ? require("./person-name.js") : null);
+  const api = factory(names);
   if (typeof module === "object" && module.exports) module.exports = api;
   root.BettersPortalMapper = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (names) {
   "use strict";
 
   const rules = [
@@ -117,15 +118,14 @@
       const value = getPath(normalized, path);
       if (comparable(value) && clean(value)) candidates.push({ path, aliases, value: clean(value), source: "normalized" });
     });
-    /* a capture holding only a glued full name still fills First/Last: split
-     * on the fly (middle names dropped - mirrors the identity rules) */
+    /* A full-name capture uses the same parser as CRM writes and matching. */
     const contact = normalized.contact || {};
-    if (clean(contact.fullName) && !clean(contact.firstName)) {
-      const parts = clean(contact.fullName).split(" ");
-      if (parts.length > 1) {
-        candidates.push({ path: "contact.firstName", aliases: rules.find(function (r) { return r[0] === "contact.firstName"; })[1], value: parts[0], source: "normalized" });
-        candidates.push({ path: "contact.lastName", aliases: rules.find(function (r) { return r[0] === "contact.lastName"; })[1], value: parts[parts.length - 1], source: "normalized" });
-      }
+    if (clean(contact.fullName) && !clean(contact.firstName) && !clean(contact.lastName)) {
+      const words = clean(contact.fullName).split(" ");
+      const parts = names ? names.parsePersonName(contact.fullName, contact.latinFullName ? "two-surnames" : "auto") : { firstName:words[0], lastName:words.length > 1 ? words[words.length - 1] : "" };
+      ["firstName", "lastName"].forEach(function(key){
+        if (parts[key]) candidates.push({ path:"contact." + key, aliases:rules.find(function(r){return r[0] === "contact." + key;})[1], value:parts[key], source:"normalized" });
+      });
     }
     (payload && payload.fields || []).forEach((field, index) => {
       if (!comparable(field.value) || !clean(field.value) || !clean(field.label)) return;

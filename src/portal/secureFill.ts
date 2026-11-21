@@ -10,6 +10,7 @@
  *  - the panel only ever sees a masked form ("•••• 6789") */
 import type { CrmEnvironment } from "@/crm/environments";
 import { isConcreteSecureTarget } from "./fieldMaps";
+import { parsePersonName, personNameKey } from "@/util/personName";
 
 export const SECURE_PENDING_KEY = "secure/pending";
 
@@ -59,7 +60,7 @@ const COLUMN = /^[a-z][a-z0-9_]{0,99}$/;
  * "Related contact 2" means the same person in a pull, a fill and a load. */
 export const RELATED_CONTACT_ORDER = "createdon asc";
 
-const canon = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+const canon = personNameKey;
 
 /** Related-contact slot -> CRM contact. When the capture names the person
  * in a slot, ONLY a name match counts (an identifier must never land on the
@@ -126,9 +127,9 @@ export function slotNamesOf(normalized: Record<string, Record<string, unknown>> 
     let firstName = s("firstName");
     let lastName = s("lastName");
     if (!firstName && !lastName && s("fullName")) {
-      const parts = s("fullName").split(/\s+/);
-      firstName = parts[0] ?? "";
-      lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
+      const parts = parsePersonName(s("fullName"));
+      firstName = parts.firstName;
+      lastName = parts.lastName;
     }
     if (firstName || lastName) out[Number(m[1])] = { firstName, lastName };
   }

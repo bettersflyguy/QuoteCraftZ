@@ -7,7 +7,7 @@ import { TargetPicker } from "./TargetPicker";
 import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import {
-  ARRAY_ROW_MAX, MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget, noteLabelOf,
+  ARRAY_ROW_MAX, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget, noteLabelOf,
   familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
 } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
@@ -15,22 +15,10 @@ import { catalogUnavailableNote, classifyCatalogError } from "@/crm/catalogNote"
 import { send } from "./api";
 import { capturedTargets } from "./capturedTargets";
 export { capturedTargets };
+import { captureGroups } from "./captureGroups";
+export { captureGroups };
 
 type OptionGroup = { group: string; paths: { path: string; label: string }[] };
-
-/** Capture targets: every core column of each CRM entity (live metadata, in
- * hierarchy order) plus the semantic risk-data groups that have no CRM table
- * (building, payroll, vehicles). Without a catalog (not signed in), the
- * built-in semantic vocabulary stands in. */
-export function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
-  const riskData = MAP_PATH_GROUPS.filter(g => /risk data/.test(g.group));
-  if (!catalog?.entities.length) return MAP_PATH_GROUPS;
-  const crm = catalog.entities.map(e => ({
-    group: e.label,
-    paths: e.columns.map(c => ({ path: `crm:${e.key}${e.array ? "[]" : ""}.${c.name}`, label: c.label }))
-  }));
-  return [...crm, ...riskData];
-}
 
 /** Secured pass-through targets (SSN, license number, field-secured
  * columns): they map only to secured CRM columns or fill quote forms,

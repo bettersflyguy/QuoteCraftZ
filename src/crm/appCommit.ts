@@ -1,4 +1,5 @@
 import { usDate } from "@/util/usDate";
+import { parsePersonName } from "@/util/personName";
 /** CRM load for a captured application (Bold Penguin or portal ingest) -
  * the non-EZLynx twin of the quote commit: insured enrichment from the
  * normalized projection, plus every captured field logged to the
@@ -142,8 +143,8 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
   if (!firstName && !lastName) {
     // an exactly-labeled "Name" fact row (GEICO Edge's Personal Information
     // tab) beats rail headings that glue the middle name in ("Edward
-    // La-Valle Parkin"); middle tokens are middle names - last word is the
-    // surname, editable in review for multi-word surnames. A value equal to
+    // La-Valle Parkin"). The shared parser preserves compound surname
+    // particles; ambiguous boundaries remain editable in review. A value equal to
     // the BUSINESS name is never a person ("B H Towing Service" must not
     // become first "B", last "Service").
     const candidates = [
@@ -151,9 +152,9 @@ export function identityFromCapture(app: CapturedApplication): CaptureIdentity {
       str(app, "contact", "fullName") ?? ""
     ];
     const person = candidates.map(v => stripNameDecorations(clean(v))).find(v => v && (!bizCanon || canonical(v) !== bizCanon));
-    const parts = (person ?? "").split(" ").filter(Boolean);
-    firstName = parts[0] ?? "";
-    lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
+    const parts = parsePersonName(person ?? "");
+    firstName = parts.firstName;
+    lastName = parts.lastName;
   }
   const phone = detectPhone(app);
   let street = [str(app, "address", "street1"), str(app, "address", "street2")].filter(Boolean).join(", ");
@@ -257,9 +258,9 @@ export function coApplicantsFromCapture(app: CapturedApplication): CapturedAppli
     let firstName = stripNameDecorations(get("firstName"));
     let lastName = stripNameDecorations(get("lastName"));
     if (!firstName && !lastName) {
-      const parts = stripNameDecorations(get("fullName")).split(" ").filter(Boolean);
-      firstName = parts[0] ?? "";
-      lastName = parts.length > 1 ? parts[parts.length - 1]! : "";
+      const parts = parsePersonName(stripNameDecorations(get("fullName")));
+      firstName = parts.firstName;
+      lastName = parts.lastName;
     }
     if (!firstName && !lastName) continue;
     if (HEADERISH.test(clean(`${firstName} ${lastName}`))) continue;

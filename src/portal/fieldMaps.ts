@@ -39,6 +39,7 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "contact.firstName", label: "First name", group: "Primary insured (account + contact)" },
   { path: "contact.lastName", label: "Last name", group: "Primary insured (account + contact)" },
   { path: "contact.fullName", label: "Full name", group: "Primary insured (account + contact)" },
+  { path: "contact.latinFullName", label: "Full name (two surnames)", group: "Primary insured (account + contact)" },
   { path: "contact.email", label: "Email", group: "Primary insured (account + contact)" },
   { path: "contact.phone", label: "Phone", group: "Primary insured (account + contact)" },
   { path: "contact.dateOfBirth", label: "Date of birth", group: "Primary insured (account + contact)" },
@@ -52,6 +53,7 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "contacts[].firstName", label: "Related contact first name", group: "Contacts (all rows)" },
   { path: "contacts[].lastName", label: "Related contact last name", group: "Contacts (all rows)" },
   { path: "contacts[].fullName", label: "Related contact full name", group: "Contacts (all rows)" },
+  { path: "contacts[].latinFullName", label: "Related contact full name (two surnames)", group: "Contacts (all rows)" },
   { path: "contacts[].email", label: "Related contact email", group: "Contacts (all rows)" },
   { path: "contacts[].phone", label: "Related contact phone", group: "Contacts (all rows)" },
   { path: "contacts[].dateOfBirth", label: "Related contact date of birth", group: "Contacts (all rows)" },
@@ -87,7 +89,7 @@ export const isArrayPath = (path: string): boolean => /\[\](?:\.|$)/.test(path);
 
 /** Concrete per-row slots an array capture fans out into ("contact2.email",
  * "vehicle5.vin"; contact1 is reserved for the primary insured). */
-const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin|purchaseDate))$/;
+const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|latinFullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin|purchaseDate))$/;
 
 /** Rows a form control can address ("Driver 2" = related contact row 1). */
 export const ARRAY_ROW_MAX = 10;
