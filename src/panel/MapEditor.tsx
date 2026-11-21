@@ -15,6 +15,7 @@ import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
 import { catalogUnavailableNote, classifyCatalogError } from "@/crm/catalogNote";
 import { send } from "./api";
 import { capturedTargets } from "./capturedTargets";
+import {matchesMappingSearch} from "./mappingSearch";
 export { capturedTargets };
 import { captureGroups } from "./captureGroups";
 export { captureGroups };
@@ -70,7 +71,8 @@ const useStyles = makeStyles({
  * addresses and any other repeated record reach a quote form. */
 export interface CapturedTarget { value: string; label: string }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek, highlightKey, onHighlight }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek, highlightKey, onHighlight, search="" }: {
+  search?:string;
   highlightKey?: string | null;
   onHighlight?: (key: string) => void;
   /** Header text (defaults to "Field mapping for <origin>"). */
@@ -295,7 +297,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
-      {rows.map(r => {
+      {(search.trim()?allRows:rows).filter(r=>matchesMappingSearch(search,r.label,r.fieldLabel,r.key,r.section,draft[r.key],targetText(draft[r.key]??r.autoPath??""))).map(r => {
         const binding = draft[r.key] ?? "";
         const current = preferredTarget(binding);
         // identifier fields (SSN, ITIN, passport) map ONLY to secured targets

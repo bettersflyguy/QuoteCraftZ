@@ -3,7 +3,8 @@ import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/re
 import { CursorClickRegular, NotepadRegular, StopRegular, TextBulletListLtrRegular } from "@fluentui/react-icons";
 import { MultiTargetPicker } from "./MultiTargetPicker";
 import { mappingTargets, preferredTarget } from "@/portal/mappingTargets";
-import { captureGroups, securedGroups } from "./MapEditor";
+import { captureGroups, securedGroups, targetLabel } from "./MapEditor";
+import {matchesMappingSearch} from "./mappingSearch";
 import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { send } from "./api";
 import type { FieldCatalog } from "@/crm/fieldCatalog";
@@ -75,7 +76,7 @@ const SECTION_NOTE: Record<string, string> = {
 
 /** Every field a data service returns, each routed to a CRM target, with
  * one-for-one choice mappings for CRM choice columns. Saves as you go. */
-export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlightKey }: { source?: string; page?: DataServicePageHooks; focusId?: { id: string } | null; highlightKey?: string | null }) {
+export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlightKey, search="" }: { source?: string; page?: DataServicePageHooks; focusId?: { id: string } | null; highlightKey?: string | null; search?:string }) {
   const styles = useStyles();
   const scope = dataServiceScope(source);
   const [saved, setSaved] = useState<Record<string, string> | undefined>(undefined);
@@ -210,7 +211,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlig
       )}
       {(["Insured", "Contacts", "Phones", "Emails", "Addresses"] as const).map(section => {
         // a field picked on the page always shows, whatever the filter
-        const listed = EZLYNX_FIELDS.filter(f => f.section === section &&
+        const listed = EZLYNX_FIELDS.filter(f => f.section === section && matchesMappingSearch(search,f.id,f.label,f.section,...(f.pageLabels??[]),targets[f.id],...mappingTargets(targets[f.id]??"").map(t=>targetLabel(t,catalog)??t)) &&
           (show === "all" || f.id === focus || (show === "mapped" ? Boolean(targets[f.id]) : !targets[f.id])));
         if (!listed.length) return null;
         return (
