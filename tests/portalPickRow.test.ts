@@ -34,7 +34,7 @@ describe("picking inside grid rows", () => {
     click(document.querySelector("#leadName span")!);
     const row = await pending as Exclude<Row,"timeout"|null>;
     expect(row.type).toBe("text");
-    expect(row.key).toBe("pick:#leadName");
+    expect(row.key).toBe("field:name");
     expect(row.label).toBe("Name");
     expect(scan.find(r => r.key === row.key)?.label).toBe(row.label);
     expect(row.label).not.toContain("disposition");

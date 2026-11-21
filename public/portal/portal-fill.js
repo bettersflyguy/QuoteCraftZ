@@ -1180,7 +1180,8 @@
       if (element.matches("input,select,textarea,[role='combobox'],[role='checkbox'],[role='switch']") || !visible(element) || !textPickable(element)) continue;
       const label = inferTextLabel(element);
       if (!label) continue;
-      const key = "pick:" + cssPath(element);
+      const local = typeof globalThis.__bettersLocalTextLabel === "function" ? globalThis.__bettersLocalTextLabel(element) : "";
+      const key = local ? "field:" + local.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "pick:" + cssPath(element);
       if (seen.has(key)) continue;
       seen.add(key);
       rows.push({ key, label, type:"text", payment:PAYMENT_FIELD.test(label), autoPath:null, mapped:typeof ov[key] === "string" ? ov[key] : null });
@@ -1482,15 +1483,14 @@
           var hostLabel = host !== tx ? primaryLabel(host) : "";
           var inferred = hostLabel || inferTextLabel(tx);
           var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
-          // The scanner already gives a read-only pair its value selector.
-          // Reuse that key when picking, rather than adding a second
-          // label-based teaching for the same value.
+          // Scan and pick share a label key for read-only pairs. Optional
+          // fields and reordered lead rows must not move the binding.
           var localPair = !hostLabel && typeof globalThis.__bettersLocalTextLabel === "function" && globalThis.__bettersLocalTextLabel(tx);
           /* inside a LABELLED form field (any site's design system): map the
            * field by its label - it survives re-renders and covers every
            * card that repeats it; otherwise a re-locatable selector */
           var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
-          var labelKey = !localPair && boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
+          var labelKey = localPair ? localPair.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
           // A truncated label cannot match the full source question later.
           // Long carrier captions use the stable control selector instead.
           if (labelKey.length > 140) labelKey = "";
@@ -1499,7 +1499,7 @@
           var sec = mapper && mapper.sectionOf ? mapper.sectionOf(tx) : { key: "", text: "" };
           var pickedPage = /(?:^| )address$/.test(sec.key) ? repeatInfo(boxLabel).page : "";
           finish({
-            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (pickedPage ? pickedPage + "|" : "") + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
+            key: labelKey && !isSensitiveSource(localPair || boxLabel) ? "field:" + (!localPair && pickedPage ? pickedPage + "|" : "") + (!localPair && sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
             label: localPair || (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,

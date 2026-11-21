@@ -538,9 +538,15 @@
         if (isVisible(c) && SKIP_TYPES.indexOf(type) < 0 && labelKey(stripMarks(labelFor(c))) === key) out.push(c);
       });
     }
+    // Read-only lead fields move when optional details appear. Resolve their
+    // own labels inside the active capture boundary, never a row position.
+    readOnlyPairs(captureRoot()).forEach(pair => {
+      if (labelKey(pair.label) === key && !out.includes(pair.el)) out.push(pair.el);
+    });
     return inPageOrder(out);
   }
   function fieldValue(el) {
+    if (localTextPair(el)?.el === el) return text(el);
     if (el.matches("input, select, textarea")) return valueOf(el);
     const shownChoice = el.querySelector(".mat-mdc-select-value-text, .mat-select-value-text, .k-input-value-text, mat-select, [role='combobox']:not(input)");
     if (shownChoice) return text(shownChoice);
@@ -548,6 +554,8 @@
     return c ? valueOf(c) : "";
   }
   function fieldLabelText(el) {
+    const local = localTextLabel(el);
+    if (local) return local;
     if (el.matches("input, select, textarea")) return stripMarks(labelFor(el));
     return el.matches(FORM_FIELD) ? boxLabel(el) : "";
   }
@@ -1296,6 +1304,13 @@
     oneLead = oneLead || globalThis.__bettersOneLead;
     const scope = oneLead ? globalThis.__bettersLead?.get() : null;
     if (oneLead && !scope) throw new Error("1 Lead paused: select a lead section again.");
+    if (!scope) {
+      const pairs = readOnlyPairs(activeModal() || document);
+      if (pairs.filter(p => /^receipt (?:code|id)$/i.test(p.label)).length > 1 &&
+          pairs.filter(p => /^(?:full )?name$/i.test(p.label)).length > 1) {
+        throw new Error("This page contains multiple leads. Use 1 Lead to select one expanded lead before ingesting.");
+      }
+    }
     leadRoot = scope?.el || null;
     try {
     const secure = [];

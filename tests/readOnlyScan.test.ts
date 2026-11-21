@@ -19,7 +19,7 @@ it("discovers Datalot-style read-only label/value lists before any field is taug
   document.body.innerHTML=`<main><section>${markup("Jordan Miller")}</section></main>`;
   const rows=g.__bettersPortalScan(null,{});
   expect(rows.map(r=>r.label)).toEqual(expect.arrayContaining(["Name","Home Number","Street"]));
-  expect(rows.every(r=>r.key.startsWith("pick:"))).toBe(true);
+  expect(rows.every(r=>r.key.startsWith("field:"))).toBe(true);
   expect(g.__bettersPortalIngest().fields).toEqual(expect.arrayContaining([expect.objectContaining({label:"Name",value:"Jordan Miller"})]));
 });
 it("discovers only the selected lead and captures the newly saved mapping",()=>{
@@ -28,8 +28,8 @@ it("discovers only the selected lead and captures the newly saved mapping",()=>{
   const rows=g.__bettersPortalScan(null,{});
   const name=rows.find(r=>r.label==="Name")!;
   expect(rows).toHaveLength(3);
-  expect(name.key).toContain("#chosen");
-  const fields=g.__bettersPortalIngest([{selector:name.key.slice(5),label:"Full Name",path:"contact.fullName"}],undefined,true).fields;
+  expect(name.key).toBe("field:name");
+  const fields=g.__bettersPortalIngest([{byLabel:name.key.slice(6),label:"Full Name",path:"contact.fullName"}],undefined,true).fields;
   expect(fields).toEqual(expect.arrayContaining([expect.objectContaining({label:"Full Name",value:"Alex Rivera"})]));
   expect(fields.some(f=>f.value==="Jordan Miller")).toBe(false);
 });
@@ -45,6 +45,22 @@ it("uses the detail labels inside a colspan row rather than the ancestor Call Ti
   expect(rows.map(r=>r.label)).toEqual(["Name","Home Number","Street"]);
   expect(rows.some(r=>r.label==="Call Time")).toBe(false);
   const name=rows.find(r=>r.label==="Name")!;
-  const result=g.__bettersPortalIngest([{selector:name.key.slice(5),label:"",path:"note"}],undefined,true);
+  const result=g.__bettersPortalIngest([{byLabel:name.key.slice(6),label:"",path:"note"}],undefined,true);
   expect(result.fields).toEqual(expect.arrayContaining([expect.objectContaining({label:"Name",value:"Jordan Miller"})]));
+});
+it("keeps label bindings correct across optional fields, reordered leads and a scoped vehicle array",()=>{
+  const pair=(label:string,value:string)=>`<div><li>${label}</li><li>${value}</li></div>`;
+  document.body.innerHTML=`<table><tbody>
+    <tr><td>First call</td></tr><tr><td colspan=3><section id=first><ul>${pair("Receipt Code","A")}${pair("Name","Alex Rivera")}${pair("Own Home","No")}</ul></section></td></tr>
+    <tr><td>Second call</td></tr><tr><td colspan=3><section id=second><ul>${pair("Receipt Code","B")}${pair("Email","alex@example.test")}${pair("Name","Ana López Pérez")}${pair("Own Home","Yes")}</ul><ul>${pair("Year","2016")}${pair("Make","JEEP")}</ul><ul>${pair("Year","2011")}${pair("Make","FORD")}</ul></section></td></tr>
+  </tbody></table>`;
+  const scan=g.__bettersPortalScan(null,{});
+  expect(scan.filter(r=>r.key==="field:name")).toHaveLength(1);
+  expect(()=>g.__bettersPortalIngest([{byLabel:"name",label:"Name",path:"contact.fullName"}])).toThrow("multiple leads");
+  g.__bettersOneLead=true;g.__bettersLead={get:()=>({el:document.querySelector("#second")!,key:"B"})};
+  const teachings=[{byLabel:"name",label:"Full name",path:"contact.fullName"},{byLabel:"own home",label:"Own Home",path:"note:contact"},{byLabel:"year",label:"Year",path:"crm:vehicles[].iacrm_year"},{byLabel:"make",label:"Make",path:"crm:vehicles[].iacrm_make"}];
+  const fields=g.__bettersPortalIngest(teachings,undefined,true).fields as {label:string;value:string;mapped?:string}[];
+  expect(fields.filter(f=>f.mapped).map(f=>[f.value,f.mapped])).toEqual([["Ana López Pérez","contact.fullName"],["Yes","note:contact"],["2016","crm:vehicle1.iacrm_year"],["2011","crm:vehicle2.iacrm_year"],["JEEP","crm:vehicle1.iacrm_make"],["FORD","crm:vehicle2.iacrm_make"]]);
+  document.querySelector("#second li:nth-of-type(2)")!.textContent="C";
+  expect(g.__bettersPortalIngest(teachings,undefined,true).fields.filter(f=>f.label==="Own Home" && (f as {mapped?:string}).mapped).map(f=>f.value)).toEqual(["Yes"]);
 });
