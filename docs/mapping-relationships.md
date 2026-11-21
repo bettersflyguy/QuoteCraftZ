@@ -1,4 +1,4 @@
-# Mapping relationships — 0.1.92
+# Mapping relationships — 0.1.93
 
 A compact header and side-by-side Environments / Pages Mapped sections sit
 at the top of Settings. Environment switching stays visible; Configure
@@ -72,3 +72,12 @@ visual field bounds. Offsets persist separately from widths and hidden sections.
 Reset positions clears offsets only. The canvas provides horizontal scrolling
 for columns moved to the right. Build and nine focused tests pass. Edge verified
 moving CRM left and an output right without resizing, then refreshing.
+
+Version 0.1.93 adds an explicit Show only selected connections checkbox.
+Select an input label, CRM field, or output field first, then enable it to
+show only that destination and connected input/output fields and arrows.
+Disabling it restores the graph under the existing search and hidden-section
+settings. Clearing selection exits focused mode. Selection alone still does
+not hide fields. This view filter never changes saved mappings. Build passes;
+Edge acceptance verified 58 destinations narrowing to one City relationship
+and restoring all 58 when unchecked.

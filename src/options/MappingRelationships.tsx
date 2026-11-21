@@ -1,5 +1,5 @@
 import {useEffect,useId,useLayoutEffect,useMemo,useRef,useState,type ReactNode} from "react";
-import {Button,Input,Text} from "@fluentui/react-components";
+import {Button,Checkbox,Input,Text} from "@fluentui/react-components";
 import {getAllFieldMaps,isNoteTarget,PATH_LABEL,noteLabelOf} from "@/portal/fieldMaps";
 import {getDataServiceMaps} from "@/sources/ezlynxSource";
 import {cachedFieldCatalog,catalogLabel,type FieldCatalog} from "@/crm/fieldCatalog";
@@ -22,6 +22,8 @@ export function MappingRelationships() {
   const [layout,setLayout]=useState<Layout>(readLayout(null));
   const [query,setQuery]=useState("");
   const [selected,setSelected]=useState<string|null>(null);
+  const [onlySelected,setOnlySelected]=useState(false);
+  useEffect(()=>{if(!selected)setOnlySelected(false);},[selected]);
   const [all,setAll]=useState(true);
   const [error,setError]=useState("");
   const [loaded,setLoaded]=useState(false);
@@ -56,10 +58,11 @@ export function MappingRelationships() {
       if(!existing||field.target.startsWith("crm:"))targets.set(field.canonical,field.target);
     }
     return [...targets].filter(([key,target])=>{
+      if(onlySelected&&selected&&key!==selected)return false;
       const q=query.toLowerCase().trim();
       return !q || `${label(target)} ${target} ${services.flatMap(s=>s.fields.filter(f=>f.canonical===key).map(f=>`${s.name} ${f.label}`)).join(" ")}`.toLowerCase().includes(q);
     }).sort((a,b)=>label(a[1]).localeCompare(label(b[1])));
-  },[services,catalog,query,selected,all]);
+  },[services,catalog,query,selected,all,onlySelected]);
   const groups=useMemo(()=>{
     const grouped=new Map<string,{id:string;label:string;logical:string;nodes:typeof nodes}>();
     for(const node of nodes){const group=entityGroup(node[1],catalog);if(!grouped.has(group.id))grouped.set(group.id,{...group,nodes:[]});grouped.get(group.id)!.nodes.push(node);}
@@ -99,18 +102,18 @@ export function MappingRelationships() {
     <header><strong>{s.name}</strong><Button size="small" appearance="subtle" onClick={()=>void toggle(lane==="input"?"inputs":"outputs",s.id)} aria-label={`Hide ${s.name} ${lane}`}>Hide</Button></header>
     <div className="qr-fields">{s.fields.filter((f,i,fields)=>
       (lane!=="input"||fields.findIndex(other=>other.source===f.source&&other.key===f.key)===i)&&
-      ((lane==="input"?s.fields.some(other=>other.source===f.source&&other.key===f.key&&shown.has(other.canonical)):shown.has(f.canonical))||(!f.target&&lane==="input"&&(!query||f.label.toLowerCase().includes(query.toLowerCase()))))&&(lane==="input"||f.output)
-    ).map(f=>lane==="input"?<div key={`${f.source}:${f.key}`} className={`qr-input-row ${f.target?"qr-mapped":"qr-unmapped"} ${selected===f.canonical?"qr-selected":""}`} data-connection={f.canonical} data-lane="input">
+      ((lane==="input"?s.fields.some(other=>other.source===f.source&&other.key===f.key&&shown.has(other.canonical)):shown.has(f.canonical))||(!onlySelected&&!f.target&&lane==="input"&&(!query||f.label.toLowerCase().includes(query.toLowerCase()))))&&(lane==="input"||f.output)
+    ).map(f=>lane==="input"?<div key={`${f.source}:${f.key}`} className={`qr-input-row ${f.target?"qr-mapped":"qr-unmapped"} ${s.fields.some(other=>other.source===f.source&&other.key===f.key&&selected===other.canonical)?"qr-selected":""}`} data-connection={f.canonical} data-lane="input">
       {s.fields.filter(other=>other.source===f.source&&other.key===f.key&&other.id!==f.id).map(other=><span key={other.id} className="qr-extra-edge" data-connection={other.canonical} data-lane="input"/>)}
-      <button className="qr-source-label" type="button" onClick={()=>setSelected(selected===f.canonical?null:f.canonical)} title={f.label}>{f.label}</button>
+      <button className="qr-source-label" type="button" onClick={()=>{const target=onlySelected&&selected?selected:f.canonical;setSelected(selected===target?null:target);}} title={f.label}>{f.label}</button>
       <RelationshipEditor service={s} field={f} catalog={catalog}/>
     </div>:<button type="button" key={f.id} className={`qr-node qr-mapped ${selected===f.canonical?"qr-selected":""}`} data-connection={f.canonical} data-lane={lane} onClick={()=>setSelected(selected===f.canonical?null:f.canonical)} title={`${s.name} · ${f.label}\nSource: ${f.key}\n${label(f.target)}\n${f.target}${f.canonical!==f.target?`\n${f.canonical}`:""}\nPreferred fill source`} aria-pressed={selected===f.canonical}>
       {f.label.replace(/^[^:]+:\s*/, "")}
-    </button>)}{!s.fields.some(f=>((lane==="input"?s.fields.some(other=>other.source===f.source&&other.key===f.key&&shown.has(other.canonical)):shown.has(f.canonical))||(!f.target&&lane==="input"&&(!query||f.label.toLowerCase().includes(query.toLowerCase()))))&&(lane==="input"||f.output))&&<p className="qr-muted">No matching mappings.</p>}</div>
+    </button>)}{!s.fields.some(f=>((lane==="input"?s.fields.some(other=>other.source===f.source&&other.key===f.key&&shown.has(other.canonical)):shown.has(f.canonical))||(!onlySelected&&!f.target&&lane==="input"&&(!query||f.label.toLowerCase().includes(query.toLowerCase()))))&&(lane==="input"||f.output))&&<p className="qr-muted">No matching mappings.</p>}</div>
   </article>;
   return <section className="qr-workspace" aria-label="Mapping relationships">
     <div className="qr-title"><div><Text as="h2" size={600} weight="semibold">Mapping relationships</Text><p>Any mapped service can supply inputs. CRM stores the data and supplies mapped outputs when you change sites.</p></div><span className="qr-badge">CRM · {environment}</span></div>
-    <div className="qr-toolbar"><Input aria-label="Find a mapping" placeholder="Find a field or service…" value={query} onChange={(_,d)=>setQuery(d.value)}/><Button onClick={()=>setAll(!all)} aria-pressed={all}>All connections: {all?"on":"off"}</Button>{selected&&<Button onClick={()=>setSelected(null)}>Clear selection</Button>}<label className="qr-gap-control">Arrow space <input type="range" aria-label="Arrow spacing" min={40} max={240} step={10} value={layout.gap} onChange={e=>void commitLayout({...layout,gap:Number(e.target.value)})}/></label><Button size="small" onClick={()=>void commitLayout({...layout,offsets:{}})}>Reset positions</Button><span>{nodes.length} CRM destinations · {services.length} service{services.length===1?"":"s"}</span></div>
+    <div className="qr-toolbar"><Input aria-label="Find a mapping" placeholder="Find a field or service…" value={query} onChange={(_,d)=>setQuery(d.value)}/><Button onClick={()=>setAll(!all)} aria-pressed={all}>All connections: {all?"on":"off"}</Button>{selected&&<Button onClick={()=>setSelected(null)}>Clear selection</Button>}<Checkbox label="Show only selected connections" checked={onlySelected} disabled={!selected} title={!selected?"Select a field label first":undefined} onChange={(_,d)=>setOnlySelected(d.checked===true)}/><label className="qr-gap-control">Arrow space <input type="range" aria-label="Arrow spacing" min={40} max={240} step={10} value={layout.gap} onChange={e=>void commitLayout({...layout,gap:Number(e.target.value)})}/></label><Button size="small" onClick={()=>void commitLayout({...layout,offsets:{}})}>Reset positions</Button><span>{nodes.length} CRM destinations · {services.length} service{services.length===1?"":"s"}</span></div>
     {error&&<p role="alert">{error}</p>}
     {!loaded?<p>Loading saved mappings…</p>:!services.length?<p>Map a field on a site using the extension’s field selector. Its relationships will appear here automatically.</p>:<>
       <div className="qr-hidden">
@@ -118,12 +121,12 @@ export function MappingRelationships() {
         <section aria-label="Hidden outputs"><strong>Hidden outputs</strong>{services.filter(s=>view.outputs.includes(s.id)).map(s=><Button size="small" key={s.id} onClick={()=>void toggle("outputs",s.id)}>Show {s.name}</Button>)}{!view.outputs.some(id=>services.some(s=>s.id===id))&&<span>None</span>}</section>
       </div>
       <div className="qr-scroll"><div className="qr-canvas" ref={canvas} style={{paddingRight:Math.max(0,...Object.values(layout.offsets)),gridTemplateColumns:`${inputs.length?`450px ${layout.gap}px `:""}${layout.widths.crm??260}px${outputs.map(s=>` ${layout.gap}px ${layout.widths[s.id]??290}px`).join("")}`}}>
-        <svg className="qr-edges" aria-hidden="true"><defs><marker id={marker} markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="context-stroke"/></marker></defs>{paths.filter(p=>all||p.target===selected).map((p,i)=><path key={i} d={p.d} fill="none" stroke={selected===p.target?"#e000b0":"#96a4b9"} strokeWidth={selected===p.target?3:1.3} opacity={selected&&selected!==p.target?0.18:0.8} markerEnd={`url(#${marker})`}/>)}</svg>
+        <svg className="qr-edges" aria-hidden="true"><defs><marker id={marker} markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="context-stroke"/></marker></defs>{paths.filter(p=>onlySelected?p.target===selected:all||p.target===selected).map((p,i)=><path key={i} d={p.d} fill="none" stroke={selected===p.target?"#e000b0":"#96a4b9"} strokeWidth={selected===p.target?3:1.3} opacity={selected&&selected!==p.target?0.18:0.8} markerEnd={`url(#${marker})`}/>)}</svg>
         {inputs.length>0&&<><div className="qr-lane qr-inputs"><h3>Inputs</h3>{inputs.map(s=>serviceCard(s,"input"))}</div><div/></>}
         <ResizableLane id="crm" label="CRM column" width={layout.widths.crm??260} offset={layout.offsets.crm??0} onMove={move} onMoveCommit={commitMove} onResize={resize} onCommit={commitWidth} className="qr-crm"><h3>CRM data storage</h3>{groups.map(group=><section className="qr-entity-block" key={group.id}><h4 title={group.logical}>{group.label}{group.logical&&<small>{group.logical}</small>}</h4>{group.nodes.map(([key,target])=><button type="button" key={key} data-crm={key} className={`qr-node qr-mapped ${isNoteTarget(target)?"qr-note":""} ${selected===key?"qr-selected":""}`} onClick={()=>setSelected(selected===key?null:key)} aria-pressed={selected===key} title={`${label(target)}\n${target}${key!==target?`\n${key}`:""}${isNoteTarget(target)?"\nCapture only · labelled note entries":""}`}>{displayName(target)}</button>)}</section>)}</ResizableLane>
         {outputs.map(s=><FragmentColumn key={s.id} service={s} width={layout.widths[s.id]??290} offset={layout.offsets[s.id]??0} onMove={move} onMoveCommit={commitMove} onResize={resize} onCommit={commitWidth} card={serviceCard(s,"output")}/>)}
       </div></div>
-      <p className="qr-muted">Click a mapping cell to change its target; changes save automatically. Green bars mark mapped fields. Click a field label to trace its relationships; other fields remain visible. Output lists use each field’s preferred fill source. Read-only fields can be captured; filling skips them. Notes retain captured answers and do not fill output fields. Hidden sections stay mapped.</p>
+      <p className="qr-muted">Click a mapping cell to change its target; changes save automatically. Green bars mark mapped fields. Click a field label to trace its relationships. Enable Show only selected connections to focus that relationship; turn it off to restore the full view. Output lists use each field’s preferred fill source. Read-only fields can be captured; filling skips them. Notes retain captured answers and do not fill output fields. Hidden sections stay mapped.</p>
     </>}
   </section>;
 }
