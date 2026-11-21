@@ -1018,6 +1018,12 @@
     if (isNotChoice(el) || isNotChoice(host)) return null;
     const name = fieldName(host) || fieldName(el) || "";
     if (isSensitiveSource(name) || PAYMENT_FIELD.test(name)) return { current: "", options: [], refused: true };
+    // A checkbox can feed a CRM Choice (e.g. Yes -> Inside). Reading its
+    // alternatives must never use the dropdown click path, which toggles it.
+    if ((el.type || "").toLowerCase() === "checkbox" || el.getAttribute("role") === "checkbox") {
+      const state = el.getAttribute("aria-checked");
+      return { current: state === "mixed" ? "" : (el.checked === true || state === "true" ? "Yes" : "No"), options: ["Yes", "No"] };
+    }
     if (host.tagName === "SELECT") {
       const sel = host.options[host.selectedIndex];
       return { current: sel ? clean(sel.textContent) : "", options: choiceOptions(host) || [] };
