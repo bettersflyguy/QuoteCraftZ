@@ -1,0 +1,31 @@
+{
+  "sourceExport": "2026-11-21T23:22:39.576Z",
+  "origin": "https://app.ezlynx.com",
+  "status": "Partial browser audit; remaining screens require EZLynx sign-in",
+  "options": {
+    "iacrm_property.iacrm_secondaryheat": {
+      "Electric": 298400002
+    },
+    "iacrm_quote.iacrm_term": {
+      "12 Month": 738590205,
+      "6 Month": 738590203
+    },
+    "iacrm_vehicle.iacrm_airbags": {
+      "Airbag (Drvr Side)": 298400001,
+      "Airbag Both Sides": 298400002,
+      "Auto Stbelts/Airbag Both": 298400002,
+      "Auto Stbelts/Drvr Airbag": 298400001
+    },
+    "iacrm_vehicle.iacrm_neworused": {
+      "No": 298400001,
+      "Yes": 298400000
+    },
+    "iacrm_vehicle.iacrm_ownership": {
+      "Lien": 298400001
+    },
+    "iacrm_vehicle.iacrm_use": {
+      "To/From School": 298400001,
+      "To/From Work": 298400001
+    }
+  }
+}
