@@ -1,3 +1,4 @@
+import {DestinationCart} from "../DestinationCart";
 import { useEffect, useState } from "react";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
@@ -73,7 +74,7 @@ export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () =
 
   return (
     <div className={styles.root}>
-      <div className={styles.title}>Bold Penguin: commercial application</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div className={styles.title}>Bold Penguin: commercial application</div><DestinationCart app={app} busy={busy}/></div>
       {error && <ErrorBar error={error} onRetry={capture} />}
       {!app && (
         <>

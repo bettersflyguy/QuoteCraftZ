@@ -1,3 +1,4 @@
+import {DestinationCart} from "../DestinationCart";
 import {captureDisplayFields} from "../captureDisplay";
 import { usDate } from "@/util/usDate";
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
@@ -441,6 +442,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
           disabled={busy !== null && busy !== "lead"}
           onClick={() => void pickLead()}
         />
+        <DestinationCart app={app} busy={busy!==null} onFill={()=>void run("fill")}/>
         <Tooltip
           content={peekUnmapped
             ? `${mappedCount} mapped in green, ${peekCount ?? 0} unmapped in red. Click to hide.`
