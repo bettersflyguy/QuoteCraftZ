@@ -9,6 +9,8 @@ import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/e
 import { accountAddressColumns, addressChoices, otherLine, priorCoverageColumns, priorCoveragesFromCapture, rowSections, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 import { ARRAY_ROW_MAX, ASSET_TABLES, CHILD_TABLES } from "@/portal/fieldMaps";
 import { writePropertyNotes } from "@/crm/propertyNotes";
+import { parsePersonName } from "@/util/personName";
+import { pendingNameReviews } from "@/boldpenguin/nameReview";
 
 const useStyles = makeStyles({
   root: {
@@ -66,6 +68,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   const styles = useStyles();
   const [step, setStep] = useState<"closed" | "review" | "target">("closed");
   const [identity, setIdentity] = useState<CaptureIdentity>(() => identityFromCapture(app));
+  const sourceFullName = String(app.normalized["contact"]?.["fullName"] || "");
+  const sourceNameParts = parsePersonName(sourceFullName, app.normalized["contact"]?.["latinFullName"] ? "two-surnames" : "auto");
   const [target, setTarget] = useState<"insured" | "lead">("insured");
   const [insuredType, setInsuredType] = useState<1 | 2>(() => guessInsuredType(app));
   // the account's primary contact: the applicant unless the agent picks one
@@ -526,6 +530,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     try {
       const created = await send<{ accountId: string; name: string }>({
         type: "panel/createAccount",
+        fromCapture:true,
         fields: {
           name: query.trim() || recordName,
           street: identity.street || null, city: identity.city || null,
@@ -543,6 +548,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       const lobName = opp.lobId ? lobs?.find(l => l.lobId === opp.lobId)?.name ?? null : null;
       const created = await send<{ leadId: string; name: string }>({
         type: "panel/createLead",
+        fromCapture:true,
         fields: {
           topic: `${oppName(lobName)} - ${recordName}`,
           name: insuredType === 2 ? identity.businessName || recordName : personName,
@@ -585,7 +591,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   if (step === "closed") {
     return (
       <div className={styles.root}>
-        <Button appearance="primary" onClick={openReview}>Load into CRM ({app.fields.length} fields)</Button>
+        {pendingNameReviews(app).length > 0 && <div className={styles.hint}>Confirm the name split above before loading CRM.</div>}
+        <Button appearance="primary" disabled={pendingNameReviews(app).length > 0} onClick={openReview}>Load into CRM ({app.fields.length} fields)</Button>
       </div>
     );
   }
@@ -638,9 +645,13 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             ))}
           </>
         )}
+        {sourceNameParts.needsReview && <div className={styles.hint}>
+          Captured name: {sourceFullName}. Verify the given names and complete surname below.
+          {sourceNameParts.suffix && ` Suffix: ${sourceNameParts.suffix} (retained in the captured full name).`}
+        </div>}
         <div className={styles.row}>
-          <Input className={styles.grow} value={identity.firstName} onChange={(_, d) => set({ firstName: d.value })} placeholder="First name" />
-          <Input className={styles.grow} value={identity.lastName} onChange={(_, d) => set({ lastName: d.value })} placeholder="Last name" />
+          <Input className={styles.grow} value={identity.firstName} onChange={(_, d) => set({ firstName: d.value })} placeholder="Given name(s)" aria-label="Given names" />
+          <Input className={styles.grow} value={identity.lastName} onChange={(_, d) => set({ lastName: d.value })} placeholder="Surname(s)" aria-label="Surnames" />
         </div>
         <Input value={identity.businessName} onChange={(_, d) => set({ businessName: d.value })} placeholder="Business name (commercial only)" />
         <Input value={identity.street} onChange={(_, d) => set({ street: d.value })} placeholder="Street" />

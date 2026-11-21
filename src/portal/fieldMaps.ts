@@ -4,6 +4,7 @@
 
 import { COLUMN_KEY, sanitizeColumnMap, type OptionMaps } from "./optionMaps";
 import { ROW_TABLES } from "./assetTables";
+import { mappingTargets, packMappingTargets } from "./mappingTargets";
 export { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, type AssetTable, type ChildTable } from "./assetTables";
 
 export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
@@ -39,6 +40,7 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "contact.firstName", label: "First name", group: "Primary insured (account + contact)" },
   { path: "contact.lastName", label: "Last name", group: "Primary insured (account + contact)" },
   { path: "contact.fullName", label: "Full name", group: "Primary insured (account + contact)" },
+  { path: "contact.latinFullName", label: "Full name (two surnames)", group: "Primary insured (account + contact)" },
   { path: "contact.email", label: "Email", group: "Primary insured (account + contact)" },
   { path: "contact.phone", label: "Phone", group: "Primary insured (account + contact)" },
   { path: "contact.dateOfBirth", label: "Date of birth", group: "Primary insured (account + contact)" },
@@ -52,6 +54,7 @@ export const MAP_PATHS: { path: string; label: string; group: string }[] = [
   { path: "contacts[].firstName", label: "Related contact first name", group: "Contacts (all rows)" },
   { path: "contacts[].lastName", label: "Related contact last name", group: "Contacts (all rows)" },
   { path: "contacts[].fullName", label: "Related contact full name", group: "Contacts (all rows)" },
+  { path: "contacts[].latinFullName", label: "Related contact full name (two surnames)", group: "Contacts (all rows)" },
   { path: "contacts[].email", label: "Related contact email", group: "Contacts (all rows)" },
   { path: "contacts[].phone", label: "Related contact phone", group: "Contacts (all rows)" },
   { path: "contacts[].dateOfBirth", label: "Related contact date of birth", group: "Contacts (all rows)" },
@@ -87,7 +90,7 @@ export const isArrayPath = (path: string): boolean => /\[\](?:\.|$)/.test(path);
 
 /** Concrete per-row slots an array capture fans out into ("contact2.email",
  * "vehicle5.vin"; contact1 is reserved for the primary insured). */
-const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin|purchaseDate))$/;
+const SLOT_PATH = /^(?:contact([2-9]|[1-3]\d)\.(firstName|lastName|fullName|latinFullName|email|phone|dateOfBirth)|vehicle([1-9]|[1-3]\d)\.(year|make|model|vin|purchaseDate))$/;
 
 /** Rows a form control can address ("Driver 2" = related contact row 1). */
 export const ARRAY_ROW_MAX = 10;
@@ -131,6 +134,13 @@ export function rowTargetOf(path: string): { arrayPath: string; row: number } | 
     return { arrayPath: `${array}[].${m[2]}`, row };
   }
   return null;
+}
+
+/** Moving a repeated control to an every-card teaching moves all its row
+ * targets together, so adding an array target cannot pin an older target
+ * to one contact/vehicle/property slot. */
+export function arrayFamilyTargets(binding:string):string {
+  return packMappingTargets(mappingTargets(binding).map(t=>rowTargetOf(t)?.arrayPath || t));
 }
 
 /** CRM column targets taught in the capture editor ("crm:account.address1_city",
@@ -250,7 +260,7 @@ export const isCaptureTarget = (path: string): boolean =>
 /** MAP_PATHS partitioned into ordered entity groups for the editor's
  * target dropdowns. */
 export const MAP_PATH_GROUPS: { group: string; paths: { path: string; label: string }[] }[] =
-  MAP_PATHS.reduce<{ group: string; paths: { path: string; label: string }[] }[]>((acc, p) => {
+  MAP_PATHS.filter(p=>!p.path.endsWith(".latinFullName")).reduce<{ group: string; paths: { path: string; label: string }[] }[]>((acc, p) => {
     const last = acc[acc.length - 1];
     if (last && last.group === p.group) last.paths.push(p);
     else acc.push({ group: p.group, paths: [p] });
@@ -307,7 +317,7 @@ export interface FieldMapExport {
  * all rows), a CRM column (record or all rows) or a timeline note. Never a
  * secured target (each agent maps those locally). */
 export const isDataServiceTarget = (t: string): boolean =>
-  t === "" || PATH_LABEL.has(t) || isRoutablePath(t) || isCrmTarget(t) || isNoteTarget(t);
+  t === "" || (mappingTargets(t).length > 0 && mappingTargets(t).every(p=>PATH_LABEL.has(p) || isRoutablePath(p) || isCrmTarget(p) || isNoteTarget(p)));
 
 export function buildFieldMapExport(
   maps: FieldMaps, options?: OptionMaps, dataServices?: Record<string, Record<string, string>>
@@ -464,8 +474,8 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
     const originLabels = new Set<string>();
     let originPicks = 0;
     for (const [key, path] of Object.entries(entries as Record<string, unknown>)) {
-      const labelTarget = typeof path === "string" && /^label:[a-z0-9 ]{1,100}$/.test(path) &&
-        !isSensitiveLabel(path.slice(6));
+      const targets = typeof path === "string" ? mappingTargets(path) : [];
+      const isLabel = (p:string) => /^label:[a-z0-9 ]{1,100}$/.test(p) && !isSensitiveLabel(p.slice(6));
       // "pick:<selector>" keys teach read-only-text CAPTURE: selectors run
       // deeper than control keys (hence the longer cap), must fit cssPath's
       // own restricted grammar, and may only target known CRM fields - a
@@ -475,16 +485,16 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
       const pickKey = typeof key === "string" && (key.startsWith("pick:") || fieldKey);
       // secured targets never travel in share files: each agent maps them on
       // their own machine, so a tampered file can't aim an SSN at a field
-      if (typeof path === "string" && path.startsWith(SECURE_PREFIX)) { dropped += 1; secured += 1; continue; }
+      if (targets.some(p=>p.startsWith(SECURE_PREFIX))) { dropped += 1; secured += 1; continue; }
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
-          typeof path !== "string" ||
-          (path !== "skip" && !labelTarget && !PATH_LABEL.has(path) &&
-            !(pickKey ? isCaptureTarget(path) : isRoutablePath(path) || isNoteTarget(path))) ||
-          (pickKey && (!(fieldKey ? FIELD_KEY.test(key) : PICK_SELECTOR.test(key)) || (path !== "skip" && !isCaptureTarget(path))))) {
+          typeof path !== "string" || !targets.length ||
+          targets.some(p=>p !== "skip" && !isLabel(p) && !PATH_LABEL.has(p) &&
+            !(pickKey ? isCaptureTarget(p) : isRoutablePath(p) || isNoteTarget(p))) ||
+          (pickKey && (!(fieldKey ? FIELD_KEY.test(key) : PICK_SELECTOR.test(key)) || targets.some(p=>p !== "skip" && !isCaptureTarget(p))))) {
         dropped += 1;
         continue;
       }
-      if (labelTarget) { labelTargets.add(path.slice(6)); originLabels.add(path.slice(6)); }
+      targets.filter(isLabel).forEach(p=>{labelTargets.add(p.slice(6));originLabels.add(p.slice(6));});
       if (pickKey && path !== "skip") originPicks += 1;
       clean[key] = path;
     }
@@ -508,7 +518,7 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
 export function withoutSecured(maps: FieldMaps): FieldMaps {
   const out: FieldMaps = {};
   for (const [origin, entries] of Object.entries(maps)) {
-    const kept = Object.fromEntries(Object.entries(entries).filter(([, v]) => !v.startsWith(SECURE_PREFIX)));
+    const kept = Object.fromEntries(Object.entries(entries).filter(([, v]) => mappingTargets(v).length && mappingTargets(v).every(p=>!p.startsWith(SECURE_PREFIX))));
     if (Object.keys(kept).length) out[origin] = kept;
   }
   return out;

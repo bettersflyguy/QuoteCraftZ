@@ -656,7 +656,7 @@
     return dropRadioKeys;
   }
   async function fillPass(payload, overwrite, autoAdvance, overrides) {
-    const ov = overrides || {};
+    const ov = globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.preferredFieldMap(overrides || {}) : overrides || {};
     const candidates = mapper.buildCandidates(payload);
     const fillRoot = activeModal() || document;
     const controls = pageControls(fillRoot);
@@ -1116,7 +1116,8 @@
     /* saved keys of controls that now carry their own key: the key stays a
      * row of its own (below) so a Save writes it back untouched */
     const legacyShared = new Map();
-    for (const element of pageControls(activeModal() || document, true)) {
+    const scanRoot = globalThis.__bettersOneLead && typeof globalThis.__bettersCaptureRoot === "function" ? globalThis.__bettersCaptureRoot() : activeModal() || document;
+    for (const element of pageControls(scanRoot, true)) {
       const name = fieldName(element);
       if (!name) continue;
       /* a box whose own-label key holds a mapping is listed under it even when
@@ -1173,6 +1174,18 @@
         options: undefined
       });
     });
+    // Read-only values must be discoverable BEFORE a mapping has been saved.
+    const readable = typeof globalThis.__bettersCaptureElements === "function" ? globalThis.__bettersCaptureElements() : [];
+    for (const element of readable) {
+      if (element.matches("input,select,textarea,[role='combobox'],[role='checkbox'],[role='switch']") || !visible(element) || !textPickable(element)) continue;
+      const label = inferTextLabel(element);
+      if (!label) continue;
+      const local = typeof globalThis.__bettersLocalTextLabel === "function" ? globalThis.__bettersLocalTextLabel(element) : "";
+      const key = local ? "field:" + local.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "pick:" + cssPath(element);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ key, label, type:"text", payment:PAYMENT_FIELD.test(label), autoPath:null, mapped:typeof ov[key] === "string" ? ov[key] : null });
+    }
     /* saved read-only-text teachings ("pick:<selector>" -> CRM field) show as
      * rows too, so a revisit can review/retarget/clear them */
     for (const key of Object.keys(ov)) {
@@ -1287,6 +1300,8 @@
     var prior = amount && amount.previousElementSibling;
     var caption = prior && prior.querySelector("mat-label, label");
     if (caption) return clean(caption.innerText || caption.textContent) + ": Amount";
+    const local = typeof globalThis.__bettersLocalTextLabel === "function" ? globalThis.__bettersLocalTextLabel(el) : "";
+    if (local) return local;
     var cell = el.closest ? el.closest("td") : null;
     if (cell) {
       var row = cell.parentElement;
@@ -1305,7 +1320,7 @@
       }
     }
     var prev = el.previousElementSibling;
-    if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV)$/.test(prev.tagName)) {
+    if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV|LI)$/.test(prev.tagName)) {
       var p = clean(prev.innerText || prev.textContent).replace(/[:*]+$/, "");
       if (p && p.length <= 60 && p !== clean(el.innerText || el.textContent)) return p;
     }
@@ -1327,6 +1342,18 @@
     for (i = 0; i < path.length; i += 1) {
       var hit = pickable(path[i]);
       if (hit) return { control: hit, box: hit };
+    }
+    // A known read-only pair is its own field. Do not climb into a broad
+    // expanded-lead wrapper and steal its unrelated notes textarea.
+    if (typeof globalThis.__bettersLocalTextLabel === "function") {
+      for (i = 0; i < path.length; i += 1) {
+        var leaf = textPickable(path[i]);
+        if (leaf && globalThis.__bettersLocalTextLabel(leaf)) {
+          var value = typeof globalThis.__bettersLocalTextValue === "function" ? globalThis.__bettersLocalTextValue(leaf) || leaf : leaf;
+          return { control:null, textEl:value, box:value };
+        }
+        if (path[i]?.tagName && PICK_STOP[path[i].tagName.toLowerCase()]) break;
+      }
     }
     for (i = 0; i < path.length; i += 1) {
       var node = path[i];
@@ -1456,11 +1483,14 @@
           var hostLabel = host !== tx ? primaryLabel(host) : "";
           var inferred = hostLabel || inferTextLabel(tx);
           var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
+          // Scan and pick share a label key for read-only pairs. Optional
+          // fields and reordered lead rows must not move the binding.
+          var localPair = !hostLabel && typeof globalThis.__bettersLocalTextLabel === "function" && globalThis.__bettersLocalTextLabel(tx);
           /* inside a LABELLED form field (any site's design system): map the
            * field by its label - it survives re-renders and covers every
            * card that repeats it; otherwise a re-locatable selector */
           var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
-          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
+          var labelKey = localPair ? localPair.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
           // A truncated label cannot match the full source question later.
           // Long carrier captions use the stable control selector instead.
           if (labelKey.length > 140) labelKey = "";
@@ -1469,8 +1499,8 @@
           var sec = mapper && mapper.sectionOf ? mapper.sectionOf(tx) : { key: "", text: "" };
           var pickedPage = /(?:^| )address$/.test(sec.key) ? repeatInfo(boxLabel).page : "";
           finish({
-            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (pickedPage ? pickedPage + "|" : "") + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
-            label: (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            key: labelKey && !isSensitiveSource(localPair || boxLabel) ? "field:" + (!localPair && pickedPage ? pickedPage + "|" : "") + (!localPair && sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
+            label: localPair || (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,
             scopes: mapper && mapper.scopesOf ? mapper.scopesOf(tx) : [],

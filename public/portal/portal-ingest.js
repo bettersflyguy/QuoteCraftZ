@@ -9,12 +9,14 @@
 
   if (globalThis.__bettersPortalIngestLoaded) return;
   globalThis.__bettersPortalIngestLoaded = true;
+  let leadRoot = null;
 
   function clean(value) {
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
   }
 
   function isVisible(element) {
+    if (leadRoot && (!element || !leadRoot.contains(element))) return false;
     if (!element || element.closest("[hidden], [aria-hidden='true']")) return false;
     const style = getComputedStyle(element);
     return style.display !== "none" && style.visibility !== "hidden";
@@ -319,6 +321,8 @@
     const prior = amount && amount.previousElementSibling;
     const caption = prior && prior.querySelector("mat-label, label");
     if (caption) return text(caption) + ": Amount";
+    const local = localTextLabel(el);
+    if (local) return local;
     const cell = el.closest("td, th");
     if (cell && cell.parentElement) {
       const row = cell.parentElement;
@@ -534,9 +538,15 @@
         if (isVisible(c) && SKIP_TYPES.indexOf(type) < 0 && labelKey(stripMarks(labelFor(c))) === key) out.push(c);
       });
     }
+    // Read-only lead fields move when optional details appear. Resolve their
+    // own labels inside the active capture boundary, never a row position.
+    readOnlyPairs(captureRoot()).forEach(pair => {
+      if (labelKey(pair.label) === key && !out.includes(pair.el)) out.push(pair.el);
+    });
     return inPageOrder(out);
   }
   function fieldValue(el) {
+    if (localTextPair(el)?.el === el) return text(el);
     if (el.matches("input, select, textarea")) return valueOf(el);
     const shownChoice = el.querySelector(".mat-mdc-select-value-text, .mat-select-value-text, .k-input-value-text, mat-select, [role='combobox']:not(input)");
     if (shownChoice) return text(shownChoice);
@@ -544,6 +554,8 @@
     return c ? valueOf(c) : "";
   }
   function fieldLabelText(el) {
+    const local = localTextLabel(el);
+    if (local) return local;
     if (el.matches("input, select, textarea")) return stripMarks(labelFor(el));
     return el.matches(FORM_FIELD) ? boxLabel(el) : "";
   }
@@ -619,7 +631,40 @@
   }
 
   function captureRoot() {
-    return activeModal() || document.querySelector("main") || document;
+    return leadRoot || (globalThis.__bettersOneLead ? globalThis.__bettersLead.get().el : null) || activeModal() || document.querySelector("main") || document;
+  }
+  // An expanded detail panel lives inside a colspan cell of the call grid.
+  // Its own "Name / value" pair wins over the ancestor's "Call Time" header.
+  function localTextPair(el) {
+    for (let node = el, depth = 0; node && depth < 4; node = node.parentElement, depth += 1) {
+      if (node.matches("td,th,tr,table,body,html")) break;
+      const row = node.parentElement;
+      if (!row || !row.matches("ul,ol,div,li,dd") || row.children.length !== 2 || row.children[1] !== node) continue;
+      if (row.querySelector("input,select,textarea,button,a,svg")) continue;
+      const label = text(row.children[0]).replace(/[:*]+$/, "");
+      if (label && label.length <= 80 && label !== text(node)) return { label, el:node };
+    }
+    return null;
+  }
+  function localTextLabel(el) {
+    return localTextPair(el)?.label || "";
+  }
+
+  /* Read-only review fields also use UL/LI pairs (Datalot), not just inputs,
+   * DDs or tables. Return the VALUE element so scan/pick/capture share it. */
+  function readOnlyPairs(root) {
+    const pairs = [], seen = new Set();
+    root.querySelectorAll("div,li,ul,ol").forEach(row => {
+      if (!shown(row) || inConsentUi(row) || siteChrome(row) || row.children.length !== 2) return;
+      if (row.querySelector("input,select,textarea,button,a,svg,[role='combobox'],[role='radiogroup']")) return;
+      const left = row.children[0], right = row.children[1];
+      if (left.children.length > 2 || right.children.length > 3) return;
+      if (row.matches("ul,ol") && (!left.matches("li") || !right.matches("li"))) return;
+      const label = text(left).replace(/[:*]+$/, ""), value = text(right);
+      if (!label || !value || label === value || label.length > 80 || value.length > 300 || PAYMENT_FIELD.test(label) || seen.has(right)) return;
+      seen.add(right); pairs.push({ label, value, el:right });
+    });
+    return pairs;
   }
 
   const SKIP_TYPES = ["radio", "hidden", "password", "file", "submit", "button", "reset", "search"];
@@ -649,6 +694,7 @@
       if (cells.length === 2 && text(cells[0]) && text(cells[1]) && text(cells[0]) !== text(cells[1])) els.push(cells[1]);
     });
     root.querySelectorAll("dd").forEach((dd) => { if (isVisible(dd) && text(dd)) els.push(dd); });
+    readOnlyPairs(root).forEach(pair => els.push(pair.el));
     return Array.from(new Set(els));
   }
 
@@ -658,7 +704,7 @@
   function collect(controlMap, secureOut) {
     const modal = activeModal();
     const section = pageSection(modal);
-    const root = modal || document.querySelector("main") || document;
+    const root = leadRoot || modal || document.querySelector("main") || document;
     const fields = [];
     const map = controlMap || {};
     const baseKeyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
@@ -678,11 +724,13 @@
         const label = clean(labelFor(control));
         if (PAYMENT_FIELD.test(label) || PAYMENT_FIELD.test(clean(control.name || control.id))) return;
         if (isGridChrome(control, label)) return;
-        let path = null;
+        let binding = null;
         if (keyOf && control.matches("input, select, textarea")) {
-          try { path = map[keyOf(control)] || null; } catch (_e) { path = null; }
+          try { binding = map[keyOf(control)] || null; } catch (_e) { binding = null; }
         }
         const value = valueFor(control);
+        const paths = binding ? (globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.mappingTargets(binding) : [binding]) : [null];
+        paths.forEach(path => {
         if (isSecurePath(path)) {
           if (value && secureOut) secureOut.push({ path, value });
           return;
@@ -695,10 +743,11 @@
           if (system && labelKey(label) === "year updated") field.label = `${system[1]}: Year Updated`;
           const scheduled = /^(coins|fineArts|furs|guns|jewelry|music|silverware)Breakage$/.exec(control.name || control.id || "");
           if (scheduled && labelKey(label) === "breakage") field.label = scheduled[1].replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase()) + ": Breakage";
-          noteControls.push({ field, control, key: keyOf(control) });
+          noteControls.push({ field, control, key: keyOf(control) + "|" + path });
         }
-        else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) });
+        else if (field.mapped && PERSON_PATH.test(field.mapped)) personControls.push({ field, control, key: keyOf(control) + "|" + path });
         fields.push(field);
+        });
       });
     /* one person mapping on a box every driver card shares ("First Name" on
      * Primary Insured and Additional Driver): each card is its own person,
@@ -808,16 +857,7 @@
     /* label-left / value-right rows - servicing portals (GEICO Edge) print
      * facts as a container with exactly two text children ("Issuing State
      * (or Country)" | "MINNESOTA"). Guards keep navs and menus out. */
-    root.querySelectorAll("div, li").forEach((row) => {
-      if (!isVisible(row) || inConsentUi(row) || row.children.length !== 2) return;
-      if (row.querySelector("input, select, textarea, button, a, svg, [role='combobox'], [role='radiogroup']")) return;
-      const c0 = row.children[0], c1 = row.children[1];
-      if (c0.children.length > 2 || c1.children.length > 3) return;
-      const label = text(c0).replace(/[:*]+$/, "");
-      const value = text(c1);
-      if (!label || !value || label === value || label.length > 80 || value.length > 300) return;
-      fields.push({ label, value, section, group: "", source: "review-row" });
-    });
+    readOnlyPairs(root).forEach(pair => fields.push({ label:pair.label, value:pair.value, section, group:"", source:"review-row" }));
 
     /* bold-label prose runs - "<strong>Name Insured</strong> <span>Edward
      * Parkin</span> <br> <strong>Mailing Address</strong>…" - the standard
@@ -850,7 +890,7 @@
     /* "Label: value" LINES inside composite cells - Tivly's Lead Details
      * renders "Contact Name: Katsuyoshi Murano" as plain lines inside a
      * multi-line value cell, invisible to the row collectors */
-    const lineSource = String((modal || document.body).innerText || "").split(String.fromCharCode(10)).slice(0, 400);
+    const lineSource = String((leadRoot || modal || document.body).innerText || "").split(String.fromCharCode(10)).slice(0, 400);
     for (const rawLine of lineSource) {
       const line = clean(rawLine);
       const m = line.match(/^([A-Za-z][A-Za-z /()'&#.-]{1,39}):\s+(.{1,200})$/);
@@ -863,7 +903,7 @@
     /* sale/confirmation facts are usually PROSE, not form fields ("GEICO Auto
      * Policy Number: 6277201270", "Your coverage is effective 9/27/2026",
      * "Your 6 Month Auto Premium is $922.00") - pattern-match the page text */
-    const bodyText = clean(((modal || document.body).innerText || "").slice(0, 150000));
+    const bodyText = clean(((leadRoot || modal || document.body).innerText || "").slice(0, 150000));
     const saleSeen = new Set();
     const salePush = (label, value) => {
       if (value && !saleSeen.has(label)) { saleSeen.add(label); fields.push({ label, value: clean(value), section, group: "", source: "sale" }); }
@@ -1082,7 +1122,9 @@
         if (!el) break; /* nth-of-type runs are contiguous */
         rows.push({ n: n, el: el });
       }
-      if (rows.filter(function (r) { return isVisible(r.el); }).length >= 2) return rows;
+      const visibleRows = rows.filter(function (r) { return isVisible(r.el); });
+      if (leadRoot && visibleRows.length) return visibleRows.map((r, i) => ({ n:i + 1, el:r.el }));
+      if (visibleRows.length >= 2) return rows;
     }
     const siblings = siblingsByLabel(anchor);
     return siblings ? inPageOrder(siblings).map((el, i) => ({ n: i + 1, el })) : null;
@@ -1150,6 +1192,10 @@
       const path = typeof t.path === "string" ? t.path : "";
       let anchor = null;
       try { anchor = document.querySelector(t.selector); } catch (_e) { return; }
+      if (leadRoot && (!anchor || !leadRoot.contains(anchor))) {
+        anchor = leadRoot.querySelector(t.selector);
+        if (!anchor) anchor = expandTaughtRows(t.selector)?.[0]?.el || null;
+      }
       const row = (el) => {
         if (!el || !shown(el)) return null;
         const value = valueOf(el).slice(0, 300);
@@ -1247,12 +1293,26 @@
     return box ? boxLabel(box) : "";
   };
   globalThis.__bettersCaptureElements = captureElements;
+  globalThis.__bettersLocalTextLabel = localTextLabel;
+  globalThis.__bettersLocalTextValue = el => localTextPair(el)?.el || null;
   /* the root a capture reads (the open dialog, else main, else the page): the
    * filler groups same-name boxes over the same root */
   globalThis.__bettersCaptureRoot = captureRoot;
   /* `controls`: the page's saved control mappings. `secure` comes back
    * separately and is never merged into the capture by the worker. */
-  globalThis.__bettersPortalIngest = (taught, controls) => {
+  globalThis.__bettersPortalIngest = (taught, controls, oneLead) => {
+    oneLead = oneLead || globalThis.__bettersOneLead;
+    const scope = oneLead ? globalThis.__bettersLead?.get() : null;
+    if (oneLead && !scope) throw new Error("1 Lead paused: select a lead section again.");
+    if (!scope) {
+      const pairs = readOnlyPairs(activeModal() || document);
+      if (pairs.filter(p => /^receipt (?:code|id)$/i.test(p.label)).length > 1 &&
+          pairs.filter(p => /^(?:full )?name$/i.test(p.label)).length > 1) {
+        throw new Error("This page contains multiple leads. Use 1 Lead to select one expanded lead before ingesting.");
+      }
+    }
+    leadRoot = scope?.el || null;
+    try {
     const secure = [];
     const fields = taughtFields(taught, secure)
       .concat(collect(controls, secure).filter((f) => !identifierField(f)))
@@ -1263,6 +1323,7 @@
      * headed by: "Prior Auto Policy" and "Prior Home Policy" stay apart */
     const line = lineOfPage();
     if (line) fields.forEach((f) => { if (f.mapped && /^crm:priorcoverage\./.test(f.mapped)) f.section = "Prior " + line + " Policy"; });
-    return { fields, secure, title: document.title, url: location.href };
+    return { fields, secure, title: document.title, url: location.href, ...(scope ? { leadKey:scope.key } : {}) };
+    } finally { leadRoot = null; }
   };
 })();

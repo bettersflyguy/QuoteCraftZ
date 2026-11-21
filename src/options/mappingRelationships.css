@@ -1,0 +1,71 @@
+.qr-workspace { margin-top:8px; color:#17243a; background:#f7f9fc; border:1px solid #dce2eb; border-radius:3px; overflow:hidden; }
+.qr-title { display:flex; justify-content:space-between; align-items:start; gap:16px; padding:12px; background:white; }
+.qr-title h2 { margin:0; }
+.qr-title p { color:#59677d; max-width:760px; margin:8px 0 0; }
+.qr-badge { background:#eaf1ff; color:#073a89; padding:7px 12px; border-radius:20px; white-space:nowrap; }
+.qr-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:6px 12px; border-block:1px solid #dce2eb; background:white; }
+.qr-toolbar>span { margin-left:auto; font-size:12px; color:#59677d; }
+.qr-hidden { display:grid; grid-template-columns:1fr 1fr; background:white; border-bottom:1px solid #dce2eb; }
+.qr-hidden section { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:6px 12px; font-size:12px; }
+.qr-hidden section+section { border-left:1px solid #dce2eb; }
+.qr-hidden span { color:#59677d; }
+.qr-scroll { overflow:auto; max-height:72vh; padding:12px; }
+.qr-canvas { position:relative; display:grid; align-items:start; min-width:max-content; gap:0; }
+.qr-lane { position:relative; z-index:1; width:290px; }
+.qr-lane h3 { font-size:13px; color:#59677d; text-transform:uppercase; letter-spacing:.06em; margin:0 0 6px; }
+.qr-service { border:1px solid #dce2eb; border-radius:0; background:#fff; margin-bottom:12px; overflow:hidden; }
+.qr-service header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:3px 6px; border-bottom:1px solid #dce2eb; background:#f0f4fb; font-size:13px; }
+.qr-fields { padding:0; display:flex; flex-direction:column; gap:0; }
+.qr-node { display:block; width:100%; text-align:left; box-sizing:border-box; padding:3px 6px; background:white; border:1px solid #dce2eb; border-radius:0; font:12px 'Segoe UI',sans-serif; color:#17243a; cursor:pointer; overflow-wrap:anywhere; }
+.qr-node:hover { border-color:#073a89; background:#f4f7ff; }
+.qr-node small { display:block; color:#67748a; font-size:11px; margin-top:1px; }
+.qr-crm .qr-node { margin-bottom:0; background:#edf4ff; border-color:#bbceef; }
+.qr-crm .qr-note { background:#fff8e8; border-style:dashed; border-color:#c8a960; }
+.qr-node.qr-selected { outline:2px solid #e000b0; background:#fff0fc; border-color:#e000b0; }
+.qr-edges { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; z-index:0; }
+.qr-muted { color:#59677d; font-size:12px; line-height:1.5; }
+.qr-workspace>p { padding:0 22px; }
+
+.qr-inputs { width:450px; }
+.qr-crm { width:260px; }
+.qr-input-row { display:grid; grid-template-columns:140px minmax(0,1fr); align-items:start; position:relative; border-bottom:1px solid #dce2eb; background:white; font-size:12px; }
+.qr-input-row:last-child { border-bottom:0; }
+.qr-source-label { text-align:left; border:0; border-right:1px solid #dce2eb; border-radius:0; background:transparent; color:inherit; font:12px 'Segoe UI',sans-serif; padding:4px 5px; cursor:pointer; overflow-wrap:anywhere; align-self:stretch; }
+.qr-source-label:hover { background:#f4f7ff; }
+.qr-inline-editor { min-width:0; padding:2px 3px; }
+.qr-inline-editor fieldset { border:0; margin:0; padding:0; min-width:0; }
+.qr-inline-editor button { min-height:20px; font-size:11px; border-radius:0; }
+.qr-inline-editor [role="alert"] { color:#a4262c; font-size:11px; padding:3px; }
+.qr-inline-editor small { font-size:10px; color:#59677d; }
+.qr-mapped { border-left:3px solid #13a10e !important; }
+.qr-unmapped { border-left:3px solid #d13438; }
+.qr-input-row.qr-selected { outline:2px solid #e000b0; outline-offset:-2px; background:#fff0fc; }
+.qr-extra-edge { position:absolute; inset:0; pointer-events:none; }
+.qr-fields>.qr-node { border-bottom:0; min-height:24px; }
+.qr-fields>.qr-node:last-child { border-bottom:1px solid #dce2eb; }
+
+.qr-config-top { display:grid; grid-template-columns:minmax(400px,1fr) minmax(300px,1fr); gap:8px; margin:6px 0; align-items:start; }
+.qr-config-section { border:1px solid #dce2eb; padding:4px 8px; background:#fff; min-width:0; }
+.qr-config-section h2 { margin:0; font-size:13px; }
+.qr-env-quick { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.qr-env-config summary { cursor:pointer; font-size:11px; color:#59677d; padding:2px 0; }
+.qr-env-config[open] { overflow-x:auto; }
+.qr-env-config input { font-size:12px; }
+.qr-pages { font-size:12px; }
+.qr-pages button { min-height:20px; padding:0 3px; }
+.qr-crm .qr-node, .qr-fields>.qr-node { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; height:24px; padding:2px 6px; }
+.qr-settings-title { min-height:26px; }
+@media(max-width:800px) { .qr-config-top { grid-template-columns:1fr; } }
+
+.qr-resizer { position:absolute; top:0; bottom:0; right:-7px; width:10px; cursor:col-resize; touch-action:none; z-index:3; border-right:2px dotted #96a4b9; }
+.qr-resizer:hover, .qr-resizer:focus-visible { background:#073a8933; outline:1px solid #073a89; }
+.qr-entity-block { margin:0 0 8px; }
+.qr-entity-block h4 { margin:0; padding:4px 6px; background:#dce7f6; border-top:2px solid #7893b6; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qr-entity-block h4 small { display:block; font-size:10px; font-weight:400; color:#59677d; }
+.qr-gap-control { display:flex; align-items:center; gap:4px; font-size:11px; }
+.qr-gap-control input { width:90px; }
+
+.qr-mover { position:absolute; top:-4px; right:14px; height:22px; border:1px solid #b8c6d8; border-radius:2px; padding:1px 5px; font:11px 'Segoe UI',sans-serif; background:#fff; color:#314761; cursor:ew-resize; touch-action:none; z-index:3; }
+.qr-mover:hover, .qr-mover:focus-visible { background:#eaf1ff; outline:1px solid #073a89; }
+.qr-resizable>h3 { padding-right:78px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qr-resizable:focus-within { z-index:2; }

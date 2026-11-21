@@ -6,7 +6,8 @@
  * with the same name (spelling-tolerant, DOB as a check), to the primary
  * when the page flags them primary (or they are the primary insured), and
  * otherwise to a new slot. */
-import { canonical, clean } from "./normalize";
+import { clean } from "./normalize";
+import { parsePersonName, personNameKey } from "@/util/personName";
 import type { CapturedAppField, NormalizedApplication } from "./types";
 
 const PRIMARY = /^(contact|crm:primarycontact|secure:primarycontact)\.(.+)$/;
@@ -38,7 +39,7 @@ export function withSlot(path: string, slot: number): string {
 
 interface Person { first: string; last: string; dob: string; email: string }
 
-const letters = (s: string) => canonical(s).replace(/[^a-z]/g, "");
+const letters = personNameKey;
 
 /** A person from {firstName,lastName,fullName,dateOfBirth,email}-ish values
  * ("Dittrich, Tracey" reads as last, first). */
@@ -46,9 +47,10 @@ function person(get: (keys: string[]) => string): Person | null {
   let first = get(["firstName", "firstname"]);
   let last = get(["lastName", "lastname"]);
   if (!first && !last) {
-    const full = get(["fullName", "fullname"]);
-    if (full.includes(",")) { const [l, f] = full.split(","); last = clean(l); first = clean(f).split(" ")[0] ?? ""; }
-    else { const parts = full.split(" ").filter(Boolean); first = parts[0] ?? ""; last = parts.length > 1 ? parts[parts.length - 1]! : ""; }
+    const latin = get(["latinFullName"]);
+    const full = latin || get(["fullName", "fullname"]);
+    const parts = parsePersonName(full, latin ? "two-surnames" : "auto");
+    first = parts.firstName; last = parts.lastName;
   }
   if (!first && !last) return null;
   return { first: letters(first), last: letters(last), dob: get(["dateOfBirth", "birthdate"]).replace(/\D/g, ""), email: get(["email", "emailaddress1"]).toLowerCase() };

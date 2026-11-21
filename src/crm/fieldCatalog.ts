@@ -8,6 +8,7 @@ import { canonical, clean } from "@/boldpenguin/normalize";
 import { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, isSensitiveLabel } from "@/portal/fieldMaps";
 import { autoMatchOption } from "@/portal/optionMaps";
 import { DATA_SERVICE_STORAGE_KEY, effectiveTargets } from "@/sources/ezlynxSource";
+import { mappingTargets } from "@/portal/mappingTargets";
 import type { CrmEnvironment } from "./environments";
 import { classifyCatalogError, type CatalogUnavailable } from "./catalogNote";
 import { caseOf, describeCatalogError, safeAccount, safeHost, statusOf, type CatalogDiagnostics, type PicklistProbe, type TableDiagnostic } from "./catalogDiagnostics";
@@ -314,6 +315,13 @@ const CACHE_VERSION = "v8";
 const CACHE_PREFIX = `crm/fieldCatalog/${CACHE_VERSION}/`;
 const TTL_MS = 24 * 60 * 60 * 1000;
 
+/** Settings can describe saved relationships without initiating sign-in. */
+export async function cachedFieldCatalog(envId:string):Promise<FieldCatalog|null> {
+  const key=CACHE_PREFIX+envId;
+  const value=(await chrome.storage.local.get(key))[key] as FieldCatalog|undefined;
+  return value?.entities?.length ? value : null;
+}
+
 /** How many CRM columns the saved mappings (page sites and data services,
  * defaults included) name that the catalog doesn't list. */
 async function missingMappedColumns(catalog: FieldCatalog): Promise<number> {
@@ -325,7 +333,7 @@ async function missingMappedColumns(catalog: FieldCatalog): Promise<number> {
     ...Object.values(effectiveTargets(services["ezlynx"]))
   ];
   let missing = 0;
-  for (const t of new Set(targets)) {
+  for (const t of new Set(targets.flatMap(mappingTargets))) {
     const m = /^(crm|secure):([a-z]+?)(\d*)(?:\[\])?\.([a-z0-9_]+)$/.exec(t);
     if (!m) continue;
     const key = m[3] ? slotEntityKey(m[2]!) ?? m[2] : m[2];

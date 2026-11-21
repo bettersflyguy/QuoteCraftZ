@@ -24,6 +24,11 @@ function taughtOnly(taught: unknown): Field[] {
 }
 
 describe("array taught captures", () => {
+  it("keeps two-surname names in their own contact slots across all rows", () => {
+    document.body.innerHTML = `<table id="latin"><tbody><tr><td>José Luis García Márquez</td></tr><tr><td>Ana María López Pérez</td></tr></tbody></table>`;
+    const fields=taughtOnly([{selector:"#latin > tbody > tr:nth-of-type(1) > td",label:"Full name (two surnames)",path:"contacts[].latinFullName"}]);
+    expect(fields.map(f=>[f.mapped,f.value])).toEqual([["contact2.latinFullName","José Luis García Márquez"],["contact3.latinFullName","Ana María López Pérez"]]);
+  });
   it("fans one taught cell out across every table row, row-aligned across columns", () => {
     document.body.innerHTML = `
       <table id="rc"><tbody>

@@ -4,6 +4,7 @@
  * next portal. Existing data always wins - ingest only adds. */
 import { canonical, clean, normalize } from "./normalize";
 import { alignPeople } from "./people";
+import { parsePersonName, personNameKey } from "@/util/personName";
 import { isIdentifierColumn } from "@/portal/fieldMaps";
 import type { CapturedApplication, CapturedAppField, NormalizedApplication } from "./types";
 
@@ -46,13 +47,13 @@ function signalsOf(n: NormalizedApplication): IdentitySignals {
   const phoneRaw = typeof contact["phone"] === "string" ? contact["phone"].replace(/\D/g, "") : "";
   let lastName = typeof contact["lastName"] === "string" ? contact["lastName"] : "";
   if (!lastName && typeof contact["fullName"] === "string") {
-    lastName = contact["fullName"].trim().split(" ").slice(-1)[0] ?? "";
+    lastName = parsePersonName(contact["fullName"]).lastName;
   }
   const businessRaw = n["business"]?.["legalName"];
   return {
     email,
     phone: phoneRaw.length >= 7 ? phoneRaw.slice(-10) : "",
-    lastName: canonical(lastName),
+    lastName: personNameKey(lastName),
     business: typeof businessRaw === "string" ? canonical(businessRaw) : ""
   };
 }
@@ -73,7 +74,7 @@ export function identityConflict(existing: NormalizedApplication, incoming: Norm
 }
 
 function fieldKey(field: CapturedAppField): string {
-  return [field.section, field.group, canonical(field.label), field.value].join("|");
+  return [field.section, field.group, canonical(field.label), field.value, field.mapped ?? ""].join("|");
 }
 
 function sanitize(fields: CapturedAppField[]): CapturedAppField[] {

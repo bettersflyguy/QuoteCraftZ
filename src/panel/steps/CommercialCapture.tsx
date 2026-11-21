@@ -3,6 +3,7 @@ import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components"
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { LoadToCrm } from "./LoadToCrm";
+import { NameReview } from "../NameReview";
 import { exportCaptureToExcel } from "../downloadCapture";
 import type { CapturedApplication } from "@/messages";
 
@@ -109,6 +110,7 @@ export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () =
             Captured {new Date(app.capturedAt).toLocaleString()}. Switch to a carrier
             portal tab; this panel offers "Fill this page" there.
           </div>
+          <NameReview app={app} onChange={setApp}/>
           <LoadToCrm key={app.capturedAt} app={app} onFlowActive={onFlowActive} />
           <div className={styles.buttons}>
             <Button disabled={busy} onClick={capture}>{busy ? <Spinner size="tiny" /> : "Re-capture"}</Button>

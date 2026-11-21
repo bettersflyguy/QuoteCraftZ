@@ -4,6 +4,7 @@
  * (docs/bold-penguin-field-inventory.md). */
 import type { NormalizedApplication } from "./types";
 import { isRoutablePath } from "@/portal/fieldMaps";
+import { parsePersonName } from "@/util/personName";
 
 const rules: [string, string[]][] = [
   ["business.legalName", ["legal business name", "business legal name", "named insured", "company name", "business name"]],
@@ -247,6 +248,16 @@ export function normalize(fields: NormalizableField[]): NormalizedApplication {
     }
   }
 
+  for (const [key, person] of Object.entries(result)) {
+    if (!/^contact(?:\d+)?$/.test(key) || typeof person["latinFullName"] !== "string") continue;
+    const parts = parsePersonName(person["latinFullName"], "two-surnames");
+    person["fullName"] ||= parts.original;
+    // Separate source fields always win over a derived split.
+    if (!person["firstName"] && !person["lastName"]) {
+      person["firstName"] = parts.firstName;
+      person["lastName"] = parts.lastName;
+    }
+  }
   const contact = result["contact"];
   if (contact && !contact["fullName"]) {
     const fullName = clean([contact["firstName"], contact["lastName"]].filter(Boolean).join(" "));
