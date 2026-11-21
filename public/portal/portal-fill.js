@@ -875,10 +875,17 @@
     }).filter((w) => w.label);
   }
   /* every on-screen field a data-service field covers, as its outlined box */
+  var peekServiceSnapshot = null;
   function serviceElements(labels) {
     const wanted = parseLabels(labels);
     if (!wanted.length) return [];
     const out = [];
+    if (peekServiceSnapshot) {
+      peekServiceSnapshot.forEach(function (entry) {
+        if (wanted.some(function (w) { return w.label === entry.label && mapper.scopeMatches(w.section, entry.scopes); }) && out.indexOf(entry.box) < 0) out.push(entry.box);
+      });
+      return out;
+    }
     Array.from(document.querySelectorAll(LABELLED_FIELDS))
       .filter((el) => visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0) && labelsHit(wanted, el))
       .forEach((el) => {
@@ -1561,17 +1568,21 @@
    * scrolled out of view, including clipped inside a scrolling panel. */
   var peekRaf = 0;
   function placeBadges() {
-    peekMarks.forEach(function (m) {
-      if (!m.badge) return;
+    // Read all layout before writing badge styles: alternating them forces
+    // a layout for every highlighted field on large Angular forms.
+    var positions = peekMarks.filter(function (m) { return m.badge; }).map(function (m) {
       var r = m.el.getBoundingClientRect();
       var inView = r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
       if (inView && typeof document.elementFromPoint === "function") {
         var hit = document.elementFromPoint(Math.min(innerWidth - 1, Math.max(0, r.left + r.width / 2)), Math.min(innerHeight - 1, Math.max(0, r.top + r.height / 2)));
         inView = !hit || hit === m.el || m.el.contains(hit) || hit.contains(m.el);
       }
-      m.badge.style.display = inView ? "" : "none";
-      m.badge.style.left = Math.max(0, r.left) + "px";
-      m.badge.style.top = Math.max(0, r.top - 15) + "px";
+      return { badge: m.badge, visible: inView, left: Math.max(0, r.left) + "px", top: Math.max(0, r.top - 15) + "px" };
+    });
+    positions.forEach(function (p) {
+      if (p.badge.style.display !== (p.visible ? "" : "none")) p.badge.style.display = p.visible ? "" : "none";
+      if (p.badge.style.left !== p.left) p.badge.style.left = p.left;
+      if (p.badge.style.top !== p.top) p.badge.style.top = p.top;
     });
   }
   function onPeekScroll() {
@@ -1733,6 +1744,12 @@
   }
 
   function peekAll(arg, redo) {
+    // One label/scope inventory per repaint, not a full document scan for
+    // every one of the data-service mappings (including off-screen fields).
+    peekServiceSnapshot = Array.from(document.querySelectorAll(LABELLED_FIELDS))
+      .filter(function (el) { return visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0); })
+      .map(function (el) { return { label: mapper.canonical(primaryLabel(el)), scopes: mapper.scopesOf(el), box: el.closest("mat-form-field, .mat-mdc-form-field") || el }; });
+    try {
     lastPeekArg = arg;
     if (!redo) watchPage(true);
     clearPeek();
@@ -1750,6 +1767,7 @@
     lastFocusedKey = focusedKey;
     watchBadges(true);
     return { shown: r.shown, missing: r.missing, unmapped: u.shown };
+    } finally { peekServiceSnapshot = null; }
   }
 
   /* "peek unmapped": outline in RED every element the capture reads that

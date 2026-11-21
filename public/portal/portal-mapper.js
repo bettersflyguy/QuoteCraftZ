@@ -233,6 +233,11 @@
     else if (box.matches(".card")) t = box.querySelector(":scope > .card-header, :scope > .card-title, :scope > .card-body > .card-title");
     else if (box.matches(".k-panelbar-item")) t = box.querySelector(":scope > .k-link");
     const s = t ? titleText(t) : "";
+    // EZLynx appends "(if current less than 3 years)" to Previous Address.
+    // Keep the stable address heading, rather than discarding the long title
+    // and accidentally treating its controls as unscoped/current fields.
+    const addressTitle = /^((?:primary|previous|other|mailing|garaging|dwelling)\s+address)\s*\(/i.exec(s);
+    if (addressTitle) return addressTitle[1];
     return s && s.length <= 40 ? s : "";
   }
   /* titled boxes around an element, nearest first */

@@ -22,6 +22,7 @@ export function MultiTargetPicker({value,onChange,groups,specials,currentText,al
   return <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:4}}>
     {[...listed,...(adding ? [""] : [])].map((target,index)=><div key={index} style={{display:"flex",gap:3,alignItems:"start"}}>
       <TargetPicker {...rest} value={pickerTarget(target)} onChange={next=>change(index,next)}
+        defaultOpen={adding && index === listed.length}
         groups={groups.map(g=>({...g,paths:g.paths.filter(p=>p.path===target || !targets.includes(p.path))}))}
         specials={index > 0 ? specials.filter(s=>s.value !== "skip" && !targets.includes(s.value)) : specials}
         currentText={currentText?.(target)} />
