@@ -32,14 +32,15 @@ it("does no account or quote writes when an insured is picked, then writes to th
     await act(async()=>root.render(<LoadToCrm app={app}/>));
     await act(async()=>Array.from(host.querySelectorAll("button")).find(b=>b.textContent?.startsWith("Load into CRM"))!.click());
     await act(async()=>{await new Promise(r=>setTimeout(r,450));});
-    await act(async()=>button("Load").click());
+    await act(async()=>button("Select account").click());
     expect(mock.send.mock.calls.some(([m])=>m.type==="panel/appCommit")).toBe(false);
     const select=host.querySelector("select[aria-label='Homeowners: Opportunity']")! as HTMLSelectElement;
-    expect(select).not.toBeNull();expect(select.value).toBe("");expect(button("Load").disabled).toBe(true);
+    expect(select).not.toBeNull();expect(select.value).toBe("");expect(button("Save to CRM").disabled).toBe(true);
     await act(async()=>{select.value="second";select.dispatchEvent(new Event("change",{bubbles:true}));});
-    await act(async()=>button("Load").click());
+    await act(async()=>button("Save to CRM").click());
     const write=mock.send.mock.calls.find(([m])=>m.type==="panel/writeQuotes")?.[0];
     expect(write).toMatchObject({accountId:"insured",groups:[{opportunityId:"second",created:false}]});
     expect(mock.send.mock.calls.some(([m])=>m.type==="panel/createOpportunity")).toBe(false);
   }finally{await act(async()=>root.unmount());host.remove();}
 });
+

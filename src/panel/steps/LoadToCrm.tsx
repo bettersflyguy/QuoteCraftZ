@@ -660,7 +660,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                   <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                     {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", d.id)} target="_blank">Open</Button>}
                     <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
-                      {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                      {busy === d.id ? <Spinner size="tiny" /> : heldQuotes.length ? "Select account" : "Save to CRM"}
                     </Button>
                   </span>
                 ) : (
@@ -881,7 +881,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       <div className={styles.row}>
         <Button appearance="primary" disabled={busy!==null||!complete} onClick={()=>pendingOpp.accountId
           ?void commit(pendingOpp.accountId,pendingOpp.accountName,{choices:opportunityChoices,created:pendingOpp.created})
-          :void createAndCommit(opportunityChoices)}>{busy?<Spinner size="tiny"/>:"Load"}</Button>
+          :void createAndCommit(opportunityChoices)}>{busy?<Spinner size="tiny"/>:"Save to CRM"}</Button>
         <Button disabled={busy!==null} onClick={()=>{setError(null);setStep(pendingOpp.returnStep);}}>Back</Button>
       </div>
     </div>;
@@ -907,7 +907,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                   {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", d.id)} target="_blank">Open</Button>}
                   <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
-                    {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                    {busy === d.id ? <Spinner size="tiny" /> : heldQuotes.length ? "Select account" : "Save to CRM"}
                   </Button>
                 </span>
               ) : (
@@ -942,14 +942,14 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
               <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                 {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", m.accountId)} target="_blank">Open</Button>}
                 <Button size="small" disabled={busy !== null} onClick={() => loadAccount(m.accountId, m.name)}>
-                  {busy === m.accountId ? <Spinner size="tiny" /> : "Load"}
+                  {busy === m.accountId ? <Spinner size="tiny" /> : heldQuotes.length ? "Select account" : "Save to CRM"}
                 </Button>
               </span>
             </div>
           ))}
           {matches && matches.length === 0 && <div className={styles.hint}>No matching accounts.</div>}
           <Button disabled={busy !== null} onClick={()=>void createAndCommit()}>
-            {busy === "create" ? <Spinner size="tiny" /> : `Create "${query.trim() || recordName}"${dupes.length ? " anyway" : ""} and load`}
+            {busy === "create" ? <Spinner size="tiny" /> : heldQuotes.length ? `New account${dupes.length ? " anyway" : ""}…` : `Create "${query.trim() || recordName}"${dupes.length ? " anyway" : ""} and save to CRM`}
           </Button>
         </>
       )}
@@ -964,3 +964,4 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     </div>
   );
 }
+
