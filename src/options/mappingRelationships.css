@@ -64,3 +64,8 @@
 .qr-entity-block h4 small { display:block; font-size:10px; font-weight:400; color:#59677d; }
 .qr-gap-control { display:flex; align-items:center; gap:4px; font-size:11px; }
 .qr-gap-control input { width:90px; }
+
+.qr-mover { position:absolute; top:-4px; right:14px; height:22px; border:1px solid #b8c6d8; border-radius:2px; padding:1px 5px; font:11px 'Segoe UI',sans-serif; background:#fff; color:#314761; cursor:ew-resize; touch-action:none; z-index:3; }
+.qr-mover:hover, .qr-mover:focus-visible { background:#eaf1ff; outline:1px solid #073a89; }
+.qr-resizable>h3 { padding-right:78px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qr-resizable:focus-within { z-index:2; }

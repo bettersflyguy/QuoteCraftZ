@@ -1,4 +1,4 @@
-# Mapping relationships — 0.1.91
+# Mapping relationships — 0.1.92
 
 A compact header and side-by-side Environments / Pages Mapped sections sit
 at the top of Settings. Environment switching stays visible; Configure
@@ -64,3 +64,11 @@ logical table names from cached metadata or the runtime catalog. Primary and
 array contacts, account fields, individual row slots, and notes remain distinct.
 Build and eight focused graph/save/layout tests pass. Edge verified widening
 CRM and one output independently, adjusting arrow gaps, and refreshing.
+
+Version 0.1.92 separates repositioning from resizing. Drag a column's Move
+handle horizontally, or focus it and press Left / Right. Each CRM / Output
+column retains its width while moving independently; connectors follow the
+visual field bounds. Offsets persist separately from widths and hidden sections.
+Reset positions clears offsets only. The canvas provides horizontal scrolling
+for columns moved to the right. Build and nine focused tests pass. Edge verified
+moving CRM left and an output right without resizing, then refreshing.

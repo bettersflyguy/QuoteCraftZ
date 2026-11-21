@@ -10,7 +10,11 @@ it("groups by stored entity, preserving account/contact distinctions despite run
   expect(entityGroup("note:properties[]",null).logical).toContain("timeline");
 });
 it("restores independent widths and arrow spacing within usable bounds",()=>{
-  expect(readLayout({widths:{crm:400,"https://rater.example":600,bad:NaN,tiny:1},gap:150})).toEqual({widths:{crm:400,"https://rater.example":600,tiny:180},gap:150});
-  expect(readLayout(null)).toEqual({widths:{},gap:80});
+  expect(readLayout({widths:{crm:400,"https://rater.example":600,bad:NaN,tiny:1},gap:150})).toEqual({widths:{crm:400,"https://rater.example":600,tiny:180},offsets:{},gap:150});
+  expect(readLayout(null)).toEqual({widths:{},offsets:{},gap:80});
   expect(readLayout({widths:{crm:9000},gap:999}).gap).toBe(240);
+});
+
+it("restores column positions independently from widths with bounded offsets",()=>{
+  expect(readLayout({widths:{crm:360},offsets:{crm:-120,"https://rater.example":440,bad:Infinity}})).toEqual({widths:{crm:360},offsets:{crm:-120,"https://rater.example":440},gap:80});
 });

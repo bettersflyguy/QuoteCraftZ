@@ -4,11 +4,13 @@ import {isNoteTarget,noteLabelOf} from "@/portal/fieldMaps";
 
 export const LAYOUT_KEY="settings/relationshipLayout";
 export const clampWidth=(value:number)=>Math.max(180,Math.min(900,Math.round(value)));
-export interface Layout {widths:Record<string,number>;gap:number}
+export const clampOffset=(value:number)=>Math.max(-3000,Math.min(3000,Math.round(value)));
+export interface Layout {widths:Record<string,number>;offsets:Record<string,number>;gap:number}
 export function readLayout(raw:unknown):Layout {
   const saved=raw&&typeof raw==="object"?raw as Partial<Layout>:{};
   const widths=Object.fromEntries(Object.entries(saved.widths??{}).filter(([,v])=>typeof v==="number"&&Number.isFinite(v)).map(([k,v])=>[k,clampWidth(v)]));
-  return {widths,gap:typeof saved.gap==="number"&&Number.isFinite(saved.gap)?Math.max(40,Math.min(240,saved.gap)):80};
+  const offsets=Object.fromEntries(Object.entries(saved.offsets??{}).filter(([,v])=>typeof v==="number"&&Number.isFinite(v)).map(([k,v])=>[k,clampOffset(v)]));
+  return {widths,offsets,gap:typeof saved.gap==="number"&&Number.isFinite(saved.gap)?Math.max(40,Math.min(240,saved.gap)):80};
 }
 export function entityGroup(target:string,catalog:FieldCatalog|null):{id:string;label:string;logical:string} {
   if(isNoteTarget(target))return {id:target,label:noteLabelOf(target),logical:"annotation · timeline"};
