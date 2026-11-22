@@ -93,15 +93,14 @@ The inventory reconciles **all 136 page-note rules and all 22 Data Service note 
 
 ## Verified disposition: create or reuse
 
-**Cross-environment schema audit:** 2026-11-19. Read-only Dataverse v9.2 requests retrieved every table definition and its complete attribute collection in both AgentCRMDev and production. The comparison searched logical/schema names, display labels, descriptions and field structures across all publisher prefixes; candidate equivalents also had their lookup targets, choice options and table capabilities inspected. Role-configuration reads checked whether Co-applicant already exists. No CRM customizations or client records were changed.
+**Cross-environment schema audit:** 2026-11-19. Read-only Dataverse v9.2 requests retrieved every table definition and its complete attribute collection in both AgentCRMDev and the then-production environment, now UAT. The comparison searched logical/schema names, display labels, descriptions and field structures across all publisher prefixes; candidate equivalents also had their lookup targets, choice options and table capabilities inspected. Role-configuration reads checked whether Co-applicant already exists. No CRM customizations or client records were changed.
 
 | Environment | Full snapshot UTC | Tables | Attributes | Result |
 |---|---|---|---|---|
 | AgentCRMDev — `https://agentcrmdev.crm.dynamics.com` | 2026-11-19 20:40:04 | 2,182 | 92,258 | Complete response; no continuation link. |
-| Production — `https://bettersinsurance.crm.dynamics.com` | 2026-11-19 20:40:29 | 2,146 | 90,217 | Complete response; no continuation link. |
+| Production at audit / UAT now — `https://bettersinsurance.crm.dynamics.com` | 2026-11-19 20:40:29 | 2,146 | 90,217 | Complete response; no continuation link. |
 
-An additional unfiltered relationship read covered **32,899 many-to-one relationships in dev and 30,880 in production**. It identified every table with an actual Contact lookup target (116 dev / 110 production), independent of what that lookup was named. Those tables' value/type/context fields were checked for a contact-method alternative; the review did not rely solely on searching for the words Contact Point.
-
+An additional unfiltered relationship read covered **32,899 many-to-one relationships in dev and 30,880 in the then-production environment (now UAT)**. It identified every table with an actual Contact lookup target (116 dev / 110 then-production), independent of what that lookup was named. Those tables' value/type/context fields were checked for a contact-method alternative; the review did not rely solely on searching for the words Contact Point.
 The earlier dev-only audit was insufficient to justify every new-table proposal. This wider audit removes the proposed Quote Participant table: existing **Connection** provides that representation once Quote connections are enabled and the missing role is configured. Contact Point remains the only proposed new table after checking both names and structural alternatives.
 
 The Required work column now uses these explicit instructions:
