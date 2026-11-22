@@ -489,7 +489,7 @@ export function parseFieldMapImport(text: string, allowEmpty = false): FieldMapI
       if (typeof key !== "string" || !key || key.length > (pickKey ? 500 : 200) ||
           typeof path !== "string" || !targets.length ||
           targets.some(p=>p !== "skip" && !isLabel(p) && !PATH_LABEL.has(p) &&
-            !(pickKey ? isCaptureTarget(p) : isRoutablePath(p) || isNoteTarget(p))) ||
+            !(pickKey ? isCaptureTarget(p) : isRoutablePath(p) || isCrmTarget(p) || isNoteTarget(p))) ||
           (pickKey && (!(fieldKey ? FIELD_KEY.test(key) : PICK_SELECTOR.test(key)) || targets.some(p=>p !== "skip" && !isCaptureTarget(p))))) {
         dropped += 1;
         continue;

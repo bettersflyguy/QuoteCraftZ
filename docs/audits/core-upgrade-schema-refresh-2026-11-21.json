@@ -1,0 +1,780 @@
+{
+  "environment": "https://bettersinsurance.crm.dynamics.com",
+  "coreVersion": "1.3.0.380",
+  "capturedAt": "2026-11-22T00:37:28.6438090Z",
+  "organizationId": "1872bedd-fb8c-f111-8069-000d3a35773c",
+  "tableCount": 2155,
+  "attributeCount": 90897,
+  "baselineSha256": "b00d19d0d6be8667be0710544b1258e120aa7c9827656541dea5ce2c93ca7f98",
+  "changes": [
+    {
+      "scope": "page",
+      "source": "checkbox:businessOrDaycareOnPremises",
+      "before": "note:property1",
+      "after": "crm:properties[].iacrm_businessordaycareonpremises",
+      "table": "iacrm_property",
+      "column": "iacrm_businessordaycareonpremises",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:dogInfo",
+      "before": "note:property1",
+      "after": "crm:properties[].iacrm_dogsonpremises",
+      "table": "iacrm_property",
+      "column": "iacrm_dogsonpremises",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:gatedCommunity",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_gatedcommunity",
+      "table": "iacrm_property",
+      "column": "iacrm_gatedcommunity",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:homeUnderConstruction",
+      "before": "note:property1",
+      "after": "crm:properties[].iacrm_underconstruction",
+      "table": "iacrm_property",
+      "column": "iacrm_underconstruction",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:limitedAccessCommunity",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_limitedaccesscommunity",
+      "table": "iacrm_property",
+      "column": "iacrm_limitedaccesscommunity",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:matureDiscount",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_maturehomeownerdiscount",
+      "table": "iacrm_property",
+      "column": "iacrm_maturehomeownerdiscount",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:multiPolicyDiscount",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_multipolicydiscount",
+      "table": "iacrm_property",
+      "column": "iacrm_multipolicydiscount",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:propertyInsurance",
+      "before": "note:property1",
+      "after": "crm:properties[].iacrm_adverseinsurancehistory5years",
+      "table": "iacrm_property",
+      "column": "iacrm_adverseinsurancehistory5years",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:retireesCredit",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_retireecredit",
+      "table": "iacrm_property",
+      "column": "iacrm_retireecredit",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:trampoline",
+      "before": "note:property1",
+      "after": "crm:properties[].iacrm_trampoline",
+      "table": "iacrm_property",
+      "column": "iacrm_trampoline",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:withinFireDistrict",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_withinfiredistrict",
+      "table": "iacrm_property",
+      "column": "iacrm_withinfiredistrict",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "field:dwelling info|dwelling address>unit",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_addressunit",
+      "table": "iacrm_property",
+      "column": "iacrm_addressunit",
+      "type": "String"
+    },
+    {
+      "scope": "page",
+      "source": "field:dwelling info|dwelling address>postal code suffix",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_zip4suffix",
+      "table": "iacrm_property",
+      "column": "iacrm_zip4suffix",
+      "type": "String"
+    },
+    {
+      "scope": "page",
+      "source": "field:home dwelling info|number of full baths",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_fullbathroomcount",
+      "table": "iacrm_property",
+      "column": "iacrm_fullbathroomcount",
+      "type": "Integer"
+    },
+    {
+      "scope": "page",
+      "source": "field:home dwelling info|number of half baths",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_halfbathroomcount",
+      "table": "iacrm_property",
+      "column": "iacrm_halfbathroomcount",
+      "type": "Integer"
+    },
+    {
+      "scope": "page",
+      "source": "field:home dwelling info|number of units in fire division",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_firedivisionunitcount",
+      "table": "iacrm_property",
+      "column": "iacrm_firedivisionunitcount",
+      "type": "Integer"
+    },
+    {
+      "scope": "page",
+      "source": "field:home dwelling info|of wood burning stoves",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_woodburningstovecount",
+      "table": "iacrm_property",
+      "column": "iacrm_woodburningstovecount",
+      "type": "Integer"
+    },
+    {
+      "scope": "page",
+      "source": "field:home dwelling info|retirement community",
+      "before": "note:properties[]",
+      "after": "crm:properties[].iacrm_retirementcommunity",
+      "table": "iacrm_property",
+      "column": "iacrm_retirementcommunity",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "number:numberOfEmployees",
+      "before": "note:property1",
+      "after": "crm:properties[].iacrm_employeesonpremises",
+      "table": "iacrm_property",
+      "column": "iacrm_employeesonpremises",
+      "type": "Integer"
+    },
+    {
+      "scope": "page",
+      "source": "field:applicant info>prefix",
+      "before": "crm:contacts[].salutation",
+      "after": "targets:[\"crm:contacts[].iacrm_prefix\",\"note:contacts[]\"]",
+      "table": "contact",
+      "column": "iacrm_prefix",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "field:applicant info>suffix",
+      "before": "crm:contacts[].suffix",
+      "after": "targets:[\"crm:contacts[].iacrm_suffix\",\"note:contacts[]\"]",
+      "table": "contact",
+      "column": "iacrm_suffix",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "field:applicant info>preferred language",
+      "before": "note:contacts[]",
+      "after": "targets:[\"crm:contacts[].iacrm_preferredlanguage\",\"note:contacts[]\"]",
+      "table": "contact",
+      "column": "iacrm_preferredlanguage",
+      "type": "Picklist"
+    },
+    {
+      "scope": "page",
+      "source": "field:quote as package",
+      "before": "note:opportunity",
+      "after": "crm:quote.iacrm_quoteaspackage",
+      "table": "iacrm_quote",
+      "column": "iacrm_quoteaspackage",
+      "type": "Picklist"
+    },
+    {
+      "scope": "dataService",
+      "source": "applicant.customerSince",
+      "before": "note",
+      "after": "crm:account.iacrm_customersince",
+      "table": "account",
+      "column": "iacrm_customersince",
+      "type": "DateTime"
+    },
+    {
+      "scope": "dataService",
+      "source": "applicant.isVip",
+      "before": "note",
+      "after": "crm:account.iacrm_isvip",
+      "table": "account",
+      "column": "iacrm_isvip",
+      "type": "Picklist"
+    },
+    {
+      "scope": "dataService",
+      "source": "applicant.postalCodeSuffix",
+      "before": "note",
+      "after": "crm:account.iacrm_address1zip4",
+      "table": "account",
+      "column": "iacrm_address1zip4",
+      "type": "String"
+    },
+    {
+      "scope": "dataService",
+      "source": "applicant.yearsAtAddress",
+      "before": "note",
+      "after": "crm:account.iacrm_yearsatprimaryaddress",
+      "table": "account",
+      "column": "iacrm_yearsatprimaryaddress",
+      "type": "Integer"
+    },
+    {
+      "scope": "dataService",
+      "source": "applicant.monthsAtAddress",
+      "before": "note",
+      "after": "crm:account.iacrm_monthsatprimaryaddress",
+      "table": "account",
+      "column": "iacrm_monthsatprimaryaddress",
+      "type": "Integer"
+    },
+    {
+      "scope": "dataService",
+      "source": "person.maidenName",
+      "before": "note:contacts[]",
+      "after": "crm:contacts[].iacrm_maidenname",
+      "table": "contact",
+      "column": "iacrm_maidenname",
+      "type": "String"
+    },
+    {
+      "scope": "dataService",
+      "source": "person.isDeceased",
+      "before": "note:contacts[]",
+      "after": "crm:contacts[].iacrm_isdeceased",
+      "table": "contact",
+      "column": "iacrm_isdeceased",
+      "type": "Picklist"
+    },
+    {
+      "scope": "dataService",
+      "source": "address.postalCodeSuffix",
+      "before": "note",
+      "after": "targets:[\"crm:addresses[].iacrm_zip4suffix\",\"note\"]",
+      "table": "customeraddress",
+      "column": "iacrm_zip4suffix",
+      "type": "String"
+    },
+    {
+      "scope": "dataService",
+      "source": "address.yearsAtAddress",
+      "before": "note",
+      "after": "targets:[\"crm:addresses[].iacrm_yearsataddress\",\"note\"]",
+      "table": "customeraddress",
+      "column": "iacrm_yearsataddress",
+      "type": "Integer"
+    },
+    {
+      "scope": "dataService",
+      "source": "address.monthsAtAddress",
+      "before": "note",
+      "after": "targets:[\"crm:addresses[].iacrm_monthsataddress\",\"note\"]",
+      "table": "customeraddress",
+      "column": "iacrm_monthsataddress",
+      "type": "Integer"
+    },
+    {
+      "scope": "page",
+      "source": "checkbox:retirementCommunity",
+      "before": "",
+      "after": "crm:properties[].iacrm_retirementcommunity",
+      "table": "iacrm_property",
+      "column": "iacrm_retirementcommunity",
+      "type": "Picklist",
+      "reason": "Native checkbox discovered on live Home Dwelling screen; old labelled-field alias did not match this control."
+    }
+  ],
+  "invalidExplicitBindings": [],
+  "staleChoiceValues": [],
+  "deferredColumnsStillAbsent": [
+    "iacrm_property.iacrm_dwellingtype",
+    "iacrm_property.iacrm_roofdesign",
+    "iacrm_property.iacrm_firedetectiontype",
+    "iacrm_property.iacrm_animalsonpremises",
+    "iacrm_quote.iacrm_policyformtype"
+  ],
+  "choices": {
+    "iacrm_riskanswer": [],
+    "iacrm_priorcoverage": [],
+    "iacrm_policydriver": [],
+    "iacrm_drivingincident": [],
+    "iacrm_property": [
+      {
+        "name": "iacrm_adverseinsurancehistory5years",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_businessordaycareonpremises",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_dogsonpremises",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_foundation",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Open"
+          },
+          {
+            "value": 298400001,
+            "label": "Closed"
+          },
+          {
+            "value": 298400002,
+            "label": "None"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_gatedcommunity",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_limitedaccesscommunity",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_maturehomeownerdiscount",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_multipolicydiscount",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_retireecredit",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_retirementcommunity",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_secondaryheat",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "None"
+          },
+          {
+            "value": 298400001,
+            "label": "Gas"
+          },
+          {
+            "value": 298400002,
+            "label": "Electric"
+          },
+          {
+            "value": 298400003,
+            "label": "Oil"
+          },
+          {
+            "value": 298400004,
+            "label": "Propane"
+          },
+          {
+            "value": 298400005,
+            "label": "Heat Pump"
+          },
+          {
+            "value": 298400006,
+            "label": "Wood"
+          },
+          {
+            "value": 298400007,
+            "label": "Solid Fuel"
+          },
+          {
+            "value": 298400008,
+            "label": "Boiler"
+          },
+          {
+            "value": 298400009,
+            "label": "Other"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_swimmingpool",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "None"
+          },
+          {
+            "value": 298400001,
+            "label": "Above Ground"
+          },
+          {
+            "value": 298400002,
+            "label": "In Ground"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_trampoline",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_underconstruction",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_withinfiredistrict",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      }
+    ],
+    "account": [
+      {
+        "name": "iacrm_isvip",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      }
+    ],
+    "iacrm_propertyrenovation": [],
+    "iacrm_vehicle": [],
+    "contact": [
+      {
+        "name": "iacrm_isdeceased",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Yes"
+          },
+          {
+            "value": 298400001,
+            "label": "No"
+          },
+          {
+            "value": 298400002,
+            "label": "Unknown / not asked"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_preferredlanguage",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "English"
+          },
+          {
+            "value": 298400001,
+            "label": "Spanish"
+          },
+          {
+            "value": 298400002,
+            "label": "Chinese"
+          },
+          {
+            "value": 298400003,
+            "label": "Vietnamese"
+          },
+          {
+            "value": 298400004,
+            "label": "Tagalog"
+          },
+          {
+            "value": 298400005,
+            "label": "Korean"
+          },
+          {
+            "value": 298400006,
+            "label": "Arabic"
+          },
+          {
+            "value": 298400007,
+            "label": "French"
+          },
+          {
+            "value": 298400008,
+            "label": "Haitian Creole"
+          },
+          {
+            "value": 298400009,
+            "label": "Portuguese"
+          },
+          {
+            "value": 298400010,
+            "label": "Russian"
+          },
+          {
+            "value": 298400011,
+            "label": "Other"
+          }
+        ]
+      },
+      {
+        "name": "iacrm_prefix",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Mr."
+          },
+          {
+            "value": 298400001,
+            "label": "Mrs."
+          },
+          {
+            "value": 298400002,
+            "label": "Ms."
+          },
+          {
+            "value": 298400003,
+            "label": "Dr."
+          }
+        ]
+      },
+      {
+        "name": "iacrm_suffix",
+        "options": [
+          {
+            "value": 298400000,
+            "label": "Jr."
+          },
+          {
+            "value": 298400001,
+            "label": "Sr."
+          },
+          {
+            "value": 298400002,
+            "label": "I"
+          },
+          {
+            "value": 298400003,
+            "label": "II"
+          },
+          {
+            "value": 298400004,
+            "label": "III"
+          }
+        ]
+      }
+    ],
+    "iacrm_quotecoverage": [],
+    "iacrm_contactpoint": []
+  },
+  "aliasSearch": {
+    "scope": "All 2,155 tables and their attribute logical/display names",
+    "terms": [
+      "Dwelling Type",
+      "Roof Design",
+      "Fire Detection",
+      "Animals on Premises",
+      "Policy Form Type"
+    ],
+    "exactLogicalOrDisplayNameMatches": 0
+  },
+  "quoteConnectionsEnabled": true,
+  "coApplicantConnectionRoleExists": true,
+  "savedConfigurationVerification": {
+    "pageTargetsMatched": 261,
+    "dataServiceTargetsMatched": 61,
+    "choiceColumnsMatched": 49,
+    "otherSiteTargetsUnchanged": true,
+    "environmentConfigurationUnchanged": true,
+    "settingsReadbackExportedAt": "2026-11-22T00:59:29.759Z"
+  }
+}
