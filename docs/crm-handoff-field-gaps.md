@@ -25,13 +25,13 @@ The import validator was corrected to preserve native-control CRM array targets.
 | page: `checkbox:retireesCredit` | `iacrm_property.iacrm_retireecredit` (Picklist) | `crm:properties[].iacrm_retireecredit` |
 | page: `checkbox:trampoline` | `iacrm_property.iacrm_trampoline` (Picklist) | `crm:properties[].iacrm_trampoline` |
 | page: `checkbox:withinFireDistrict` | `iacrm_property.iacrm_withinfiredistrict` (Picklist) | `crm:properties[].iacrm_withinfiredistrict` |
-| page: `field:dwelling info\|dwelling address>unit` | `iacrm_property.iacrm_addressunit` (String) | `crm:properties[].iacrm_addressunit` |
-| page: `field:dwelling info\|dwelling address>postal code suffix` | `iacrm_property.iacrm_zip4suffix` (String) | `crm:properties[].iacrm_zip4suffix` |
-| page: `field:home dwelling info\|number of full baths` | `iacrm_property.iacrm_fullbathroomcount` (Integer) | `crm:properties[].iacrm_fullbathroomcount` |
-| page: `field:home dwelling info\|number of half baths` | `iacrm_property.iacrm_halfbathroomcount` (Integer) | `crm:properties[].iacrm_halfbathroomcount` |
-| page: `field:home dwelling info\|number of units in fire division` | `iacrm_property.iacrm_firedivisionunitcount` (Integer) | `crm:properties[].iacrm_firedivisionunitcount` |
-| page: `field:home dwelling info\|of wood burning stoves` | `iacrm_property.iacrm_woodburningstovecount` (Integer) | `crm:properties[].iacrm_woodburningstovecount` |
-| page: `field:home dwelling info\|retirement community` | `iacrm_property.iacrm_retirementcommunity` (Picklist) | `crm:properties[].iacrm_retirementcommunity` |
+| page: `field:dwelling info\\|dwelling address>unit` | `iacrm_property.iacrm_addressunit` (String) | `crm:properties[].iacrm_addressunit` |
+| page: `field:dwelling info\\|dwelling address>postal code suffix` | `iacrm_property.iacrm_zip4suffix` (String) | `crm:properties[].iacrm_zip4suffix` |
+| page: `field:home dwelling info\\|number of full baths` | `iacrm_property.iacrm_fullbathroomcount` (Integer) | `crm:properties[].iacrm_fullbathroomcount` |
+| page: `field:home dwelling info\\|number of half baths` | `iacrm_property.iacrm_halfbathroomcount` (Integer) | `crm:properties[].iacrm_halfbathroomcount` |
+| page: `field:home dwelling info\\|number of units in fire division` | `iacrm_property.iacrm_firedivisionunitcount` (Integer) | `crm:properties[].iacrm_firedivisionunitcount` |
+| page: `field:home dwelling info\\|of wood burning stoves` | `iacrm_property.iacrm_woodburningstovecount` (Integer) | `crm:properties[].iacrm_woodburningstovecount` |
+| page: `field:home dwelling info\\|retirement community` | `iacrm_property.iacrm_retirementcommunity` (Picklist) | `crm:properties[].iacrm_retirementcommunity` |
 | page: `number:numberOfEmployees` | `iacrm_property.iacrm_employeesonpremises` (Integer) | `crm:properties[].iacrm_employeesonpremises` |
 | page: `field:applicant info>prefix` | `contact.iacrm_prefix` (Picklist) | `targets:["crm:contacts[].iacrm_prefix","note:contacts[]"]` |
 | page: `field:applicant info>suffix` | `contact.iacrm_suffix` (Picklist) | `targets:["crm:contacts[].iacrm_suffix","note:contacts[]"]` |
