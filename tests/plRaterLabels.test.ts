@@ -68,3 +68,9 @@ it('scans one collection field and captures/fills every current driver column, i
   await api.__bettersPortalFill({normalized:{},fields:[],values},true,false,map);
   expect(Array.from(document.querySelectorAll<HTMLInputElement>('input[name$="$txtFirstName"]')).map(el=>el.value)).toEqual(['Updated1','Updated2','Updated3','Updated4','Updated5']);
 });
+it('routes fallback controls to every drivers own note instead of leaving additional drivers unassigned',()=>{
+  document.body.innerHTML=[1,2,3].map(n=>`<input name="DriverCtlHeader_${n}$txtFirstName" value="Person${n}"><select name="DriverCtlBody_${n}$cmbIndustry"><option>Industry${n}</option></select>`).join('');
+  const api=globalThis as unknown as {__bettersPortalIngest:(t:unknown,m:unknown)=>{fields:{name:string;mapped?:string}[]}};
+  const fields=api.__bettersPortalIngest([],{'select:DriverCtlBody_*$cmbIndustry':'note:contacts[]'}).fields;
+  expect(fields.filter(f=>f.name?.endsWith('$cmbIndustry')).map(f=>f.mapped)).toEqual(['note:contact','note:contact2','note:contact3']);
+});

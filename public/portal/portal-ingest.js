@@ -1038,7 +1038,7 @@
    * the primary insured, so related contacts start at 2). */
   /* timeline-note targets; "note:contacts[]" = each row's related contact
    * (row 1 -> note:contact2, like the related-contact slots) */
-  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]|properties\[\]|vehicles\[\]|property[1-9]\d?|vehicle[1-9]\d?))?$/;
+  var NOTE_PATH = /^note(:(contact|contact(?:[2-9]|[1-3]\d)|opportunity|quote|policy|contacts\[\]|properties\[\]|vehicles\[\]|property[1-9]\d?|vehicle[1-9]\d?))?$/;
   function contactArrayStart() {
     // EZLynx's applicant/details and driver lists include the insured first.
     // Generic related-contact tables keep their existing start-at-2 contract.

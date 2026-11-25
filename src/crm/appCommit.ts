@@ -1,4 +1,3 @@
-import { usDate } from "@/util/usDate";
 import { parsePersonName } from "@/util/personName";
 import { withReviewedNames } from "@/boldpenguin/nameReview";
 /** CRM load for a captured application (Bold Penguin or portal ingest) -
@@ -6,7 +5,7 @@ import { withReviewedNames } from "@/boldpenguin/nameReview";
  * normalized projection, plus every captured field logged to the
  * question-knowledge tables for the risk-data layer. */
 import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
-import { recordTables, UNMATCHED_TITLE } from "@/boldpenguin/recordTables";
+import { noteTables } from "@/boldpenguin/noteTables";
 import { noteRecordOf, noteSlotOf, propertyNoteSlotOf, vehicleNoteSlotOf, type NoteRecord } from "@/portal/fieldMaps";
 import type { CapturedApplication, CapturedAppField } from "@/boldpenguin/types";
 
@@ -470,8 +469,7 @@ export function buildSupplementalNote(app: CapturedApplication): SupplementalNot
   // "Related contacts" rows are CRM-sourced display context - never written back
   const extra = app.fields.filter((f, i) => !claimed.has(i) && f.section !== "Related contacts");
   if (!extra.length) return null;
-  // ONE rich-text note, laid out like the timeline note: a Field/Value
-  // table per section, list rows as a table with their real columns
+  // ONE rich-text note using the timeline's field-header tables.
   const body = noteHtml("Captured Application Data", app, extra.map(f => ({ ...f, section: f.section || "Details" }))).slice(0, 90000);
   return {
     subject: `QuoteCraftZ: captured application data (${app.source.system})`,
@@ -623,7 +621,6 @@ export function buildTimelineNote(app: CapturedApplication, record: NoteRecord =
 export function buildRelatedContactNote(app: CapturedApplication, slot: number): TimelineNote | null {
   const tagged = app.fields
     .filter(f => noteSlotOf(f.mapped) === slot && clean(f.value))
-    // one person: their values read as Field / Value, not a one-row table
     .map(f => ({ ...f, group: "" }));
   if (!tagged.length) return null;
   return {
@@ -667,31 +664,18 @@ export function vehicleNoteSlots(app: CapturedApplication): number[] {
   return [...new Set(app.fields.map(f => vehicleNoteSlotOf(f.mapped)).filter((n): n is number => n !== null))].sort((a, b) => a - b);
 }
 
-/** One rich-text note body: a heading, when and where it was captured, then
- * per section a Field/Value table for single values and a table with the
- * list's real columns for its rows. Every field in ONE note. */
+/** Field-header tables, using the same record-type structure as Intake. Each
+ * caller supplies only fields routed to this particular CRM record. */
 function noteHtml(title: string, app: CapturedApplication, fields: CapturedApplication["fields"]): string {
   const parts: string[] = [
     `<h2>${html(title)}</h2>`,
     `<p><b>Captured ${html(new Date(app.capturedAt).toLocaleString())} from ${html(app.source.system)}</b></p>`
   ];
-  for (const section of [...new Set(fields.map(f => f.section))]) {
-    const inSection = fields.filter(f => f.section === section);
-    parts.push(`<h3>${html(section || "Notes")}</h3>`);
-    const singles = inSection.filter(f => !isGridRow(f));
-    if (singles.length) {
-      parts.push(TABLE + "<tr><th>Field</th><th>Value</th></tr>" +
-        singles.map(f => `<tr><td>${html(f.label)}</td><td>${html(usDate(f.value))}</td></tr>`).join("") + "</table>");
-    }
-    // list rows: columns told apart by label alone (see recordTables), one table per section
-    const tables = recordTables(inSection.filter(isGridRow));
-    for (const t of tables) {
-      // a heading when the section yields more than one table, and always for the unmatched ones
-      if (tables.length > 1 || t.title === UNMATCHED_TITLE) parts.push(`<h4>${html(t.title)}</h4>`);
-      parts.push(TABLE + "<tr>" + t.columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
-        t.rows.map(r => "<tr>" + t.columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
-        "</table>");
-    }
+  for (const t of noteTables(fields,app.fields)) {
+    parts.push(`<h3>${html(t.title)}</h3>`);
+    parts.push(TABLE + "<tr>" + t.columns.map(c => `<th>${html(c)}</th>`).join("") + "</tr>" +
+      t.rows.map(r => "<tr>" + t.columns.map(c => `<td>${html(r[c] ?? "")}</td>`).join("") + "</tr>").join("") +
+      "</table>");
   }
   return parts.join("");
 }
