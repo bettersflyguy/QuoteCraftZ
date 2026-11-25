@@ -1034,7 +1034,7 @@
    * the primary insured, so related contacts start at 2). */
   /* timeline-note targets; "note:contacts[]" = each row's related contact
    * (row 1 -> note:contact2, like the related-contact slots) */
-  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]|properties\[\]|property[1-9]\d?))?$/;
+  var NOTE_PATH = /^note(:(contact|opportunity|quote|policy|contacts\[\]|properties\[\]|vehicles\[\]|property[1-9]\d?|vehicle[1-9]\d?))?$/;
   function contactArrayStart() {
     // EZLynx's applicant/details and driver lists include the insured first.
     // Generic related-contact tables keep their existing start-at-2 contract.
@@ -1053,7 +1053,8 @@
   function noteRow(path, i) {
     const contactSlot = contactArrayStart() + i;
     return path === "note:contacts[]" ? (contactSlot === 1 ? "note:contact" : "note:contact" + contactSlot)
-      : path === "note:properties[]" ? "note:property" + (i + 1) : path;
+      : path === "note:properties[]" ? "note:property" + (i + 1)
+      : path === "note:vehicles[]" ? "note:vehicle" + (i + 1) : path;
   }
   /* a person's mapped path (1 = the primary insured, N = related contact
    * N-1); same grammar as src/boldpenguin/people.ts slotOf / withSlot */

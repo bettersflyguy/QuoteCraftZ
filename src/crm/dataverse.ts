@@ -503,6 +503,7 @@ export const NOTE_RECORDS = {
   account: { logical: "account", set: "accounts" },
   contact: { logical: "contact", set: "contacts" },
   property: { logical: "iacrm_property", set: "iacrm_properties" },
+  vehicle: { logical: "iacrm_vehicle", set: "iacrm_vehicles" },
   opportunity: { logical: "opportunity", set: "opportunities" },
   quote: { logical: "iacrm_quote", set: "iacrm_quotes" },
   policy: { logical: "iacrm_policy", set: "iacrm_policies" }

@@ -8,7 +8,7 @@ import type { CapturedApplicant } from "@/types";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { accountAddressColumns, addressChoices, otherLine, priorCoverageColumns, priorCoveragesFromCapture, rowSections, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 import { ARRAY_ROW_MAX, ASSET_TABLES, CHILD_TABLES } from "@/portal/fieldMaps";
-import { writePropertyNotes } from "@/crm/propertyNotes";
+import { writePropertyNotes, writeVehicleNotes } from "@/crm/propertyNotes";
 import { parsePersonName } from "@/util/personName";
 import { pendingNameReviews } from "@/boldpenguin/nameReview";
 import {quoteLobMatch} from "@/crm/lobMatch";
@@ -441,6 +441,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       }
       rows.push(...await writePropertyNotes(app, loadedAssets, (id, subject, html) =>
         send({ type: "panel/upsertNote", record: "property", id, subject, html })));
+      rows.push(...await writeVehicleNotes(app, loadedAssets, (id, subject, html) =>
+        send({ type: "panel/upsertNote", record: "vehicle", id, subject, html })));
       // records on an asset (lienholder, mortgagee, a property's renovations,
       // losses, parties) attach to the asset mapped on the same page, or the
       // only one this load wrote

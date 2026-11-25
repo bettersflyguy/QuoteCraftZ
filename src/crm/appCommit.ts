@@ -7,7 +7,7 @@ import { withReviewedNames } from "@/boldpenguin/nameReview";
  * question-knowledge tables for the risk-data layer. */
 import { canonical, claimedIndices, clean, isGridRow } from "@/boldpenguin/normalize";
 import { recordTables, UNMATCHED_TITLE } from "@/boldpenguin/recordTables";
-import { noteRecordOf, noteSlotOf, propertyNoteSlotOf, type NoteRecord } from "@/portal/fieldMaps";
+import { noteRecordOf, noteSlotOf, propertyNoteSlotOf, vehicleNoteSlotOf, type NoteRecord } from "@/portal/fieldMaps";
 import type { CapturedApplication, CapturedAppField } from "@/boldpenguin/types";
 
 /** Fields that describe the insured themselves; data-grid rows (Drivers,
@@ -651,6 +651,20 @@ export function buildPropertyNote(app: CapturedApplication, slot: number): Timel
 
 export function propertyNoteSlots(app: CapturedApplication): number[] {
   return [...new Set(app.fields.map(f => propertyNoteSlotOf(f.mapped)).filter((n): n is number => n !== null))].sort((a, b) => a - b);
+}
+
+export function buildVehicleNote(app: CapturedApplication, slot: number): TimelineNote | null {
+  const fields = app.fields.filter(f => vehicleNoteSlotOf(f.mapped) === slot && clean(f.value))
+    .map(f => ({ ...f, group: "" }));
+  return fields.length ? {
+    subject: `QuoteCraftZ: Non Mapped Timeline Entries (${app.source.system})`,
+    html: noteHtml("Non Mapped Timeline Entries", app, fields).slice(0, 100000),
+    count: fields.length
+  } : null;
+}
+
+export function vehicleNoteSlots(app: CapturedApplication): number[] {
+  return [...new Set(app.fields.map(f => vehicleNoteSlotOf(f.mapped)).filter((n): n is number => n !== null))].sort((a, b) => a - b);
 }
 
 /** One rich-text note body: a heading, when and where it was captured, then

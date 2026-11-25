@@ -72,8 +72,95 @@
     return "";
   }
 
+  /* PL Rating lays its vehicle editor out as a column grid.  Its controls
+   * have durable ASP.NET ids, but no per-control label association: the
+   * generic container fallback consequently finds the first header (VIN) or
+   * first body caption (Cost New Amount) for every field.  Resolve those ids
+   * before looking at generic accessibility metadata so the mapping editor
+   * identifies every column correctly and rows can be mapped as a vehicle
+   * collection. */
+  function plRaterVehicleLabel(element) {
+    if (!/rating\.vertafore\.com$/i.test(location.hostname)) return "";
+    const id = clean(element.id || element.name);
+    const match = /^(?:AutoCtlHeader|AutoCtlBody|DriverCtlHeader|DriverCtlBody)_\d+_([A-Za-z0-9]+)/.exec(id);
+    if (!match) {
+      // PL Rater's layout containers often contain many captions. Choosing
+      // their first caption labels an entire form "Opt Out" or "Name".
+      // Native control names are stable and distinguish these inputs.
+      if (/^rptrOptionSections/.test(id)) return clean(document.getElementById(id.replace(/_chkOption$/, "_lblOption"))?.textContent);
+      if (/^dgQuestions/.test(id)) return "";
+      const suffix = id.split(/[_$]/).pop();
+      if (!/^(?:txt|rni|rdi|rmi|cmb|chk)/.test(suffix || "")) return "";
+      const special = { rmiSocialSecurity: "Social Security Number", rmiAddSSN: "Additional Insured Social Security Number", txtDriversLicenseNumber: "Driver License Number", rdiDateofBirth: "Date of Birth" };
+      const own = element.labels && element.labels.length ? clean(element.labels[0].textContent) : "";
+      const readable = special[suffix] || own || suffix.replace(/^(?:txt|rni|rdi|rmi|cmb|chk)/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Za-z])(\d+)/g, "$1 $2").trim();
+      const detail = /^(.*?)_ascx[_$]/.exec(id);
+      return detail ? detail[1].replace(/([a-z])([A-Z])/g, "$1 $2") + ": " + readable : readable;
+    }
+    const labels = {
+      txtFirstName: "First Name", txtMiddleName: "Middle Name", txtLastName: "Last Name",
+      rdiDateOfBirth: "Date of Birth", chkOperatorExcl: "Excluded Driver",
+      cmbRelationship: "Relationship", cmbSex: "Gender", cmbMaritalStatus: "Marital Status",
+      chkCustody: "Custody", rmiSocialSecurity: "Social Security Number",
+      cmbPOMF: "Driver Usage", cmbAuto: "Assigned Vehicle", cmbLicStatus: "License Status",
+      chkForeignInternationalLicense: "Foreign or International License",
+      cmbStateLic: "License State", txtDriversLicenseNumber: "Driver License Number",
+      rdiDateLicensed: "Date Licensed", cmbFiling: "Financial Responsibility Filing",
+      cmbIndustry: "Industry", cmbOccupation: "Occupation",
+      rniYearsAtOccupation: "Years at Occupation", rniYearsCurrentEmployer: "Years with Current Employer",
+      cmbEducationLevel: "Education", cmbEnrollTelematics: "Enroll in Telematics",
+      chkDriveTrain: "Driver Training", chkGoodStudent: "Good Student",
+      rniSchoolMile: "School Distance (Miles)",
+      txtVIN: "VIN", cmbYear: "Year", cmbMake: "Make", cmbModel: "Model",
+      rniCostNew: "Cost New Amount", cmbPurchaseType: "Purchase Type",
+      rdiPurchaseDate: "Purchase Date", cmbOwnershipStatus: "Ownership Status",
+      rniLengthOwnershipYrs: "Length of Ownership (Years)",
+      rniLengthOwnershipMonths: "Length of Ownership (Months)",
+      cmbUse: "Use", chkDeliveryUsage: "Used for Delivery",
+      chkRideshareUsage: "Used for Rideshare", txtLicensePlate: "License Plate Number",
+      rniAnnualMiles: "Annual Miles", rniOdometer: "Odometer",
+      chkCompOnly: "Comprehensive Only", cmbComp: "Comprehensive Deductible",
+      chkFullGlass: "Full Glass", cmbColl: "Collision Deductible",
+      chkLoanLease: "Loan Lease", cmbTowLabor: "Towing & Labor",
+      cmbTrans: "Transportation Expense", rniElecCov: "Electronic Equipment",
+      chkMediaCov: "Media Coverage", chkRepairReplace: "Repair/Replacement Cost Coverage",
+      chkRoadsideAssistance: "Roadside Assistance", chkOEM: "OEM Coverage",
+      chkTripInterruption: "Trip Interruption", chkCompanyCar: "Company Car",
+      chkAddress: "Garaged at Different Address", cmbPerformance: "Performance",
+      chkFourWheel: "4 Wheel Drive", chkDayLight: "Daytime Lights"
+    };
+    if (labels[match[1]]) return labels[match[1]];
+
+    /* Vehicle Attributes are rendered in the same three-column grid but do
+     * not have individual HTML labels.  Falling through to containerLabel()
+     * gave every one of them the grid's first caption, "Cost New Amount".
+     * Keep an explicit name for the known terse ASP.NET ids and use a safe
+     * camel-case fallback for newly introduced attributes. */
+    const attributes = {
+      chkALockBrake2W: "Anti-lock Brakes (2 wheel)",
+      chkALockBrake4W: "Anti-lock Brakes (4 wheel)",
+      chkAutoBelts: "Automatic Belts",
+      chkAirBagDriver: "Driver Airbag",
+      chkAirBagPass: "Passenger Airbag",
+      chkSideAirBag: "Side Airbag",
+      chkSideAirBagPass: "Passenger Side Airbag",
+      chkRearAirBag: "Rear Airbag",
+      chkPassiveDisabling: "Passive Disabling",
+      chkActiveDisabling: "Active Disabling",
+      chkAlarmOnly: "Alarm Only",
+      chkVinEtch: "VIN Etching",
+      chkRecovery: "Vehicle Recovery System",
+      chkWindowEtch: "Window Etching"
+    };
+    if (attributes[match[1]]) return attributes[match[1]];
+    const suffix = match[1].replace(/^(?:chk|cmb|txt|rni|rdi)/, "");
+    return suffix.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Za-z])(\d+)/g, "$1 $2").trim();
+  }
+
   /* the one VISIBLE label a human would read for this control */
   function primaryLabel(element) {
+    const plRaterLabel = plRaterVehicleLabel(element);
+    if (plRaterLabel) return plRaterLabel;
     /* EZLynx carrier selects point aria-labelledby at the selected answer.
      * The question's own caption is the stable field identity. */
     const question = element.tagName === "MAT-SELECT" ? element.closest("icq-question") : null;
@@ -1189,7 +1276,13 @@
     });
     // Read-only values must be discoverable BEFORE a mapping has been saved.
     const readable = typeof globalThis.__bettersCaptureElements === "function" ? globalThis.__bettersCaptureElements() : [];
+    // PL Rater's native forms put column captions and the client banner in
+    // plain table cells. They are labels, not additional data inputs. Keep
+    // manual text picking and existing pick teachings available, while not
+    // advertising every caption as another unmapped field on those forms.
+    const plRaterNativeForm = /rating\.vertafore\.com$/i.test(location.hostname) && rows.some(r => /^(?:text|select|checkbox):/.test(r.key));
     for (const element of readable) {
+      if (plRaterNativeForm) continue;
       if (element.matches("input,select,textarea,[role='combobox'],[role='checkbox'],[role='switch']") || !visible(element) || !textPickable(element)) continue;
       const label = inferTextLabel(element);
       if (!label) continue;
@@ -1789,6 +1882,7 @@
     const covered = [];
     const keys = arg && arg.map && typeof arg.map === "object" ? arg.map : {};
     const coveredKeys = new Set(Object.keys(keys).filter(function (k) { return keys[k]; }));
+    const plRaterNativeForm = /rating\.vertafore\.com$/i.test(location.hostname) && all.some(el => el.matches("input:not([type='hidden']),select,textarea"));
     try {
       scanControls(arg && arg.payload ? arg.payload : null, keys).forEach(function (r) { if (r.autoPath) coveredKeys.add(r.key); });
     } catch (_e) { /* auto-matching is best-effort here */ }
@@ -1822,6 +1916,7 @@
     all.forEach(function (el) {
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
+      if (plRaterNativeForm && !isControl) return;
       if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(labelKeyOf(el)))) return;
       if (isControl && serviceLabels.length && serviceCovers(el)) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;

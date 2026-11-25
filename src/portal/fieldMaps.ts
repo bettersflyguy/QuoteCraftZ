@@ -115,6 +115,7 @@ const ROW_SLOTS: Record<string, { slot: string; start: number }> = {
 /** "contacts[].email" + row 2 -> "contact3.email" (the one-row target a
  * form control fills from and captures into). */
 export function toRowTarget(arrayPath: string, row: number): string | null {
+  if (arrayPath === "note:vehicles[]") return Number.isInteger(row) && row >= 1 && row <= ARRAY_ROW_MAX ? `note:vehicle${row}` : null;
   if (arrayPath === "note:properties[]") return Number.isInteger(row) && row >= 1 && row <= ARRAY_ROW_MAX ? `note:property${row}` : null;
   const m = /^((?:crm:|secure:)?[a-z]+)\[\]\.(.+)$/.exec(arrayPath);
   const cfg = m ? ROW_SLOTS[m[1]!] : undefined;
@@ -124,6 +125,8 @@ export function toRowTarget(arrayPath: string, row: number): string | null {
 
 /** Inverse of toRowTarget: "contact3.email" -> {contacts[].email, row 2}. */
 export function rowTargetOf(path: string): { arrayPath: string; row: number } | null {
+  const vehicleNote = /^note:vehicle([1-9]|10)$/.exec(path);
+  if (vehicleNote) return { arrayPath: "note:vehicles[]", row: Number(vehicleNote[1]) };
   const propertyNote = /^note:property([1-9]|10)$/.exec(path);
   if (propertyNote) return { arrayPath: "note:properties[]", row: Number(propertyNote[1]) };
   for (const [array, cfg] of Object.entries(ROW_SLOTS)) {
@@ -209,7 +212,7 @@ export const NOTE_TARGET = "note";
 
 /** Which record's timeline a note teaching lands on ("note" = the insured
  * account, kept for mappings saved before the record choice existed). */
-export type NoteRecord = "account" | "contact" | "relatedcontact" | "property" | "opportunity" | "quote" | "policy";
+export type NoteRecord = "account" | "contact" | "relatedcontact" | "property" | "vehicle" | "opportunity" | "quote" | "policy";
 export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[] = [
   { value: "note", record: "account", label: "Notes: Insured (account)" },
   { value: "note:contact", record: "contact", label: "Notes: Primary contact" },
@@ -217,6 +220,7 @@ export const NOTE_TARGETS: { value: string; record: NoteRecord; label: string }[
   // primary insured to note:contact, others to note:contact2, note:contact3 ...)
   { value: "note:contacts[]", record: "relatedcontact", label: "Notes: Each contact's own timeline" },
   { value: "note:properties[]", record: "property", label: "Notes: Properties (all rows)" },
+  { value: "note:vehicles[]", record: "vehicle", label: "Notes: Vehicles (all rows)" },
   { value: "note:opportunity", record: "opportunity", label: "Notes: Opportunity" },
   { value: "note:quote", record: "quote", label: "Notes: Quote" },
   { value: "note:policy", record: "policy", label: "Notes: Policy" }
@@ -231,10 +235,15 @@ export const isPrimaryTarget = (path: string | undefined): boolean =>
  * second related contact; contact1 is the primary insured). */
 const RELATED_NOTE = /^note:contact([2-9]|[1-3]\d)$/;
 const PROPERTY_NOTE = /^note:property([1-9]|[1-3]\d)$/;
+const VEHICLE_NOTE = /^note:vehicle([1-9]|[1-3]\d)$/;
+export const vehicleNoteSlotOf = (path: string | undefined): number | null => {
+  const m = VEHICLE_NOTE.exec(path ?? "");
+  return m ? Number(m[1]) : null;
+};
 export const isNoteTarget = (path: string | undefined): boolean =>
-  NOTE_TARGETS.some(t => t.value === path) || RELATED_NOTE.test(path ?? "") || PROPERTY_NOTE.test(path ?? "");
+  NOTE_TARGETS.some(t => t.value === path) || RELATED_NOTE.test(path ?? "") || PROPERTY_NOTE.test(path ?? "") || VEHICLE_NOTE.test(path ?? "");
 export const noteRecordOf = (path: string | undefined): NoteRecord | null =>
-  PROPERTY_NOTE.test(path ?? "") ? "property" : RELATED_NOTE.test(path ?? "") ? "relatedcontact" : NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
+  VEHICLE_NOTE.test(path ?? "") ? "vehicle" : PROPERTY_NOTE.test(path ?? "") ? "property" : RELATED_NOTE.test(path ?? "") ? "relatedcontact" : NOTE_TARGETS.find(t => t.value === path)?.record ?? null;
 export const propertyNoteSlotOf = (path: string | undefined): number | null => {
   const m = PROPERTY_NOTE.exec(path ?? "");
   return m ? Number(m[1]) : null;
@@ -246,6 +255,8 @@ export const noteSlotOf = (path: string | undefined): number | null => {
 };
 /** Display label for any note target, resolved rows included. */
 export const noteLabelOf = (path: string | undefined): string => {
+  const vehicle = vehicleNoteSlotOf(path);
+  if (vehicle) return `Notes: Vehicle ${vehicle}`;
   const property = propertyNoteSlotOf(path);
   if (property) return `Notes: Property ${property}`;
   const slot = noteSlotOf(path);
