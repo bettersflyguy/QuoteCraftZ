@@ -41,6 +41,10 @@ Other source-specific property details (heat counts, basement classifications, r
 
 ## Choices, security and exclusions
 
+### Capture-label correction
+
+The mapping editor and harvester previously used separate caption resolvers. The driver grid's first caption, `Date of Birth / Age`, was consequently reused for gender, licensing, occupation and note entries; the name grid similarly reused First Name for surnames. Capture now shares the editor's PL Rater control-label resolver. Re-ingestion replaces stale captions for the same control/target on the same site while retaining other held pages. Never fill controls are excluded from new capture rows. A live driver re-ingestion verified distinct First Name, Last Name, Date of Birth, Gender, License Status, Excluded Driver and Years at Occupation labels, including scoped notes and secured identifiers.
+
 Explicit choice translations: Work → Commute; Leasing Company → Lessor; all ten education levels; Undergraduate → College Student; hip-roof variants → Hip; In-Ground → In Ground. Original source choices are also retained in scoped notes alongside coarser CRM classifications. Unsupported indoor-pool/construction variants remain recoverable. Placeholders are not answers.
 
 Billing/payment and carrier agent-identity controls are Never fill. Derived driver age and years licensed are Never fill because DOB and licensing date are separate inputs. Prospect/Client does not control CRM lead qualification. SSN/license numbers use secured pass-through, never notes or repository data.
@@ -49,4 +53,4 @@ Import the manifest through the site's mapping import in extension Settings. Imp
 
 PL Rater's existing package has Protective Devices enabled without individual devices selected. It can show a required-information dialog on navigation. Do not fabricate device answers to bypass it; inspect the controls and return to the existing quote without rating it.
 
-Validation: production build passed; the full suite passed 644 tests in 85 files with two workers. The final label/highlight regressions passed their focused tests, and all seven portal-peek tests passed. No CRM customizations or customer-record writes were performed.
+Validation: production build passed; the full suite passed 647 tests in 85 files with two workers after the capture-label correction. Regression tests cover capture labels, scoped notes, Never fill exclusion, and stale-caption replacement without losing other held pages. No CRM customizations or customer-record writes were performed.

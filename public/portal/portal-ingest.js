@@ -84,6 +84,9 @@
   }
 
   function labelFor(control) {
+    const sourceLabel = typeof globalThis.__bettersSourceControlLabel === "function"
+      ? globalThis.__bettersSourceControlLabel(control) : "";
+    if (sourceLabel) return sourceLabel;
     const question = control.closest("icq-question");
     const caption = question && question.querySelector(":scope > label");
     if (caption) return text(caption).slice(0, 140);
@@ -731,6 +734,7 @@
         const value = valueFor(control);
         const paths = binding ? (globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.mappingTargets(binding) : [binding]) : [null];
         paths.forEach(path => {
+        if (path === "skip") return;
         if (isSecurePath(path)) {
           if (value && secureOut) secureOut.push({ path, value });
           return;

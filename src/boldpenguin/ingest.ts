@@ -144,7 +144,17 @@ export function mergeIngestedFields(
   // current value: the old one is replaced, never kept beside it
   const slot = (f: CapturedAppField) => [f.section, f.group, canonical(f.label)].join("|");
   const reread = new Set(incoming.map(slot));
-  const held = withoutIdentifiers(existing.fields, secured);
+  const samePlRater = [existing.source.url, site.url].every(url => {
+    try { return new URL(url ?? "").origin === "https://rating.vertafore.com"; } catch { return false; }
+  });
+  // Older PL Rater captures labelled whole grid columns with their first
+  // caption. A re-read has the same durable control name and target but a
+  // corrected caption. Replace that stale row, retaining other pages/targets.
+  const captions = new Map(incoming.filter(f => f.name).map(f => [`${f.name}|${f.mapped ?? ""}`, f.label]));
+  const held = withoutIdentifiers(existing.fields, secured).filter(f => {
+    const corrected = samePlRater && f.name ? captions.get(`${f.name}|${f.mapped ?? ""}`) : undefined;
+    return corrected === undefined || canonical(corrected) === canonical(f.label);
+  });
   const known = new Set(held.map(fieldKey));
   const now = new Set(incoming.map(fieldKey));
   const added = incoming.filter(field => !known.has(fieldKey(field)));

@@ -1940,6 +1940,8 @@
    * on capture exactly as it does on fill */
   globalThis.__bettersControlKey = controlKey;
   globalThis.__bettersSavedKey = savedKeyOf;
+  // Capture and mapping must use the same site-specific control captions.
+  globalThis.__bettersSourceControlLabel = plRaterVehicleLabel;
   globalThis.__bettersIsSensitiveLabel = isSensitiveSource;
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
   globalThis.__bettersPortalPick = (timeoutMs, overrides) => pickField(timeoutMs, overrides || {});

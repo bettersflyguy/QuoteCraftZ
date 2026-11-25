@@ -5,7 +5,29 @@ beforeAll(() => {
   vi.stubGlobal('location', new URL('https://rating.vertafore.com/UserInterface/Main/clientEdit.aspx'));
   HTMLElement.prototype.getBoundingClientRect = function () { return { x:0,y:0,left:0,top:0,right:100,bottom:20,width:100,height:20,toJSON(){} } as DOMRect; };
   Element.prototype.getClientRects = function () { return [this.getBoundingClientRect()] as unknown as DOMRectList; };
-  for (const file of ['portal-mapper.js','portal-fill.js']) new Function(readFileSync(`public/portal/${file}`,'utf8'))();
+  vi.stubGlobal('CSS',{escape:(s:string)=>s.replace(/([^\w-])/g,'\\$1')});
+  for (const file of ['portal-mapper.js','portal-ingest.js','portal-fill.js']) new Function(readFileSync(`public/portal/${file}`,'utf8'))();
+});
+it('captures distinct source labels and scoped notes instead of the grid first caption', () => {
+  document.body.innerHTML = `<div><label>Date of Birth / Age</label>
+    <input id="DriverCtlBody_1_rdiDateOfBirth" name="DriverCtlBody_1$rdiDateOfBirth" value="03/11/1972">
+    <input id="DriverCtlBody_1_datAge" name="DriverCtlBody_1$datAge" value="54">
+    <select id="DriverCtlBody_1_cmbSex" name="DriverCtlBody_1$cmbSex"><option>Female</option></select>
+    <input type="checkbox" id="DriverCtlBody_1_chkOperatorExcl" name="DriverCtlBody_1$chkOperatorExcl">
+    <input id="DriverCtlBody_1_rniYearsAtOccupation" name="DriverCtlBody_1$rniYearsAtOccupation" value="30"></div>`;
+  const result=(globalThis as unknown as {__bettersPortalIngest:(a:unknown,b:unknown)=>{fields:{name:string;label:string;value:string;mapped?:string}[]}}).__bettersPortalIngest([],{
+    'text:DriverCtlBody_1$rdiDateOfBirth':'crm:primarycontact.birthdate',
+    'text:DriverCtlBody_1$datAge':'skip',
+    'select:DriverCtlBody_1$cmbSex':'crm:primarycontact.gendercode',
+    'checkbox:DriverCtlBody_1$chkOperatorExcl':'note:contact',
+    'text:DriverCtlBody_1$rniYearsAtOccupation':'crm:primarycontact.iacrm_yearsemployed'
+  });
+  const byName=Object.fromEntries(result.fields.filter(f=>f.name).map(f=>[f.name,f]));
+  expect(byName['DriverCtlBody_1$rdiDateOfBirth']?.label).toBe('Date of Birth');
+  expect(byName['DriverCtlBody_1$cmbSex']?.label).toBe('Gender');
+  expect(byName['DriverCtlBody_1$chkOperatorExcl']).toMatchObject({label:'Excluded Driver',value:'No',mapped:'note:contact'});
+  expect(byName['DriverCtlBody_1$rniYearsAtOccupation']?.label).toBe('Years at Occupation');
+  expect(byName['DriverCtlBody_1$datAge']).toBeUndefined();
 });
 it('distinguishes fields inside PL Rater layout containers and identifies secured inputs', () => {
   document.body.innerHTML = `<div><label>Opt Out</label><input id="txtFirstName" name="txtFirstName"><input id="txtLastName" name="txtLastName"><input id="rmiSocialSecurity" name="rmiSocialSecurity"></div>
