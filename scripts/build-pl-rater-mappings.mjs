@@ -83,7 +83,7 @@ for(const [s,col] of Object.entries({rdiLossDate:'lossdate',rniLossAmount:'amoun
 put('checkbox:chkHotTub','note:property1');
 put('checkbox:chkGuarded','note:property1');
 // Preserve the exact source choice alongside coarser CRM classifications.
-for(const [key,target] of Object.entries(maps))if(key.startsWith('select:')&&target.startsWith('crm:')&&!target.includes('additionalinterest')){
+for(const [key,target] of Object.entries(maps))if(key.startsWith('select:')&&target.startsWith('crm:')&&!target.includes('additionalinterest')&&!key.endsWith('$cmbEducationLevel')){
   const note=target.startsWith('crm:property')?'note:property1':target.startsWith('crm:vehicle')?`note:vehicle${/vehicle(\d+)/.exec(target)[1]}`:target.startsWith('crm:primarycontact')?'note:contact':target.startsWith('crm:contact')?`note:contact${/contact(\d+)/.exec(target)[1]}`:null;
   if(note)maps[key]='targets:'+JSON.stringify([target,note]);
 }

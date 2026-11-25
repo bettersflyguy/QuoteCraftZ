@@ -1,7 +1,7 @@
 {
   "type": "iacrm-quote-connector-fieldmaps",
   "version": 1,
-  "exportedAt": "2026-11-25T04:09:38.701Z",
+  "exportedAt": "2026-11-25T04:17:31.637Z",
   "maps": {
     "https://rating.vertafore.com": {
       "select:cmbPriorCompany": "coverage.currentCarrier",
@@ -453,7 +453,7 @@
       "select:DriverCtlBody_*$cmbStateLic": "targets:[\"crm:contacts[].iacrm_dlstate\",\"note:contacts[]\"]",
       "select:DriverCtlBody_*$cmbOccupation": "targets:[\"crm:contacts[].iacrm_occupation\",\"note:contacts[]\"]",
       "text:DriverCtlBody_*$rniYearsCurrentEmployer": "crm:contacts[].iacrm_yearsemployed",
-      "select:DriverCtlBody_*$cmbEducationLevel": "targets:[\"crm:contacts[].educationcode\",\"note:contacts[]\"]",
+      "select:DriverCtlBody_*$cmbEducationLevel": "crm:contacts[].educationcode",
       "select:DriverCtlBody_*$cmbEnrollTelematics": "targets:[\"crm:contacts[].iacrm_telematicsagreement\",\"note:contacts[]\"]",
       "checkbox:DriverCtlBody_*$chkDriveTrain": "crm:contacts[].iacrm_drivereducation",
       "checkbox:DriverCtlBody_*$chkGoodStudent": "crm:contacts[].iacrm_goodstudent",

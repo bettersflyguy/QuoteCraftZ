@@ -56,6 +56,8 @@ var BettersMappingTargets = (function(exports) {
 		if (mappingTargets(out[occupation]).includes("crm:contacts[].iacrm_yearsemployed")) out[occupation] = packMappingTargets([...mappingTargets(out[occupation]).filter((t) => t !== "crm:contacts[].iacrm_yearsemployed"), "note:contacts[]"]);
 		const employer = "text:DriverCtlBody_*$rniYearsCurrentEmployer";
 		if (out[employer] === "note:contacts[]") out[employer] = "crm:contacts[].iacrm_yearsemployed";
+		const education = "select:DriverCtlBody_*$cmbEducationLevel";
+		if (mappingTargets(out[education]).includes("crm:contacts[].educationcode")) out[education] = packMappingTargets(mappingTargets(out[education]).filter((t) => t !== "note:contacts[]"));
 		return out;
 	}
 	/** Use all visible record columns, including empty controls, to establish

@@ -1,5 +1,10 @@
 import {expect,it} from 'vitest';
 import {collectionFieldMap,nativeCollectionKey,resolveCollectionFieldMap} from '@/portal/mappingTargets';
+it('keeps driver education on its Contact choice destination without a redundant note target',()=>{
+  const map=collectionFieldMap({'select:DriverCtlBody_1$cmbEducationLevel':'targets:["crm:primarycontact.educationcode","note:contact"]','select:DriverCtlBody_2$cmbEducationLevel':'targets:["crm:contact2.educationcode","note:contact2"]'});
+  expect(map).toEqual({'select:DriverCtlBody_*$cmbEducationLevel':'crm:contacts[].educationcode'});
+  expect(collectionFieldMap(map)).toEqual(map);
+});
 it('maps current-employer tenure to Contact and preserves occupation tenure separately',()=>{
   const map=collectionFieldMap({'text:DriverCtlBody_1$rniYearsAtOccupation':'crm:primarycontact.iacrm_yearsemployed','text:DriverCtlBody_1$rniYearsCurrentEmployer':'note:contact'});
   expect(map['text:DriverCtlBody_*$rniYearsAtOccupation']).toBe('note:contacts[]');
