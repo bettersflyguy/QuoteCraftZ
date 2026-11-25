@@ -1,5 +1,11 @@
 import {expect,it} from 'vitest';
 import {collectionFieldMap,nativeCollectionKey,resolveCollectionFieldMap} from '@/portal/mappingTargets';
+it('maps current-employer tenure to Contact and preserves occupation tenure separately',()=>{
+  const map=collectionFieldMap({'text:DriverCtlBody_1$rniYearsAtOccupation':'crm:primarycontact.iacrm_yearsemployed','text:DriverCtlBody_1$rniYearsCurrentEmployer':'note:contact'});
+  expect(map['text:DriverCtlBody_*$rniYearsAtOccupation']).toBe('note:contacts[]');
+  expect(map['text:DriverCtlBody_*$rniYearsCurrentEmployer']).toBe('crm:contacts[].iacrm_yearsemployed');
+  expect(collectionFieldMap(map)).toEqual(map);
+});
 it('migrates numbered mappings to one reusable field while preserving fan-out notes',()=>{
   const result=collectionFieldMap({
     'text:DriverCtlHeader_1$txtFirstName':'crm:primarycontact.firstname',

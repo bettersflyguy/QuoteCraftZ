@@ -15,7 +15,7 @@ import { QuotesView } from "../QuotesView";
 import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult, LeadSelection } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { captureTables, securedCaptureTable } from "../captureTables";
-import { noteTables } from "@/boldpenguin/noteTables";
+import { additionalNoteFields, noteTables } from "@/boldpenguin/noteTables";
 import { isNoteTarget } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
@@ -366,7 +366,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const displayFields=app?captureDisplayFields(app.fields):[];
   const namesPending=Boolean(app && pendingNameReviews(app).length);
   // values tagged for a timeline note show apart from the regular capture
-  const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped)) : [];
+  const noteFields = app ? additionalNoteFields(app.fields.filter(f => isNoteTarget(f.mapped)),app.fields) : [];
   const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
   const policyFields = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && isPolicySection(f.section)) : [];
   const renderGrid = (t: GridTable, at = 0) => (
@@ -519,7 +519,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
       )}
       {app && view === "data" && noteFields.length > 0 && (
         <div className={styles.notesBlock}>
-          <div className={styles.notesTitle}><NotepadRegular /> Non Mapped Timeline Entries</div>
+          <div className={styles.notesTitle}><NotepadRegular /> Additional timeline data</div>
           {noteTables(noteFields,app.fields).map((t,i)=>renderGrid(t,i))}
         </div>
       )}

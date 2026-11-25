@@ -18,13 +18,13 @@ for(let n=1;n<=3;n++){
 const interest={txtName:'iacrm_name',txtAddress:'iacrm_street',txtCity:'iacrm_city',cmbState:'iacrm_state',txtZipCode:'iacrm_zip',cmbType:'iacrm_interesttype',txtLoanNumber:'iacrm_loanoraccountnumber'};
 for(const [suffix,col] of Object.entries(interest))put(`${kind(suffix)}:rptAdditionalInterestData$ctl01$${suffix}`,`crm:additionalinterest1.${col}`);
 // Primary insured is distinct from related contacts: the first driver is Tracey.
-const driverTyped={rdiDateOfBirth:'birthdate',cmbSex:'gendercode',cmbMaritalStatus:'familystatuscode',cmbLicStatus:'iacrm_dlstatus',cmbStateLic:'iacrm_dlstate',cmbOccupation:'iacrm_occupation',rniYearsAtOccupation:'iacrm_yearsemployed',cmbEducationLevel:'educationcode',cmbEnrollTelematics:'iacrm_telematicsagreement',chkDriveTrain:'iacrm_drivereducation',chkGoodStudent:'iacrm_goodstudent'};
+const driverTyped={rdiDateOfBirth:'birthdate',cmbSex:'gendercode',cmbMaritalStatus:'familystatuscode',cmbLicStatus:'iacrm_dlstatus',cmbStateLic:'iacrm_dlstate',cmbOccupation:'iacrm_occupation',rniYearsCurrentEmployer:'iacrm_yearsemployed',cmbEducationLevel:'educationcode',cmbEnrollTelematics:'iacrm_telematicsagreement',chkDriveTrain:'iacrm_drivereducation',chkGoodStudent:'iacrm_goodstudent'};
 for(let n=1;n<=3;n++){
   const prefix=n===1?'crm:primarycontact':`crm:contact${n}`;
   for(const [suffix,col] of Object.entries({txtFirstName:'firstname',txtMiddleName:'middlename',txtLastName:'lastname'}))put(`text:DriverCtlHeader_${n}$${suffix}`,`${prefix}.${col}`);
   for(const [suffix,col] of Object.entries(driverTyped))put(`${kind(suffix)}:DriverCtlBody_${n}$${suffix}`,`${prefix}.${col}`);
   if(n>1)put(`select:DriverCtlBody_${n}$cmbRelationship`,`${prefix}.iacrm_driverrelationship`);
-  for(const suffix of ['chkOperatorExcl','chkCustody','cmbPOMF','cmbAuto','chkForeignInternationalLicense','rdiDateLicensed','cmbFiling','cmbIndustry','rniYearsCurrentEmployer','rniSchoolMile'])put(`${kind(suffix)}:DriverCtlBody_${n}$${suffix}`,n===1?'note:contact':`note:contact${n}`);
+  for(const suffix of ['chkOperatorExcl','chkCustody','cmbPOMF','cmbAuto','chkForeignInternationalLicense','rdiDateLicensed','cmbFiling','cmbIndustry','rniYearsAtOccupation','rniSchoolMile'])put(`${kind(suffix)}:DriverCtlBody_${n}$${suffix}`,n===1?'note:contact':`note:contact${n}`);
 }
 // Reviewed against the live Minnesota package screens. Notes retain source labels.
 for(const s of ['txtRiskDescription','cmbCreditAuth','cmbBusinessType','cmbTerm','chkPaperless','cmbPriorType','cmbPriorBI','rniLenCovYears','rniLenCovMonths','chkPriorLapse','cmbCarefulDriver'])put(`${kind(s)}:${s}`,'note:opportunity');

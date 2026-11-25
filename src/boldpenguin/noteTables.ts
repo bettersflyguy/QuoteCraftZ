@@ -1,5 +1,6 @@
 import type { CapturedAppField } from './types';
-import { isGridRow } from './normalize';
+import { canonical, isGridRow } from './normalize';
+import { isNoteTarget } from '@/portal/fieldMaps';
 import { recordRefOf, recordTables, type RecordTable } from './recordTables';
 
 const TYPES: Record<string, {title:string;singular:string}> = {
@@ -8,6 +9,14 @@ const TYPES: Record<string, {title:string;singular:string}> = {
 };
 const destinationTitle=(target:string|undefined)=>({note:'Insured','note:opportunity':'Opportunity','note:quote':'Quote','note:policy':'Policy'} as Record<string,string>)[target??''] || 'Other risks';
 const policyContext=(section:string|undefined)=>/^(?:(?:prior|new) .{1,30} policy|opportunity policy - .{1,30})$/i.test(section??'');
+
+/** The preview lists a mapped fact once. Raw source-choice notes remain held
+ * for CRM history, but an identical typed Contact/asset value is not a gap. */
+export function additionalNoteFields(fields:CapturedAppField[],context:CapturedAppField[]):CapturedAppField[] {
+  const key=(f:CapturedAppField)=>JSON.stringify([f.source,f.section,f.name||`${f.group}|${f.label}`,canonical(f.value)]);
+  const typed=new Set(context.filter(f=>f.mapped && f.mapped!=='skip' && !isNoteTarget(f.mapped)).map(key));
+  return fields.filter(f=>!typed.has(key(f)));
+}
 
 function recordIdentity(kind:string,slot:number,context:CapturedAppField[]):string {
   const values=new Map<string,string>();

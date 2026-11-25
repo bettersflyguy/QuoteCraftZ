@@ -10,10 +10,11 @@ Primary client and the first driver column map to the primary contact. Subsequen
 
 ## Create new columns
 
-The following columns are absent from canonical Vehicle metadata at CRM commit `b76c53f68ac03df076aecad766f554f1a0b6f2b2`. The live picker also had no plate, ownership-duration or four-wheel-drive destination. No schemas were deployed in this audit.
+The Vehicle columns below are absent from canonical metadata at CRM commit `b76c53f68ac03df076aecad766f554f1a0b6f2b2`. Contact occupation tenure was checked against that baseline as well. The live picker also had no plate, ownership-duration or four-wheel-drive destination. No schemas were deployed in this audit.
 
 | Source | Target table | Representation to create | Current fallback |
 | --- | --- | --- | --- |
+| Years at Occupation | `contact` | New nonnegative whole number for occupation tenure. Existing `iacrm_yearsemployed` means years with the current employer and must not be reused. | That contact's timeline note |
 | License Plate Number | `iacrm_vehicle` | New text column | Matching vehicle timeline note |
 | Ownership Years | `iacrm_vehicle` | New nonnegative whole number | Matching vehicle timeline note |
 | Ownership Months | `iacrm_vehicle` | New whole number, 0–11 | Matching vehicle timeline note |
@@ -32,7 +33,7 @@ The following columns are absent from canonical Vehicle metadata at CRM commit `
 | Certificate of Insurance | Existing Additional Interest Certificate Holder flag | Conditional type-to-flag transform | Raw interest type on opportunity note alongside typed type binding |
 | Joint Ownership, Trust, Corporate Owned | Existing Additional Interest type | Extend its choices after business review | Raw interest type on opportunity note |
 | Separate ABS, airbag, anti-theft checkboxes | Existing Vehicle ABS/airbags/anti-theft columns | Aggregate booleans accurately; avoid last-checkbox-wins writes | Individual values on matching vehicle note |
-| Driver excluded / filing / assigned vehicle | Contact rating status / SR-22 / driver-vehicle relationships | Conditional transforms and lookup resolution | That person's notes |
+| Driver excluded / filing / assigned vehicle | Policy Driver rating status / Contact SR-22 and FR-44 / driver-vehicle relationships | Conditional transforms and lookup resolution; do not reuse deprecated Contact rating status | That person's notes |
 | PL Rater Industry | Contact employment industry / occupation | Explicit crosswalk: PL Rater's list contains occupations such as Nurse and Pilot, not the CRM industry taxonomy | That person's notes |
 | Hot tub / guarded community | Property Jacuzzi / guards-or-watchmen counts | Presence does not establish a count. Collect quantity or add a presence flag; do not invent a count. | Property 1 notes |
 | Scheduled property category totals / watercraft liability | Existing Scheduled Item / Watercraft and Quote Coverage | Supply item identity and coverage context; totals do not identify individual assets | Opportunity notes |
@@ -42,6 +43,10 @@ Other source-specific property details (heat counts, basement classifications, r
 ## Choices, security and exclusions
 
 ### Capture table layout
+
+Drivers are Contact records. First/middle/last name, birthdate, gender, marital status, DL status/state, occupation, education, driver training, good student, telematics, course dates and current-employer tenure use typed Contact destinations. The employer control `rniYearsCurrentEmployer` maps to `contact.iacrm_yearsemployed`; older defaults incorrectly applied this destination to `rniYearsAtOccupation` and now migrate automatically. Occupation tenure stays separate in contact notes pending its own column.
+
+The Intake heading is **Additional timeline data**, not an assertion that the whole driver is unmapped. Identical typed/source-note copies are hidden from this preview; the original notes remain held for CRM history. Different source wording and fields without a safe typed mapping stay visible. Excluded/rated status belongs to Policy Driver (the Contact rating-status column is deprecated); filing and assigned-vehicle inputs still need conditional transforms/relationship resolution. These are representation gaps, not evidence that a Driver is a different entity from Contact.
 
 The Intake preview displays field names as column headers with their values beneath, one contact, vehicle or property per row. Native form controls use the same record grouping as captured data-service tables. Scoped notes and masked secured identifiers also use horizontal field-header tables. Headers stay visible during vertical scrolling; wider tables scroll horizontally. Presentation grouping does not modify held capture data or CRM destinations, and multiple targets still display a source field only once. The installed extension was checked on the live PL Rater driver page with three separate contact rows and three masked license rows.
 
@@ -61,4 +66,4 @@ Import the manifest through the site's mapping import in extension Settings. Imp
 
 PL Rater's existing package has Protective Devices enabled without individual devices selected. It can show a required-information dialog on navigation. Do not fabricate device answers to bypass it; inspect the controls and return to the existing quote without rating it.
 
-Validation: production build passed; the full suite passed 661 tests in 88 files with two workers after the unified fallback-table update. Tests exercise five driver columns with sparse indices, scan deduplication, real capture/fill, primary-contact routing, independent vehicles, scoped notes, secured routing, saved-map migration, collection choice translation, and shared field-header tables in Intake and CRM note HTML. Live acceptance verified three identified driver rows in one fallback table, three identified vehicle rows in one fallback table, and one address-identified property row. The current Driver, Vehicle and Home General screens were re-ingested after installation. No CRM customizations or customer-record writes were performed.
+Validation: production build passed; the full suite passed 663 tests in 88 files with two workers after the Contact tenure and preview corrections. Tests exercise five driver columns with sparse indices, scan deduplication, real capture/fill, primary-contact routing, independent vehicles, scoped notes, secured routing, saved-map migration, occupation/employer tenure separation, preview-only deduplication, collection choice translation, and shared field-header tables in Intake and CRM note HTML. Live acceptance verified three identified driver rows in one fallback table, three identified vehicle rows in one fallback table, one address-identified property row, and current-employer tenure in the typed Contacts table. The current Driver, Vehicle and Home General screens were re-ingested after installation. No CRM customizations or customer-record writes were performed.

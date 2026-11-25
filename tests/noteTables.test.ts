@@ -1,8 +1,17 @@
 import {expect,it} from 'vitest';
-import {noteTables} from '@/boldpenguin/noteTables';
+import {additionalNoteFields,noteTables} from '@/boldpenguin/noteTables';
 import {buildVehicleNote} from '@/crm/appCommit';
 import type {CapturedAppField,CapturedApplication} from '@/boldpenguin/types';
 const field=(label:string,value:string,mapped:string,section='PL Rater'):CapturedAppField=>({label,value,mapped,section,group:'',source:'control'});
+it('does not present an identical mapped Contact value as an unmapped gap',()=>{
+  const typed={...field('Gender','Female','crm:primarycontact.gendercode'),name:'DriverCtlBody_1$cmbSex'};
+  const copy={...typed,mapped:'note:contact'};
+  const different={...field('Gender','Male','note:contact2'),name:'DriverCtlBody_2$cmbSex'};
+  const rawChoice={...field('Education',"Bachelor's Degree",'note:contact'),name:'DriverCtlBody_1$cmbEducationLevel'};
+  const context=[typed,copy,different,rawChoice,{...rawChoice,mapped:'crm:primarycontact.educationcode',value:'BA / BS'}];
+  expect(additionalNoteFields([copy,different,rawChoice],context)).toEqual([different,rawChoice]);
+  expect(context).toContain(copy);
+});
 it('combines vehicles across pages into one table with shared headers and distinct identified rows',()=>{
   const notes=[field('Ownership','Financed','note:vehicle1'),field('Plate','ABC','note:vehicle1','Vehicle details'),field('Ownership','Owned','note:vehicle2'),field('Four Wheel Drive','Yes','note:vehicle3'),field('Plate','XYZ','note:vehicle3')];
   const context=[...notes,field('Year','2020','vehicle1.year'),field('Make','Ford','vehicle1.make'),field('Model','Escape','vehicle1.model')];

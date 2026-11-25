@@ -54,6 +54,14 @@ export function collectionFieldMap(map: Record<string,string>): Record<string,st
       out[family]=packMappingTargets([...previous.filter(t=>t!=='skip'),...targets]);
     } else if(!previous.length) out[family]=packMappingTargets(targets);
   }
+  // Older PL Rater templates confused occupation tenure with employer tenure.
+  // Only migrate those known defaults; leave custom destinations untouched.
+  const occupation='text:DriverCtlBody_*$rniYearsAtOccupation';
+  if(mappingTargets(out[occupation]).includes('crm:contacts[].iacrm_yearsemployed')) {
+    out[occupation]=packMappingTargets([...mappingTargets(out[occupation]).filter(t=>t!=='crm:contacts[].iacrm_yearsemployed'),'note:contacts[]']);
+  }
+  const employer='text:DriverCtlBody_*$rniYearsCurrentEmployer';
+  if(out[employer]==='note:contacts[]')out[employer]='crm:contacts[].iacrm_yearsemployed';
   return out;
 }
 /** Use all visible record columns, including empty controls, to establish
