@@ -41,6 +41,10 @@ Other source-specific property details (heat counts, basement classifications, r
 
 ## Choices, security and exclusions
 
+### Capture table layout
+
+The Intake preview displays field names as column headers with their values beneath, one contact, vehicle or property per row. Native form controls use the same record grouping as captured data-service tables. Scoped notes and masked secured identifiers also use horizontal field-header tables. Headers stay visible during vertical scrolling; wider tables scroll horizontally. Presentation grouping does not modify held capture data or CRM destinations, and multiple targets still display a source field only once. The installed extension was checked on the live PL Rater driver page with three separate contact rows and three masked license rows.
+
 ### Capture-label correction
 
 The mapping editor and harvester previously used separate caption resolvers. The driver grid's first caption, `Date of Birth / Age`, was consequently reused for gender, licensing, occupation and note entries; the name grid similarly reused First Name for surnames. Capture now shares the editor's PL Rater control-label resolver. Re-ingestion replaces stale captions for the same control/target on the same site while retaining other held pages. Never fill controls are excluded from new capture rows. A live driver re-ingestion verified distinct First Name, Last Name, Date of Birth, Gender, License Status, Excluded Driver and Years at Occupation labels, including scoped notes and secured identifiers.
@@ -53,4 +57,4 @@ Import the manifest through the site's mapping import in extension Settings. Imp
 
 PL Rater's existing package has Protective Devices enabled without individual devices selected. It can show a required-information dialog on navigation. Do not fabricate device answers to bypass it; inspect the controls and return to the existing quote without rating it.
 
-Validation: production build passed; the full suite passed 647 tests in 85 files with two workers after the capture-label correction. Regression tests cover capture labels, scoped notes, Never fill exclusion, and stale-caption replacement without losing other held pages. No CRM customizations or customer-record writes were performed.
+Validation: production build passed; the full suite passed 650 tests in 86 files with two workers after the capture table layout update. Regression tests cover field-header contact rows, scoped notes, masked secured rows, capture labels, Never fill exclusion, and stale-caption replacement without losing other held pages. No CRM customizations or customer-record writes were performed.
