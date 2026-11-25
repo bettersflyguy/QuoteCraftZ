@@ -1914,6 +1914,7 @@
     });
     let shown = 0;
     all.forEach(function (el) {
+      if (!visible(el)) return;
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
       if (plRaterNativeForm && !isControl) return;

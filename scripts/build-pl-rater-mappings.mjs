@@ -61,6 +61,21 @@ put('select:rptAdditionalInterestData$ctl01$cmbType','targets:'+JSON.stringify([
 for(const [s,col] of Object.entries({txtAddress:'addressline1',rniZipCode:'postalcode',txtCity:'city',txtState:'stateprovince',txtCounty:'county',cmbResType:'residencetype',cmbBCEGSCode:'buildingcodegrade'}))put(`${kind(s)}:${s}`,`crm:property1.iacrm_${col}`);
 put('select:cmbOwnership','note:property1');
 put('text:hdnAddressVerified','skip');
+put('textarea:HeaderCtl1$taNotes','note:opportunity');
+put('select:MenuCtl1$cmbExistingQuotes','skip');
+for(const s of ['cmbLapseDetails','rniLenCurrentPriorYears','rniLenCurrentPriorMonths','rniLenInsuredYears','rniLenInsuredMonths','rniPriorDurationMonths','rniPriorDurationDays','cmbNoNeedDetails','rniValidInsuranceTimeMonths','rniValidInsuranceTimeDays','chkPriorLapseNone','rniPriorDurationNoneMonths','rniPriorDurationNoneDays'])put(`${kind(s)}:${s}`,'note:opportunity');
+for(const s of ['cmbPrimaryHeatTankLocation','cmbAuxiliaryHeatTankLocation','chkTrampolineNet','chkTrampolineFence','chkPoolLocked','chkPoolLadder','chkRetLockLadder','chkHotTubFence','chkHotTubLocked'])put(`${kind(s)}:${s}`,'note:property1');
+for(const [s,col] of Object.entries({chkPoolDivingBoard:'divingboard',chkPoolSlide:'slide',chkPoolFence:'poolfenced'}))put(`${kind(s)}:${s}`,`crm:property1.iacrm_${col}`);
+for(let n=1;n<=3;n++){
+  for(const s of ['rniSymbol','txtTerritory','cmbBodyType','chkMultiCar','txtAddress','rniZipCode','datCityName','datCountyName','chkPublicTrans','chkCombatAutoTheft'])put(`${kind(s)}:AutoCtlBody_${n}$${s}`,`note:vehicle${n}`);
+  for(const [s,col] of Object.entries({rniStatedAmount:'iacrm_value',rniWorkMiles:'iacrm_onewaycommutemiles',chkCarPool:'iacrm_carpool',cmbAntiTheft:'iacrm_antitheft'}))put(`${kind(s)}:AutoCtlBody_${n}$${s}`,`crm:vehicle${n}.${col}`);
+  const person=n===1?'crm:primarycontact':`crm:contact${n}`, note=n===1?'note:contact':`note:contact${n}`;
+  put(`text:DriverCtlBody_${n}$rdiDefensive`,`${person}.iacrm_defensivedrivercoursedate`);
+  put(`checkbox:DriverCtlBody_${n}$chkMature`,`${person}.iacrm_maturedriver`);
+  for(const s of ['rdiAccPrev','chkWLExcl','chkCollegeGrad','chkDrugAwareness','chkYouthGroup'])put(`${kind(s)}:DriverCtlBody_${n}$${s}`,note);
+}
+for(const s of ['rniBodilyInjuryAmount','rniPropertyDamgeAmount','rniUMAmount','rniMedPaymentAmount','rniCollisionAmount','chkDeathOccurred','rniSpeed','rniPostedLimit','cmbCompLossType','rniCompLossAmt','rniMonthsSuspension','chkPrayerJudgement'])put(`${kind(s)}:rptMVRData$ctl01$${s}`,'note:opportunity');
+for(const s of ['chkAgentMVR','chkMARMV','chkIncidentPrefill'])put(`checkbox:${s}`,'skip');
 for(const [s,col] of Object.entries({rdiLossDate:'lossdate',rniLossAmount:'amountpaid',chkCatastrophicRelated:'catastrophe',cmbClaimStatus:'status',cmbCauseofLoss:'losstype',txtLossDescription:'description'}))put(`${s==='txtLossDescription'?'textarea':kind(s)}:${s}`,`crm:propertyloss1.iacrm_${col}`);
 // A checkbox is presence, not a count. Preserve it without inventing one.
 put('checkbox:chkHotTub','note:property1');
