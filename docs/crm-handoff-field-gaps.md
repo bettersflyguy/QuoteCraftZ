@@ -1,5 +1,7 @@
 # EZLynx to CRM: complete fields, representations and current fallbacks
 
+**Current implementation instructions (2026-11-25): [Claude CRM schema instructions](claude-crm-schema-instructions.md).** Use that document for CREATE versus DEPLOY EXISTING versus REUSE decisions, proposed types/limits/descriptions, and driver-assignment writer work. The dated reconciliation below is historical: several formerly missing definitions now exist in canonical Git but remain absent from the checked production environment. Do not recreate them from an older CREATE row.
+
 ## Current active CRM reconciliation — 2026-11-21
 
 This section and the refreshed Required work cells supersede the historical dev-only deployment status below. The complete metadata was repulled read-only from `https://bettersinsurance.crm.dynamics.com`: **core 1.3.0.380, 2,155 tables, 90,897 attributes**, captured `2026-11-22T00:37:28.6438090Z`. Choice metadata was refreshed for eleven mapping-related tables. The environment label in the extension remains Prod; this audit identifies the target by its exact URL.

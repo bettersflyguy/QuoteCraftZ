@@ -10,6 +10,8 @@ Primary client and the first driver column map to the primary contact. Subsequen
 
 ## Create new columns
 
+The implementation specification is now [Claude CRM schema instructions](claude-crm-schema-instructions.md), dated 2026-11-25. It supplies proposed exact names, limits and metadata descriptions; the two vehicle Yes/No concepts below are specified there as three-state Choices so unknown is preserved. It also distinguishes additional proposed Property representations from existing definitions awaiting deployment.
+
 The Vehicle columns below are absent from canonical metadata at CRM commit `b76c53f68ac03df076aecad766f554f1a0b6f2b2`. Contact occupation tenure was checked against that baseline as well. The live picker also had no plate, ownership-duration or four-wheel-drive destination. No schemas were deployed in this audit.
 
 | Source | Target table | Representation to create | Current fallback |
