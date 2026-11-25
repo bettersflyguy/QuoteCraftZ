@@ -8,6 +8,7 @@
  * educationcode"), so every row of a list shares one mapping. */
 import { canonical } from "@/boldpenguin/normalize";
 import { ROW_TABLES, SLOT_ENTITY } from "./assetTables";
+import { PL_RATER_RESIDENCE_CHOICES } from './plRaterChoices';
 
 export const OPTIONMAP_STORAGE_KEY = "portal/optionMap";
 
@@ -78,7 +79,9 @@ export function toSourceText(crm: string, map: ColumnOptionMap | undefined, opti
 
 export async function getOptionMaps(): Promise<OptionMaps> {
   const s = await chrome.storage.local.get(OPTIONMAP_STORAGE_KEY);
-  return (s[OPTIONMAP_STORAGE_KEY] as OptionMaps | undefined) ?? {};
+  const maps=(s[OPTIONMAP_STORAGE_KEY] as OptionMaps | undefined) ?? {};
+  const site='https://rating.vertafore.com',column='iacrm_property.iacrm_residencetype';
+  return {...maps,[site]:{...maps[site],[column]:{...PL_RATER_RESIDENCE_CHOICES,...maps[site]?.[column]}}};
 }
 
 /** Replaces one source's mappings for the given columns (empty = cleared). */

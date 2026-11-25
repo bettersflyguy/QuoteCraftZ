@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
-const {collectionFieldMap}=createRequire(import.meta.url)('../public/portal/mapping-targets.js');
+const {collectionFieldMap,PL_RATER_RESIDENCE_CHOICES}=createRequire(import.meta.url)('../public/portal/mapping-targets.js');
 const maps = {};
 const put=(key,target)=>{maps[key]=target;};
 put('select:cmbPriorCompany','coverage.currentCarrier');
@@ -83,11 +83,12 @@ for(const [s,col] of Object.entries({rdiLossDate:'lossdate',rniLossAmount:'amoun
 put('checkbox:chkHotTub','note:property1');
 put('checkbox:chkGuarded','note:property1');
 // Preserve the exact source choice alongside coarser CRM classifications.
-for(const [key,target] of Object.entries(maps))if(key.startsWith('select:')&&target.startsWith('crm:')&&!target.includes('additionalinterest')&&!key.endsWith('$cmbEducationLevel')){
+for(const [key,target] of Object.entries(maps))if(key.startsWith('select:')&&target.startsWith('crm:')&&!target.includes('additionalinterest')&&!key.endsWith('$cmbEducationLevel')&&key!=='select:cmbResType'){
   const note=target.startsWith('crm:property')?'note:property1':target.startsWith('crm:vehicle')?`note:vehicle${/vehicle(\d+)/.exec(target)[1]}`:target.startsWith('crm:primarycontact')?'note:contact':target.startsWith('crm:contact')?`note:contact${/contact(\d+)/.exec(target)[1]}`:null;
   if(note)maps[key]='targets:'+JSON.stringify([target,note]);
 }
 const options={'https://rating.vertafore.com':{'iacrm_additionalinterest.iacrm_interesttype':{'Leasing Company':298400002},'iacrm_vehicle.iacrm_use':{Work:298400001},'contact.educationcode':{'Less than High School':298400001,GED:298400002,'High School':298400002,'Some College':298400003,'Community or Junior College':298400005,"Bachelor's Degree":298400006,'Masters Degree':298400007,'Ph. D.':298400008,'Medical Degree':298400009,'Law Degree':298400010},'contact.iacrm_occupation':{Undergraduate:298400402},'iacrm_property.iacrm_roofdesign':{'Hip - Partial':298400004,'Hip - Full':298400004},'iacrm_property.iacrm_swimmingpool':{'In-Ground':298400002}}};
+options['https://rating.vertafore.com']['iacrm_property.iacrm_residencetype']=PL_RATER_RESIDENCE_CHOICES;
 const collectionMaps=collectionFieldMap(maps);
 const doc={type:'iacrm-quote-connector-fieldmaps',version:1,exportedAt:new Date().toISOString(),maps:{'https://rating.vertafore.com':collectionMaps},options};
 fs.writeFileSync(new URL('../public/mappings/quotecraftz-pl-rater.json',import.meta.url),JSON.stringify(doc,null,2)+'\n');

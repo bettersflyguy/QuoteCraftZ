@@ -1,6 +1,7 @@
 /** Existing one-target strings remain unchanged. Ordered fan-out bindings
  * keep their preferred fill source first and capture into every target. */
 export const MAX_MAPPING_TARGETS = 8;
+export { PL_RATER_RESIDENCE_CHOICES } from './plRaterChoices';
 const PREFIX = "targets:";
 export function mappingTargets(value: string | undefined): string[] {
   if (!value) return [];
@@ -66,6 +67,13 @@ export function collectionFieldMap(map: Record<string,string>): Record<string,st
   if(mappingTargets(out[education]).includes('crm:contacts[].educationcode')) {
     out[education]=packMappingTargets(mappingTargets(out[education]).filter(t=>t!=='note:contacts[]'));
   }
+  const residence='select:cmbResType';
+  const residenceTargets=mappingTargets(out[residence]);
+  const residenceNotes=new Set(residenceTargets.flatMap(t=>{
+    const m=/^crm:(property\d+|properties\[\])\.iacrm_residencetype$/.exec(t);
+    return m?[`note:${m[1]}`]:[];
+  }));
+  if(residenceNotes.size)out[residence]=packMappingTargets(residenceTargets.filter(t=>!residenceNotes.has(t)));
   return out;
 }
 /** Use all visible record columns, including empty controls, to establish
