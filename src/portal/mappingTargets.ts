@@ -25,3 +25,52 @@ export function preferredFieldMap(map: Record<string,string>): Record<string,str
 export function expandedFieldMap(map: Record<string,string>): [string,string][] {
   return Object.entries(map).flatMap(([k,v])=>mappingTargets(v).map(t=>[k,t] as [string,string]));
 }
+
+/** PL Rater lays records across columns. The index is instance identity in
+ * the DOM, not a part of the reusable field mapping. */
+const NATIVE_COLLECTION = /^(text|select|checkbox):(Driver|Auto)Ctl(Header|Body)_(\d+|\*)\$(\w+)$/;
+export function nativeCollectionKey(key: string): string | null {
+  const m = NATIVE_COLLECTION.exec(key);
+  return m ? `${m[1]}:${m[2]}Ctl${m[3]}_*$${m[5]}` : null;
+}
+export function nativeCollectionTarget(target: string): string {
+  return target
+    .replace(/^(crm:|secure:)?(?:primarycontact|contact\d*|contacts\[\])\./, (_,prefix='')=>`${prefix}contacts[].`)
+    .replace(/^(crm:)?vehicle\d+\./, (_,prefix='')=>`${prefix}vehicles[].`)
+    .replace(/^note:contact\d*$/, 'note:contacts[]')
+    .replace(/^note:vehicle\d+$/, 'note:vehicles[]');
+}
+export function collectionFieldMap(map: Record<string,string>): Record<string,string> {
+  const out: Record<string,string> = {};
+  const explicit=new Set(Object.keys(map).filter(k=>nativeCollectionKey(k)===k));
+  // Existing explicit collection mappings win over migrated instance maps.
+  for (const [key,value] of Object.entries(map)) if (!nativeCollectionKey(key) || key.includes('_*$')) out[key]=value;
+  for (const [key,value] of Object.entries(map)) {
+    const family=nativeCollectionKey(key);
+    if (!family || explicit.has(family)) continue;
+    const targets=mappingTargets(value).map(nativeCollectionTarget);
+    const previous=mappingTargets(out[family]);
+    if(targets.length && targets[0]!=='skip') {
+      out[family]=packMappingTargets([...previous.filter(t=>t!=='skip'),...targets]);
+    } else if(!previous.length) out[family]=packMappingTargets(targets);
+  }
+  return out;
+}
+/** Use all visible record columns, including empty controls, to establish
+ * position. A missing field cannot shift the next person's/vehicle's values. */
+export function resolveCollectionFieldMap(map: Record<string,string>, keys: string[]): Record<string,string> {
+  const normalized=collectionFieldMap(map), out={...normalized};
+  const columns:Record<string,string[]>={Driver:[],Auto:[]};
+  for(const key of keys){const m=NATIVE_COLLECTION.exec(key);if(m&&m[4]!=='*'&&!columns[m[2]!]!.includes(m[4]!))columns[m[2]!]!.push(m[4]!);}
+  for(const key of keys){
+    const m=NATIVE_COLLECTION.exec(key),family=nativeCollectionKey(key);
+    if(!m||!family||!normalized[family])continue;
+    const slot=columns[m[2]!]!.indexOf(m[4]!)+1;
+    out[key]=packMappingTargets(mappingTargets(normalized[family]).map(target=>target
+      .replace(/^(crm:|secure:)?contacts\[\]\./,(_,prefix='')=>prefix==='secure:'?(slot===1?'secure:primarycontact.':`secure:contact${slot}.`):prefix==='crm:'?(slot===1?'crm:primarycontact.':`crm:contact${slot}.`):(slot===1?'contact.':`contact${slot}.`))
+      .replace(/^(crm:)?vehicles\[\]\./,(_,prefix='')=>`${prefix}vehicle${slot}.`)
+      .replace(/^note:contacts\[\]$/,slot===1?'note:contact':`note:contact${slot}`)
+      .replace(/^note:vehicles\[\]$/,`note:vehicle${slot}`)));
+  }
+  return out;
+}

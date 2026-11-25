@@ -1,6 +1,6 @@
 /** Applies one-for-one choice mappings to the two directions of travel. */
 import type { CapturedAppField } from "@/boldpenguin/types";
-import { mappingTargets } from "./mappingTargets";
+import { mappingTargets, nativeCollectionTarget } from "./mappingTargets";
 import type { CatalogColumn, FieldCatalog } from "@/crm/fieldCatalog";
 import { columnKeyOf, entityKeyOf, toCrmChoice, toSourceText, type ColumnOptionMap } from "./optionMaps";
 
@@ -36,7 +36,9 @@ export function translateFillChoices(
 ): Record<string, string> {
   if (!scope) return values;
   const out = { ...values };
-  for (const path of new Set(Object.values(overrides).flatMap(mappingTargets))) {
+  const targets=Object.values(overrides).flatMap(mappingTargets);
+  const paths=new Set(targets.flatMap(path=>path.includes('[].') ? Object.keys(out).filter(key=>nativeCollectionTarget(key)===path) : [path]));
+  for (const path of paths) {
     if (!path.startsWith("crm:") || !out[path]) continue;
     const col = choiceColumnOf(path, catalog);
     const key = columnKeyOf(path);

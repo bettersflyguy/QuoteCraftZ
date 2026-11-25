@@ -4,7 +4,7 @@ import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { choiceColumnOf } from "@/portal/choiceRouting";
 import { columnKeyOf, type ColumnOptionMap } from "@/portal/optionMaps";
 import { MultiTargetPicker } from "./MultiTargetPicker";
-import { mappingTargets, packMappingTargets, preferredTarget } from "@/portal/mappingTargets";
+import { mappingTargets, packMappingTargets, preferredTarget, nativeCollectionKey, nativeCollectionTarget } from "@/portal/mappingTargets";
 import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import {
@@ -311,6 +311,10 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
         // across them all instead of naming one row
         const choose = (v: string) => {
           const selected = mappingTargets(v);
+          if (nativeCollectionKey(r.key)) {
+            setTarget(r.key, packMappingTargets(selected.map(nativeCollectionTarget)));
+            return;
+          }
           const fam = !isPick && selected.some(isArrayPath) ? familyKeyOf(r) : null;
           if (fam) {
             if (!allRows.some(x => x.key === fam.key)) {
@@ -330,7 +334,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
         };
         // a CRM choice target: each of this field's options binds to one CRM choice
         const targetExtras = (target:string,change:(target:string)=>void) => {
-          const row = !isPick ? rowTargetOf(target) : null;
+          const row = !isPick && !nativeCollectionKey(r.key) ? rowTargetOf(target) : null;
           const col = setChoices ? choiceColumnOf(target,catalog) : null;
           return <>
             {row && <select aria-label="Row" value={row.row} onChange={e=>change(toRowTarget(row.arrayPath,Number(e.target.value)) || target)} style={{fontSize:12}}>

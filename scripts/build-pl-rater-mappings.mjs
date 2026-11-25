@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
+const {collectionFieldMap}=createRequire(import.meta.url)('../public/portal/mapping-targets.js');
 const maps = {};
 const put=(key,target)=>{maps[key]=target;};
 put('select:cmbPriorCompany','coverage.currentCarrier');
@@ -86,6 +88,7 @@ for(const [key,target] of Object.entries(maps))if(key.startsWith('select:')&&tar
   if(note)maps[key]='targets:'+JSON.stringify([target,note]);
 }
 const options={'https://rating.vertafore.com':{'iacrm_additionalinterest.iacrm_interesttype':{'Leasing Company':298400002},'iacrm_vehicle.iacrm_use':{Work:298400001},'contact.educationcode':{'Less than High School':298400001,GED:298400002,'High School':298400002,'Some College':298400003,'Community or Junior College':298400005,"Bachelor's Degree":298400006,'Masters Degree':298400007,'Ph. D.':298400008,'Medical Degree':298400009,'Law Degree':298400010},'contact.iacrm_occupation':{Undergraduate:298400402},'iacrm_property.iacrm_roofdesign':{'Hip - Partial':298400004,'Hip - Full':298400004},'iacrm_property.iacrm_swimmingpool':{'In-Ground':298400002}}};
-const doc={type:'iacrm-quote-connector-fieldmaps',version:1,exportedAt:new Date().toISOString(),maps:{'https://rating.vertafore.com':maps},options};
+const collectionMaps=collectionFieldMap(maps);
+const doc={type:'iacrm-quote-connector-fieldmaps',version:1,exportedAt:new Date().toISOString(),maps:{'https://rating.vertafore.com':collectionMaps},options};
 fs.writeFileSync(new URL('../public/mappings/quotecraftz-pl-rater.json',import.meta.url),JSON.stringify(doc,null,2)+'\n');
-console.log(`Generated ${Object.keys(maps).length} PL Rater bindings.`);
+console.log(`Generated ${Object.keys(collectionMaps).length} PL Rater bindings with automatic driver/vehicle collections.`);

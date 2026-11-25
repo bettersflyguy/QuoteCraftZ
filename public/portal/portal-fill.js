@@ -252,6 +252,15 @@
     const tag = el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase();
     return (tag + ":" + (clean(el.name) || clean(el.id))).slice(0, 120);
   }
+  function nativeFamily(key) {
+    return /(^|\.)rating\.vertafore\.com$/i.test(location.hostname) && globalThis.BettersMappingTargets
+      ? globalThis.BettersMappingTargets.nativeCollectionKey(key) : null;
+  }
+  function collectionMap(map) {
+    if (!/(^|\.)rating\.vertafore\.com$/i.test(location.hostname) || !globalThis.BettersMappingTargets) return map || {};
+    const keys=Array.from(document.querySelectorAll('input,select,textarea')).filter(captureVisible).map(keyBase);
+    return globalThis.BettersMappingTargets.resolveCollectionFieldMap(map || {},keys);
+  }
   function sharedBases() {
     const c = tick();
     if (c.bases) return c.bases;
@@ -432,6 +441,8 @@
    * - Otherwise its current key, as before. */
   function rowKeyOf(map, element) {
     const key = controlKey(element);
+    const family = nativeFamily(keyBase(element));
+    if (family) return family;
     const own = labelKeyOf(element);
     if (!own) return key;
     if (map && map[own]) return own;
@@ -743,7 +754,7 @@
     return dropRadioKeys;
   }
   async function fillPass(payload, overwrite, autoAdvance, overrides) {
-    const ov = globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.preferredFieldMap(overrides || {}) : overrides || {};
+    const ov = globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.preferredFieldMap(collectionMap(overrides)) : overrides || {};
     const candidates = mapper.buildCandidates(payload);
     const fillRoot = activeModal() || document;
     const controls = pageControls(fillRoot);
@@ -873,7 +884,7 @@
    * mapping names a secured target that `values` carries. Values are never
    * echoed back; the result lists labels and target paths. */
   async function fillSecure(values, overwrite, overrides) {
-    const ov = overrides || {};
+    const ov = collectionMap(overrides);
     const vals = values || {};
     const filled = [];
     let missing = 0;
@@ -1008,6 +1019,7 @@
     /* never a password, hidden, file or button control, on any path */
     const all = Array.from(document.querySelectorAll(LABELLED_FIELDS))
       .filter((c) => !isNotChoice(c));
+    if (nativeFamily(key) === key) return all.find(c => captureVisible(c) && nativeFamily(keyBase(c)) === key) || null;
     /* keys are computed lazily and kept: an exact hit must not pay for every
      * other control (controlKey can run a document-wide label lookup) */
     const keyOf = new Map();
@@ -1209,7 +1221,7 @@
   /* mapping editor's view of this frame: every visible control with its key,
    * visible label, what auto-matching would pick, and any saved mapping */
   function scanControls(payload, overrides) {
-    const ov = overrides || {};
+    const ov = collectionMap(overrides);
     const candidates = payload ? mapper.buildCandidates(payload) : [];
     const rows = [];
     const seen = new Set();
@@ -1231,7 +1243,7 @@
       if ((element.disabled || element.readOnly) && (!ov[key] || inherited)) continue;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (legacy !== key) {
+      if (legacy !== key && !nativeFamily(key)) {
         const hit = legacyShared.get(legacy) || { element, count: 0 };
         hit.count += 1;
         legacyShared.set(legacy, hit);
@@ -1778,6 +1790,8 @@
       if (["hidden", "password", "file", "submit", "button", "reset", "image"].indexOf(type) !== -1 || !visible(el)) return;
       var k = controlKey(el);
       (byKey[k] = byKey[k] || []).push(el);
+      var family = nativeFamily(keyBase(el));
+      if (family) (byKey[family] = byKey[family] || []).push(el);
       var ok = labelKeyOf(el);
       if (ok && ok !== k) (byKey[ok] = byKey[ok] || []).push(el);
     });
@@ -1918,7 +1932,7 @@
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
       if (plRaterNativeForm && !isControl) return;
-      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(labelKeyOf(el)))) return;
+      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(labelKeyOf(el)) || coveredKeys.has(nativeFamily(keyBase(el))))) return;
       if (isControl && serviceLabels.length && serviceCovers(el)) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
       markPeek(el, "unmapped", "");
@@ -1942,6 +1956,7 @@
   globalThis.__bettersSavedKey = savedKeyOf;
   // Capture and mapping must use the same site-specific control captions.
   globalThis.__bettersSourceControlLabel = plRaterVehicleLabel;
+  globalThis.__bettersCollectionFieldMap = collectionMap;
   globalThis.__bettersIsSensitiveLabel = isSensitiveSource;
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
   globalThis.__bettersPortalPick = (timeoutMs, overrides) => pickField(timeoutMs, overrides || {});

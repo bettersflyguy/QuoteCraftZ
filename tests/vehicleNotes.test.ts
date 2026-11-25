@@ -35,9 +35,9 @@ it("imports every reviewed PL Rater binding without dropping rows", () => {
   expect(result.fields).toBe(Object.keys(JSON.parse(text).maps["https://rating.vertafore.com"]).length);
   expect(result.fields).toBeGreaterThan(450);
   const map = result.maps["https://rating.vertafore.com"]!;
-  expect(map["text:DriverCtlHeader_1$txtFirstName"]).toBe("crm:primarycontact.firstname");
-  expect(map["text:DriverCtlHeader_2$txtFirstName"]).toBe("crm:contact2.firstname");
-  expect(map["text:AutoCtlBody_3$txtLicensePlate"]).toBe("note:vehicle3");
+  expect(map["text:DriverCtlHeader_*$txtFirstName"]).toBe("crm:contacts[].firstname");
+  expect(map["text:DriverCtlHeader_2$txtFirstName"]).toBeUndefined();
+  expect(map["text:AutoCtlBody_*$txtLicensePlate"]).toBe("note:vehicles[]");
 });
 
 it("preserves vehicle-note row bindings in shared mappings", () => {

@@ -709,7 +709,7 @@
     const section = pageSection(modal);
     const root = leadRoot || modal || document.querySelector("main") || document;
     const fields = [];
-    const map = controlMap || {};
+    const map = typeof globalThis.__bettersCollectionFieldMap === 'function' ? globalThis.__bettersCollectionFieldMap(controlMap) : controlMap || {};
     const baseKeyOf = typeof globalThis.__bettersControlKey === "function" ? globalThis.__bettersControlKey : null;
     /* the key the control's saved mapping lives under: its own key, or the
      * legacy key a mapping saved before same-id controls were told apart

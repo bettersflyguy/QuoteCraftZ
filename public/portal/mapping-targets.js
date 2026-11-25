@@ -30,13 +30,61 @@ var BettersMappingTargets = (function(exports) {
 	function expandedFieldMap(map) {
 		return Object.entries(map).flatMap(([k, v]) => mappingTargets(v).map((t) => [k, t]));
 	}
+	/** PL Rater lays records across columns. The index is instance identity in
+	* the DOM, not a part of the reusable field mapping. */
+	var NATIVE_COLLECTION = /^(text|select|checkbox):(Driver|Auto)Ctl(Header|Body)_(\d+|\*)\$(\w+)$/;
+	function nativeCollectionKey(key) {
+		const m = NATIVE_COLLECTION.exec(key);
+		return m ? `${m[1]}:${m[2]}Ctl${m[3]}_*$${m[5]}` : null;
+	}
+	function nativeCollectionTarget(target) {
+		return target.replace(/^(crm:|secure:)?(?:primarycontact|contact\d*|contacts\[\])\./, (_, prefix = "") => `${prefix}contacts[].`).replace(/^(crm:)?vehicle\d+\./, (_, prefix = "") => `${prefix}vehicles[].`).replace(/^note:contact\d*$/, "note:contacts[]").replace(/^note:vehicle\d+$/, "note:vehicles[]");
+	}
+	function collectionFieldMap(map) {
+		const out = {};
+		const explicit = new Set(Object.keys(map).filter((k) => nativeCollectionKey(k) === k));
+		for (const [key, value] of Object.entries(map)) if (!nativeCollectionKey(key) || key.includes("_*$")) out[key] = value;
+		for (const [key, value] of Object.entries(map)) {
+			const family = nativeCollectionKey(key);
+			if (!family || explicit.has(family)) continue;
+			const targets = mappingTargets(value).map(nativeCollectionTarget);
+			const previous = mappingTargets(out[family]);
+			if (targets.length && targets[0] !== "skip") out[family] = packMappingTargets([...previous.filter((t) => t !== "skip"), ...targets]);
+			else if (!previous.length) out[family] = packMappingTargets(targets);
+		}
+		return out;
+	}
+	/** Use all visible record columns, including empty controls, to establish
+	* position. A missing field cannot shift the next person's/vehicle's values. */
+	function resolveCollectionFieldMap(map, keys) {
+		const normalized = collectionFieldMap(map), out = { ...normalized };
+		const columns = {
+			Driver: [],
+			Auto: []
+		};
+		for (const key of keys) {
+			const m = NATIVE_COLLECTION.exec(key);
+			if (m && m[4] !== "*" && !columns[m[2]].includes(m[4])) columns[m[2]].push(m[4]);
+		}
+		for (const key of keys) {
+			const m = NATIVE_COLLECTION.exec(key), family = nativeCollectionKey(key);
+			if (!m || !family || !normalized[family]) continue;
+			const slot = columns[m[2]].indexOf(m[4]) + 1;
+			out[key] = packMappingTargets(mappingTargets(normalized[family]).map((target) => target.replace(/^(crm:|secure:)?contacts\[\]\./, (_, prefix = "") => prefix === "secure:" ? slot === 1 ? "secure:primarycontact." : `secure:contact${slot}.` : prefix === "crm:" ? slot === 1 ? "crm:primarycontact." : `crm:contact${slot}.` : slot === 1 ? "contact." : `contact${slot}.`).replace(/^(crm:)?vehicles\[\]\./, (_, prefix = "") => `${prefix}vehicle${slot}.`).replace(/^note:contacts\[\]$/, slot === 1 ? "note:contact" : `note:contact${slot}`).replace(/^note:vehicles\[\]$/, `note:vehicle${slot}`)));
+		}
+		return out;
+	}
 	//#endregion
 	exports.MAX_MAPPING_TARGETS = MAX_MAPPING_TARGETS;
+	exports.collectionFieldMap = collectionFieldMap;
 	exports.expandedFieldMap = expandedFieldMap;
 	exports.mappingTargets = mappingTargets;
+	exports.nativeCollectionKey = nativeCollectionKey;
+	exports.nativeCollectionTarget = nativeCollectionTarget;
 	exports.packMappingTargets = packMappingTargets;
 	exports.preferredFieldMap = preferredFieldMap;
 	exports.preferredTarget = preferredTarget;
+	exports.resolveCollectionFieldMap = resolveCollectionFieldMap;
 	return exports;
 })({});
 

@@ -4,7 +4,7 @@
 
 import { COLUMN_KEY, sanitizeColumnMap, type OptionMaps } from "./optionMaps";
 import { ROW_TABLES } from "./assetTables";
-import { mappingTargets, packMappingTargets } from "./mappingTargets";
+import { collectionFieldMap, mappingTargets, packMappingTargets } from "./mappingTargets";
 export { ASSET_TABLES, CHILD_TABLES, ROW_TABLES, SLOT_ENTITY, type AssetTable, type ChildTable } from "./assetTables";
 
 export const FIELDMAP_STORAGE_KEY = "portal/fieldMap";
@@ -280,7 +280,8 @@ export const MAP_PATH_GROUPS: { group: string; paths: { path: string; label: str
 
 export async function getAllFieldMaps(): Promise<FieldMaps> {
   const s = await chrome.storage.local.get(FIELDMAP_STORAGE_KEY);
-  return (s[FIELDMAP_STORAGE_KEY] as FieldMaps | undefined) ?? {};
+  const maps=(s[FIELDMAP_STORAGE_KEY] as FieldMaps | undefined) ?? {};
+  return Object.fromEntries(Object.entries(maps).map(([origin,map])=>[origin,origin==='https://rating.vertafore.com'?collectionFieldMap(map):map]));
 }
 
 export async function setAllFieldMaps(maps: FieldMaps): Promise<void> {

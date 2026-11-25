@@ -24,6 +24,11 @@ const catalog: FieldCatalog = { envId: "e", fetchedAt: 0, entities: [
 ] };
 
 describe("choice mapping", () => {
+  it("translates collection mappings for primary and newly added contact slots", () => {
+    expect(translateFillChoices({'crm:primarycontact.educationcode':"Associate's",'crm:contact5.educationcode':"Associate's"},
+      {'select:DriverCtlBody_*$cmbEducationLevel':'crm:contacts[].educationcode'},
+      {'contact.educationcode':{'Some College':2}},catalog)).toEqual({'crm:primarycontact.educationcode':'Some College','crm:contact5.educationcode':'Some College'});
+  });
   it("keys per CRM column so every row shares one mapping", () => {
     expect(columnKeyOf("crm:primarycontact.educationcode")).toBe("contact.educationcode");
     expect(columnKeyOf("crm:contact3.educationcode")).toBe("contact.educationcode");
