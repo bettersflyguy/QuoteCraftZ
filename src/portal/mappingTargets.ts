@@ -55,14 +55,26 @@ export function collectionFieldMap(map: Record<string,string>): Record<string,st
       out[family]=packMappingTargets([...previous.filter(t=>t!=='skip'),...targets]);
     } else if(!previous.length) out[family]=packMappingTargets(targets);
   }
-  // Older PL Rater templates confused occupation tenure with employer tenure.
-  // Only migrate those known defaults; leave custom destinations untouched.
+  // Upgrade only the former reviewed defaults; leave custom destinations untouched.
   const occupation='text:DriverCtlBody_*$rniYearsAtOccupation';
-  if(mappingTargets(out[occupation]).includes('crm:contacts[].iacrm_yearsemployed')) {
-    out[occupation]=packMappingTargets([...mappingTargets(out[occupation]).filter(t=>t!=='crm:contacts[].iacrm_yearsemployed'),'note:contacts[]']);
-  }
+  const occupationTargets=mappingTargets(out[occupation]);
+  if(occupationTargets.includes('crm:contacts[].iacrm_yearsemployed')||occupationTargets.length===1&&occupationTargets[0]==='note:contacts[]')
+    out[occupation]=packMappingTargets(['crm:contacts[].iacrm_yearsatoccupation','note:contacts[]']);
   const employer='text:DriverCtlBody_*$rniYearsCurrentEmployer';
   if(out[employer]==='note:contacts[]')out[employer]='crm:contacts[].iacrm_yearsemployed';
+  const typedVehicle:Record<string,string>={
+    rniLengthOwnershipYrs:'iacrm_ownershipyears',rniLengthOwnershipMonths:'iacrm_ownershipmonths',txtLicensePlate:'iacrm_licenseplatenumber',chkCompanyCar:'iacrm_companycar',chkFourWheel:'iacrm_fourwheeldrive'
+  };
+  for(const [suffix,column] of Object.entries(typedVehicle)){
+    const key=`${suffix.startsWith('chk')?'checkbox':'text'}:AutoCtlBody_*$${suffix}`;
+    if(out[key]==='note:vehicles[]')out[key]=packMappingTargets([`crm:vehicles[].${column}`,'note:vehicles[]']);
+  }
+  const typedProperty:Record<string,string>={cmbFoundationType:'iacrm_foundationconstructiontype',chkHotTub:'iacrm_hottubpresent',chkGuarded:'iacrm_guardedcommunity'};
+  for(const [suffix,column] of Object.entries(typedProperty)){
+    const key=`${suffix.startsWith('chk')?'checkbox':'select'}:${suffix}`, targets=mappingTargets(out[key]);
+    const former=new Set(['note:property1','crm:property1.iacrm_foundation','crm:property1.iacrm_jacuzzis','crm:property1.iacrm_guardsorwatchmen']);
+    if(targets.length&&targets.every(t=>former.has(t)))out[key]=packMappingTargets([`crm:property1.${column}`,'note:property1']);
+  }
   const education='select:DriverCtlBody_*$cmbEducationLevel';
   if(mappingTargets(out[education]).includes('crm:contacts[].educationcode')) {
     out[education]=packMappingTargets(mappingTargets(out[education]).filter(t=>t!=='note:contacts[]'));

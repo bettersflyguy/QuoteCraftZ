@@ -244,7 +244,7 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
     (v.startsWith("label:") ? (captured.find(c => c.value === v)?.label ?? v.slice(6)) : v);
   const peekItems: PeekItem[] = allRows.flatMap<PeekItem>(r => {
     const v = draft[r.key] ?? "";
-    if (r.payment) return [];
+    if (r.payment) return [{ key: r.key, label: "Payment field, never filled", kind: "skip" }];
     if (v === "skip") return [{ key: r.key, label: "Never fill", kind: "skip" }];
     if (isNoteTarget(v)) return [{ key: r.key, label: noteLabelOf(v), kind: "mapped", array: true }];
     if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v), family: r.key.startsWith("field:") && isArrayPath(v) }];

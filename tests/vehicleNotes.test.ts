@@ -37,7 +37,10 @@ it("imports every reviewed PL Rater binding without dropping rows", () => {
   const map = result.maps["https://rating.vertafore.com"]!;
   expect(map["text:DriverCtlHeader_*$txtFirstName"]).toBe("crm:contacts[].firstname");
   expect(map["text:DriverCtlHeader_2$txtFirstName"]).toBeUndefined();
-  expect(map["text:AutoCtlBody_*$txtLicensePlate"]).toBe("note:vehicles[]");
+  expect(map["text:AutoCtlBody_*$txtLicensePlate"]).toBe('targets:["crm:vehicles[].iacrm_licenseplatenumber","note:vehicles[]"]');
+  expect(map["field:distance to recognized water source"]).toBe('targets:["crm:properties[].iacrm_firehydrantdistancerange","note:properties[]"]');
+  expect(map["field:distance to fire department"]).toBe("note:properties[]");
+  expect(map["field:alternate water supply"]).toBe("note:properties[]");
 });
 
 it("preserves vehicle-note row bindings in shared mappings", () => {

@@ -8,20 +8,24 @@ Covered screens: Client Information; Auto General, Vehicles, Additional Interest
 
 Primary client and the first driver column map to the primary contact. Subsequent driver columns map to additional contacts. Driver and vehicle Header/Body keys use `_*` collection bindings, resolved against the visible column identities in page order during scan, capture and fill. Added/removed columns require no additional mapping or Row selection. All columns, including empty controls, establish position so a missing cell does not shift later records. Secured values and scoped notes resolve to the same record positions; saved numbered mappings migrate when read and persist on Save mapping. Vehicles retain distinct records; previous/mailing addresses use customer-address rows 2/3; property data uses property row 1. The audit covers the existing Minnesota package; unvisited products, states, carriers and future layout changes still need review.
 
-## Create new columns
+## Delivered columns
 
-The implementation specification is now [Claude CRM schema instructions](claude-crm-schema-instructions.md), dated 2026-11-25. It supplies proposed exact names, limits and metadata descriptions; the two vehicle Yes/No concepts below are specified there as three-state Choices so unknown is preserved. It also distinguishes additional proposed Property representations from existing definitions awaiting deployment.
+The ten previously missing representations were added to canonical CRM source in BettersInsuranceCRM commit `2f0e5b041c89b1caa841755be028809ca34d7317` (solution 1.3.0.391) and are present on current CRM `origin/dev` as of 2026-11-26. QuoteCraftZ routes their PL Rater sources to the typed destinations below while retaining record-scoped notes for source wording and migration safety.
 
-The Vehicle columns below are absent from canonical metadata at CRM commit `b76c53f68ac03df076aecad766f554f1a0b6f2b2`. Contact occupation tenure was checked against that baseline as well. The live picker also had no plate, ownership-duration or four-wheel-drive destination. No schemas were deployed in this audit.
+The historical implementation specification remains in [Claude CRM schema instructions](claude-crm-schema-instructions.md). It is no longer a request to create these columns.
 
-| Source | Target table | Representation to create | Current fallback |
+| Source | Target table | Typed destination | Preserved fallback |
 | --- | --- | --- | --- |
-| Years at Occupation | `contact` | New nonnegative whole number for occupation tenure. Existing `iacrm_yearsemployed` means years with the current employer and must not be reused. | That contact's timeline note |
-| License Plate Number | `iacrm_vehicle` | New text column | Matching vehicle timeline note |
-| Ownership Years | `iacrm_vehicle` | New nonnegative whole number | Matching vehicle timeline note |
-| Ownership Months | `iacrm_vehicle` | New whole number, 0–11 | Matching vehicle timeline note |
-| 4 Wheel Drive | `iacrm_vehicle` | New Yes/No column | Matching vehicle timeline note |
-| Company Car | `iacrm_vehicle` | New Yes/No column | Matching vehicle timeline note |
+| Years at Occupation | `contact` | `iacrm_yearsatoccupation` | That contact's timeline note |
+| License Plate Number | `iacrm_vehicle` | `iacrm_licenseplatenumber` | Matching vehicle timeline note |
+| Ownership Years | `iacrm_vehicle` | `iacrm_ownershipyears` | Matching vehicle timeline note |
+| Ownership Months | `iacrm_vehicle` | `iacrm_ownershipmonths` | Matching vehicle timeline note |
+| 4 Wheel Drive | `iacrm_vehicle` | `iacrm_fourwheeldrive` | Matching vehicle timeline note |
+| Company Car | `iacrm_vehicle` | `iacrm_companycar` | Matching vehicle timeline note |
+| Foundation Type | `iacrm_property` | `iacrm_foundationconstructiontype` | Property 1 timeline note |
+| Distance to Recognized Water Source | `iacrm_property` | `iacrm_firehydrantdistancerange` | Property 1 timeline note |
+| Hot Tub | `iacrm_property` | `iacrm_hottubpresent` | Property 1 timeline note |
+| Guarded Community | `iacrm_property` | `iacrm_guardedcommunity` | Property 1 timeline note |
 
 ## Reuse existing schema
 
@@ -37,7 +41,7 @@ The Vehicle columns below are absent from canonical metadata at CRM commit `b76c
 | Separate ABS, airbag, anti-theft checkboxes | Existing Vehicle ABS/airbags/anti-theft columns | Aggregate booleans accurately; avoid last-checkbox-wins writes | Individual values on matching vehicle note |
 | Driver excluded / filing / assigned vehicle | Policy Driver rating status / Contact SR-22 and FR-44 / driver-vehicle relationships | Conditional transforms and lookup resolution; do not reuse deprecated Contact rating status | That person's notes |
 | PL Rater Industry | Contact employment industry / occupation | Explicit crosswalk: PL Rater's list contains occupations such as Nurse and Pilot, not the CRM industry taxonomy | That person's notes |
-| Hot tub / guarded community | Property Jacuzzi / guards-or-watchmen counts | Presence does not establish a count. Collect quantity or add a presence flag; do not invent a count. | Property 1 notes |
+| Hot tub / guarded community | `iacrm_hottubpresent` / `iacrm_guardedcommunity` | Delivered three-state presence choices; never write the Jacuzzi or guards-or-watchmen count columns from these checkboxes | Property 1 notes retained alongside the typed value |
 | Scheduled property category totals / watercraft liability | Existing Scheduled Item / Watercraft and Quote Coverage | Supply item identity and coverage context; totals do not identify individual assets | Opportunity notes |
 
 Other source-specific property details (heat counts, basement classifications, roof layers, roof coverage elections, partial renovations, solar/garage carrier questions) remain individually labelled Property 1 notes. The JSON manifest lists every control and its exact fallback. These require individual representation/transform review, not another property table.
@@ -46,7 +50,7 @@ Other source-specific property details (heat counts, basement classifications, r
 
 ### Capture table layout
 
-Drivers are Contact records. First/middle/last name, birthdate, gender, marital status, DL status/state, occupation, education, driver training, good student, telematics, course dates and current-employer tenure use typed Contact destinations. The employer control `rniYearsCurrentEmployer` maps to `contact.iacrm_yearsemployed`; older defaults incorrectly applied this destination to `rniYearsAtOccupation` and now migrate automatically. Occupation tenure stays separate in contact notes pending its own column.
+Drivers are Contact records. First/middle/last name, birthdate, gender, marital status, DL status/state, occupation, education, driver training, good student, telematics, course dates, current-employer tenure and occupation tenure use typed Contact destinations. The employer control `rniYearsCurrentEmployer` maps to `contact.iacrm_yearsemployed`; `rniYearsAtOccupation` maps to `contact.iacrm_yearsatoccupation`. Older saved defaults that conflated those concepts migrate automatically. The exact source wording remains in the matching contact note.
 
 The Intake heading is **Additional timeline data**, not an assertion that the whole driver is unmapped. Identical typed/source-note copies are hidden from this preview; the original notes remain held for CRM history. Different source wording and fields without a safe typed mapping stay visible. Excluded/rated status belongs to Policy Driver (the Contact rating-status column is deprecated); filing and assigned-vehicle inputs still need conditional transforms/relationship resolution. These are representation gaps, not evidence that a Driver is a different entity from Contact.
 

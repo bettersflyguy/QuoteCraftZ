@@ -1,10 +1,17 @@
 # Claude instructions: QuoteCraftZ CRM schema and import gaps
 
-Prepared for Nathan Betters, 2026-11-25. This is the current implementation handoff. It supersedes the **create** recommendations in older QuoteCraftZ handoffs wherever the dispositions below differ. Historical audit documents remain evidence, not a current deployment checklist.
+Prepared for Nathan Betters, 2026-11-25; delivery status updated 2026-11-26. The ten columns formerly specified for creation were delivered in BettersInsuranceCRM commit `2f0e5b041c89b1caa841755be028809ca34d7317` (solution 1.3.0.391) and are now mapped by QuoteCraftZ. The detailed definitions below remain implementation evidence and must not be treated as a request to create duplicate columns.
+
+## Delivery status
+
+- **DELIVERED AND MAPPED:** `contact.iacrm_yearsatoccupation`; Vehicle `iacrm_licenseplatenumber`, `iacrm_ownershipyears`, `iacrm_ownershipmonths`, `iacrm_fourwheeldrive`, `iacrm_companycar`; Property `iacrm_foundationconstructiontype`, `iacrm_firehydrantdistancerange`, `iacrm_hottubpresent`, `iacrm_guardedcommunity`.
+- QuoteCraftZ retains matching Contact, Vehicle or Property notes as a non-destructive source fallback. Capture preview still shows each source once.
+- Current-employer tenure remains `contact.iacrm_yearsemployed`; occupation tenure is now `contact.iacrm_yearsatoccupation`.
+- PL Rater's read-only “Distance to Recognized Water Source” value maps verbatim to `iacrm_firehydrantdistancerange`, not to the exact integer `iacrm_distancetofirehydrantfeet`.
 
 ## Assignment and evidence
 
-Implement the missing representations below on the existing CRM tables, expose them to QuoteCraftZ, and replace temporary notes only after typed writes and read-back succeed. Do not create a second Contact, Vehicle, Property, coverage or driver-assignment table.
+Treat the delivered definitions below as the authoritative schema contract. Do not recreate them. Continue the remaining writer and relationship work only after refreshing current metadata, and retire temporary notes only after typed writes and read-back succeed. Do not create a second Contact, Vehicle, Property, coverage or driver-assignment table.
 
 Evidence used:
 
@@ -14,13 +21,13 @@ Evidence used:
 - The five Property definitions and one Quote definition in section 3 exist in canonical Git XML but were absent from those production attribute responses. **Git existence is not deployment evidence.** Current dev was not inspected during this handoff.
 - Source coverage and current fallback details: `docs/pl-rater-mapping-gaps.md`, `public/mappings/quotecraftz-pl-rater.json`, its generator `scripts/build-pl-rater-mappings.mjs`, and `docs/crm-handoff-field-gaps.md` with its dated EZLynx inventories. These cover observed forms and known conditional controls, not every future state/carrier/product.
 
-All names and limits for **new** columns below are proposed implementation specifications, not claims that those definitions already exist. Recheck current dev/canonical metadata for an equivalent before creating. If an equivalent has appeared, document its exact name, type, semantics and limits and use it; do not create both. Every final disposition must say **CREATE**, **REUSE**, **DEPLOY EXISTING**, or **EXTEND CHOICES**, never “create/reuse.”
+The names, types and limits in sections 1 and 2 describe the delivered columns. Recheck current environment metadata before use, but do not create alternatives with different names. Every remaining disposition must say **REUSE**, **DEPLOY EXISTING**, **EXTEND CHOICES**, or **UNRESOLVED**, never “create/reuse.”
 
-## 1. CREATE: six confirmed Contact/Vehicle gaps
+## 1. DELIVERED: six Contact/Vehicle columns
 
-Use the existing `iacrm` publisher. Proposed schema names equal the logical names shown, matching the existing lowercase convention. Use English display labels and copy the descriptions verbatim into attribute metadata. All six columns are optional, audited and editable/readable through the API. Integer fields have format None and precision zero. No zero/No default should turn an unasked answer into an asserted answer. Character limit is **not applicable** to integers, Boolean or Choice columns; their constraints are given instead.
+The delivered columns use the existing `iacrm` publisher and lowercase logical names shown below. All six are optional and audited. Integer fields have format None and precision zero. No zero/No default should turn an unasked answer into an asserted answer. Character limit is **not applicable** to integers or Choice columns; their constraints are given instead.
 
-| Target table | Display name / proposed logical and schema name | Dataverse type and constraints | Description to include in field schema | Source and current fallback |
+| Target table | Display name / delivered logical and schema name | Dataverse type and constraints | Delivered field description | Source and preserved fallback |
 | --- | --- | --- | --- | --- |
 | Contact `contact` | Years at occupation — `iacrm_yearsatoccupation` | Whole Number; minimum 0, maximum 100; character limit N/A; no default | Completed years the person has worked in their occupation, across employers. Distinct from years with the current employer and years with a prior employer. Preserve an unasked or unknown answer as blank; zero means less than one completed year. | PL Rater driver `rniYearsAtOccupation`; matching primary/additional contact timeline data. Do not reuse `iacrm_yearsemployed` or `iacrm_prioryearsemployed`. |
 | Vehicle `iacrm_vehicle` | License plate number — `iacrm_licenseplatenumber` | Single Line of Text, Text format, **30 characters** | Vehicle registration plate identifier as supplied by the source, including meaningful letters, digits, spaces and punctuation. Distinct from VIN and registration state. Preserve leading zeros; do not store as a number. Blank means not supplied. | PL Rater License Plate Number; matching vehicle timeline data. Existing registration state/expiry do not hold the identifier. |
@@ -31,20 +38,20 @@ Use the existing `iacrm` publisher. Proposed schema names equal the logical name
 
 The older PL Rater gap list called the last two fields Yes/No. This handoff deliberately specifies three-state Choices, following the existing Property intake pattern, so unknown is representable. Update the extension catalog and explicit checkbox/choice transforms accordingly. An unchecked checkbox is No only when the source actually provides a completed answer, not merely because a new form starts unchecked. Never silently truncate overlength text or clamp out-of-range numbers: keep the raw scoped fallback and report validation failure.
 
-Ownership duration is a captured assertion and will age; do not run a job that increments these components. If the CRM team instead adopts a dated ownership-history model, record that decision and its exact capture-date contract before replacing these two proposed fields.
+Ownership duration is a captured assertion and will age; do not run a job that increments these components. If the CRM team later adopts a dated ownership-history model, record that decision and its exact capture-date contract before replacing these fields.
 
-## 2. CREATE: proposed Property representations for known semantic gaps
+## 2. DELIVERED: four Property representations
 
-These are additional design proposals supported by observed source mismatches. They are not delivered schema. Refresh metadata and check alternative property attributes before authoring. Keep source-specific text where a complete cross-service vocabulary has not been established; do not manufacture a supposedly complete ACORD Choice list from one screen.
+These four representations are delivered schema. Refresh metadata before use and do not author alternatives. Keep source-specific text where a complete cross-service vocabulary has not been established; do not manufacture a supposedly complete ACORD Choice list from one screen.
 
-| Target table | Display name / proposed logical and schema name | Type and limits | Description to include in field schema | Current fallback / reason existing field is unsuitable |
+| Target table | Display name / delivered logical and schema name | Type and limits | Delivered field description | Preserved fallback / reason older field is unsuitable |
 | --- | --- | --- | --- | --- |
 | Property `iacrm_property` | Foundation construction type — `iacrm_foundationconstructiontype` | Single Line of Text, Text format, **100 characters**, optional, no default | Source-reported physical foundation construction, such as slab, basement or crawlspace. Preserve the original description. Distinct from the Open, Closed or None foundation classification. Blank means not supplied; do not infer one classification from the other. | Property-scoped notes where no safe typed mapping exists. Live `iacrm_foundation` options are Open `298400000`, Closed `298400001`, None `298400002`; these do not mean slab/basement/crawlspace. Recheck the current PL Rater foundation binding against its actual source options before leaving any typed conversion enabled. |
 | Property `iacrm_property` | Fire hydrant distance range — `iacrm_firehydrantdistancerange` | Single Line of Text, Text format, **100 characters**, optional, no default | Source-reported distance band to a fire hydrant, preserving its unit and inclusive or exclusive wording, for example 1–500 feet. Distinct from a measured exact distance. Do not convert a range boundary or midpoint into an exact distance. Blank means not supplied. | Property-scoped notes for range answers. Existing `iacrm_distancetofirehydrantfeet` is an exact Whole Number; retain it for actual exact measurements. |
 | Property `iacrm_property` | Hot tub present — `iacrm_hottubpresent` | Choice: Yes `298400000`, No `298400001`, Unknown / not asked `298400002`; character limit N/A; optional; no selected default | Whether a hot tub or Jacuzzi is explicitly reported at the property. Presence does not establish the number of units. Preserve an unasked or unknown answer separately from No. | PL Rater `chkHotTub` currently goes to Property 1 notes. Existing `iacrm_jacuzzis` is a count. Never convert Yes into a count of one. |
 | Property `iacrm_property` | Guarded community — `iacrm_guardedcommunity` | Choice: Yes `298400000`, No `298400001`, Unknown / not asked `298400002`; character limit N/A; optional; no selected default | Whether the property is explicitly reported as being in a guarded community. Distinct from gated or limited-access community, twenty-four-hour security and a count of guards or watchmen. Preserve an unasked or unknown answer separately from No. | PL Rater `chkGuarded` currently goes to Property 1 notes. Existing `iacrm_guardsorwatchmen` is a count, not community presence. |
 
-Enable auditing for these four proposed additions. Do not change the types or meanings of the existing foundation, exact-distance or count columns to accommodate these sources.
+Auditing is enabled for these four delivered additions. Do not change the types or meanings of the existing foundation, exact-distance or count columns to accommodate these sources.
 
 **Exterior walls is a mapping/choice review first, not an automatic new field.** Live Property `iacrm_siding` already has Aluminum Siding, Stucco, Vinyl or Plastic, Cedar or Wood Shingle, EIFS on cinder block, EIFS on studs and Other. Reuse that field for equivalent material answers and extend its vocabulary only for reviewed missing meanings. `iacrm_walls` is Boolean and must not receive a material name. Preserve unmatched material text in the property's notes until the crosswalk is approved.
 
@@ -70,7 +77,7 @@ The following are not new schema requests. Implement or fix the mapping/writer. 
 | Source information | Existing destination and implementation instruction | Current fallback or limitation |
 | --- | --- | --- |
 | Driver identity, education and license status | Drivers are Contact records. Reuse `contact.educationcode`, `iacrm_dlstatus`, name/DOB/gender/marital-status fields, driver education, good student, telematics and secured identifiers. Use the explicit reviewed source-to-CRM choice maps. | A driver note section does not mean the entire driver is unmapped. Education already has an explicit ten-option PL Rater crosswalk. |
-| Employer tenure / prior employer tenure | `contact.iacrm_yearsemployed` / `iacrm_prioryearsemployed`. These are distinct from occupation tenure in section 1. | Current-employer tenure is typed; occupation tenure stays in that contact's notes. |
+| Employer tenure / prior employer tenure | `contact.iacrm_yearsemployed` / `iacrm_prioryearsemployed`. These are distinct from occupation tenure in section 1. | Current-employer and occupation tenure are both typed; scoped notes preserve source wording. |
 | Residence type | Property `iacrm_residencetype`; eight live choices: Dwelling, Apartment, Condominium, Townhouse, Rowhouse, Co-op, Mobile Home, Other. | Already mapped for all eight observed PL Rater options; do not recreate or route back to notes. |
 | Retirees credit, wood stoves, occupants and bathrooms | Existing Property retiree/retirement-community choices, `iacrm_woodburningstovecount`, `iacrm_householdresidents`, `iacrm_fullbathroomcount`, `iacrm_halfbathroomcount`; inspect the current canonical definitions. | Older handoffs requesting these columns are obsolete. Stove inserts and fireplaces remain separate quantities. |
 | Driver-to-vehicle association | `iacrm_vehicleassignment`, plus `iacrm_policydriver` when the context is a policy. See section 5. | Assigned-vehicle selection and EZLynx percentage matrix remain scoped notes until an association writer exists. |
@@ -84,7 +91,7 @@ The following are not new schema requests. Implement or fix the mapping/writer. 
 | Prior-carrier / continuous coverage duration | Existing Prior Coverage months-with-carrier and months-continuous-coverage fields. Teach the two native controls independently. | Ambiguous Months mapping retains opportunity notes. |
 | Exterior material | Existing Property `iacrm_siding`, with reviewed choice translation/extensions. | Unmatched values stay in Property notes; Boolean `iacrm_walls` is unsuitable. |
 
-Other note-only source controls, including custody, foreign/international-license answers, date first licensed, school-away mileage, heat-tank location, basement classifications, roof layers, pool safety and optional-coverage details, remain in the reviewed mapping manifest. Their presence in notes alone is not evidence that another Contact or Property column is required. Route contextual answers through the appropriate existing child model where possible. In particular, current license issue date is not necessarily first-ever licensing date; a student-away flag is not a distance; a count is not a presence flag. For unresolved concepts, record the source semantics and candidate-equivalent check before proposing additional schema. The ten new columns above are the concrete proposed addition set, not a claim that every conditional carrier question has been exhaustively modeled.
+Other note-only source controls, including custody, foreign/international-license answers, date first licensed, school-away mileage, heat-tank location, basement classifications, roof layers, pool safety and optional-coverage details, remain in the reviewed mapping manifest. Their presence in notes alone is not evidence that another Contact or Property column is required. Route contextual answers through the appropriate existing child model where possible. In particular, current license issue date is not necessarily first-ever licensing date; a student-away flag is not a distance; a count is not a presence flag. For unresolved concepts, record the source semantics and candidate-equivalent check before proposing additional schema. The ten delivered columns above are the completed addition set, not a claim that every conditional carrier question has been exhaustively modeled.
 
 ## 5. Driver assignments: schema exists; import is still missing
 
@@ -122,14 +129,14 @@ Implementation sequence:
 - For every CREATE row, capture before/after metadata: table, schema/logical name, display label, type, maximum length or numeric bounds, required level/default, auditing, description and full Choice values. For DEPLOY EXISTING, preserve the existing managed identity and option numbers. Never interpret PAC XML `Length=1` on a Choice as a one-character answer limit.
 - Update existing forms/views where appropriate; do not replace solution-owned forms/apps. Keep optional capture data optional. Do not store SSNs or license numbers in ordinary notes or commit customer values/credentials to Git.
 - Update QuoteCraftZ's metadata catalog, generator, shared manifests, transforms and tests to use final deployed names. Refresh the selected environment's metadata cache. Automatic collections must cover all Contacts/Vehicles/Properties, with the first PL Rater driver as primary and later columns as additional contacts; no fixed maximum-column mapping.
-- Add explicit Choice crosswalks; preserve source wording when a conversion loses information. Text fields must enforce the stated limits without silent truncation. Keep the proposed numeric bounds and precision in schema and validation. Reject invalid ownership-month values without corrupting adjacent vehicle rows.
+- Add explicit Choice crosswalks; preserve source wording when a conversion loses information. Text fields must enforce the stated limits without silent truncation. Keep the delivered numeric bounds and precision in schema and validation. Reject invalid ownership-month values without corrupting adjacent vehicle rows.
 - Keep existing scoped fallback/history until successful typed write/read-back. Do not delete historical timeline notes as a migration shortcut. Capture preview should show each source once even with multiple targets, and one horizontal table per risk type with one record per row.
 - Run the required solution checks/reviews and the authorized dev deployment/capture process. Validate the authenticated dev user path, not only metadata existence. Do not label production ready from a local build or Git merge.
 - Return one disposition ledger with **created**, **existing definition deployed**, **existing field reused**, **choice extended**, or **still unresolved**, exact PR/commit/deployment links, read-back evidence and remaining fallback for each row. Do not report a note-only association as a completed typed import.
 
 ## Acceptance checklist
 
-- [ ] Six confirmed Contact/Vehicle additions and four proposed Property representations have exact approved names, types, constraints and descriptions, with no duplicate equivalents.
+- [x] Six Contact/Vehicle additions and four Property representations have exact approved names, types, constraints and descriptions, with no duplicate equivalents; QuoteCraftZ maps their observed PL Rater sources.
 - [ ] The six already-authored Choice definitions are handled as existing deployment work, with current dev/production status recorded separately.
 - [ ] Education, residence type, retirees credit and other already-delivered columns are reused; no duplicate Contact/Property/coverage/assignment tables are created.
 - [ ] Primary and additional drivers, arbitrary vehicle counts and source reorder/removal preserve record identity.

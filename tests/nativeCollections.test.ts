@@ -5,11 +5,21 @@ it('keeps driver education on its Contact choice destination without a redundant
   expect(map).toEqual({'select:DriverCtlBody_*$cmbEducationLevel':'crm:contacts[].educationcode'});
   expect(collectionFieldMap(map)).toEqual(map);
 });
-it('maps current-employer tenure to Contact and preserves occupation tenure separately',()=>{
+it('maps current-employer and occupation tenure to their distinct Contact columns',()=>{
   const map=collectionFieldMap({'text:DriverCtlBody_1$rniYearsAtOccupation':'crm:primarycontact.iacrm_yearsemployed','text:DriverCtlBody_1$rniYearsCurrentEmployer':'note:contact'});
-  expect(map['text:DriverCtlBody_*$rniYearsAtOccupation']).toBe('note:contacts[]');
+  expect(map['text:DriverCtlBody_*$rniYearsAtOccupation']).toBe('targets:["crm:contacts[].iacrm_yearsatoccupation","note:contacts[]"]');
   expect(map['text:DriverCtlBody_*$rniYearsCurrentEmployer']).toBe('crm:contacts[].iacrm_yearsemployed');
   expect(collectionFieldMap(map)).toEqual(map);
+});
+it('upgrades former vehicle and property note/count mappings to the new typed columns',()=>{
+  const map=collectionFieldMap({
+    'text:AutoCtlBody_1$txtLicensePlate':'note:vehicle1','checkbox:AutoCtlBody_2$chkFourWheel':'note:vehicle2',
+    'select:cmbFoundationType':'targets:["crm:property1.iacrm_foundation","note:property1"]','checkbox:chkHotTub':'note:property1'
+  });
+  expect(map['text:AutoCtlBody_*$txtLicensePlate']).toBe('targets:["crm:vehicles[].iacrm_licenseplatenumber","note:vehicles[]"]');
+  expect(map['checkbox:AutoCtlBody_*$chkFourWheel']).toBe('targets:["crm:vehicles[].iacrm_fourwheeldrive","note:vehicles[]"]');
+  expect(map['select:cmbFoundationType']).toBe('targets:["crm:property1.iacrm_foundationconstructiontype","note:property1"]');
+  expect(map['checkbox:chkHotTub']).toBe('targets:["crm:property1.iacrm_hottubpresent","note:property1"]');
 });
 it('migrates numbered mappings to one reusable field while preserving fan-out notes',()=>{
   const result=collectionFieldMap({

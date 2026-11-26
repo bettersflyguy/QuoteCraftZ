@@ -121,7 +121,7 @@
       "person.education": "crm:contacts[].educationcode",
       "person.industry": "crm:contacts[].iacrm_employmentindustry",
       "person.occupation": "crm:contacts[].iacrm_employmentoccupation",
-      "person.yearsAtOccupation": "crm:contacts[].iacrm_yearsemployed",
+      "person.yearsAtOccupation": "crm:contacts[].iacrm_yearsatoccupation",
       "person.priorEmployerInYears": "crm:contacts[].iacrm_prioryearsemployed",
       "person.driversLicenseStatus": "note:contacts[]",
       "person.driversLicenseState": "crm:contacts[].iacrm_dlstate",

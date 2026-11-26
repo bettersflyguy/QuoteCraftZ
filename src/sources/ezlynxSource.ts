@@ -90,7 +90,7 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "person.education", label: "Education", section: "Contacts", defaultTarget: "crm:contacts[].educationcode", pageLabels: PERSON("education"), legacy: both("education") },
   { id: "person.industry", label: "Industry", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_employmentindustry", pageLabels: PERSON("industry"), legacy: both("industry") },
   { id: "person.occupation", label: "Occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_employmentoccupation", pageLabels: PERSON("occupation"), legacy: both("occupation") },
-  { id: "person.yearsAtOccupation", label: "Years at occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_yearsemployed", pageLabels: PERSON("years"), legacy: both("yearsAtOccupation") },
+  { id: "person.yearsAtOccupation", label: "Years at occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_yearsatoccupation", pageLabels: PERSON("years"), legacy: both("yearsAtOccupation") },
   { id: "person.priorEmployerInYears", label: "Prior employer (years)", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_prioryearsemployed", pageLabels: PERSON("prior employer in years"), legacy: both("priorEmployerInYears") },
   { id: "person.driversLicenseStatus", label: "License status", section: "Contacts", defaultTarget: "", pageLabels: PERSON("dl status"), legacy: both("driversLicenseStatus") },
   { id: "person.driversLicenseState", label: "License state", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_dlstate", pageLabels: PERSON("dl state"), legacy: both("driversLicenseState") },
@@ -166,7 +166,13 @@ function asListTarget(target: string): string {
 export function effectiveTargets(saved: Record<string, string> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   for (const f of EZLYNX_FIELDS) {
-    if (saved && f.id in saved) { out[f.id] = saved[f.id]!; continue; }
+    if (saved && f.id in saved) {
+      const current=saved[f.id]!;
+      out[f.id]=f.id==="person.yearsAtOccupation"&&mappingTargets(current).includes("crm:contacts[].iacrm_yearsemployed")
+        ? packMappingTargets(mappingTargets(current).map(t=>t==="crm:contacts[].iacrm_yearsemployed"?"crm:contacts[].iacrm_yearsatoccupation":t))
+        : current;
+      continue;
+    }
     const legacy = (f.legacy ?? []).find(id => saved && id in saved);
     out[f.id] = legacy ? packMappingTargets(mappingTargets(saved![legacy]!).map(asListTarget)) : f.defaultTarget;
   }

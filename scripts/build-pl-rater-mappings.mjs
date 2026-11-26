@@ -6,25 +6,28 @@ const put=(key,target)=>{maps[key]=target;};
 put('select:cmbPriorCompany','coverage.currentCarrier');
 put('text:rdiEffectiveDate','coverage.effectiveDate');
 put('text:rdiExpirationDate','coverage.expirationDate');
-const vehicleTyped={rniCostNew:'iacrm_costnew',cmbPurchaseType:'iacrm_neworused',cmbOwnershipStatus:'iacrm_ownership',cmbUse:'iacrm_use',chkDeliveryUsage:'iacrm_usedfordelivery',chkRideshareUsage:'iacrm_transportationnetworkcompany',rniAnnualMiles:'iacrm_annualmiles',rniOdometer:'iacrm_currentodometer',cmbPerformance:'iacrm_performance',chkDayLight:'iacrm_daytimerunninglights',chkAddress:'iacrm_alternategarage'};
-const vehicleFallback=['rniLengthOwnershipYrs','rniLengthOwnershipMonths','txtLicensePlate','chkCompOnly','cmbComp','chkFullGlass','cmbColl','chkLoanLease','cmbTowLabor','cmbTrans','rniElecCov','chkMediaCov','chkRepairReplace','chkRoadsideAssistance','chkOEM','chkTripInterruption','chkCompanyCar','chkFourWheel','chkALockBrake2W','chkALockBrake4W','chkAutoBelts','chkAirBagDriver','chkAirBagPass','chkSideAirBag','chkSideAirBagPass','chkRearAirBag','chkPassiveDisabling','chkActiveDisabling','chkAlarmOnly','chkVinEtch','chkRecovery','chkWindowEtch'];
+const vehicleTyped={rniCostNew:'iacrm_costnew',cmbPurchaseType:'iacrm_neworused',cmbOwnershipStatus:'iacrm_ownership',rniLengthOwnershipYrs:'iacrm_ownershipyears',rniLengthOwnershipMonths:'iacrm_ownershipmonths',txtLicensePlate:'iacrm_licenseplatenumber',cmbUse:'iacrm_use',chkDeliveryUsage:'iacrm_usedfordelivery',chkRideshareUsage:'iacrm_transportationnetworkcompany',rniAnnualMiles:'iacrm_annualmiles',rniOdometer:'iacrm_currentodometer',cmbPerformance:'iacrm_performance',chkDayLight:'iacrm_daytimerunninglights',chkAddress:'iacrm_alternategarage',chkCompanyCar:'iacrm_companycar',chkFourWheel:'iacrm_fourwheeldrive'};
+const vehicleFallback=['chkCompOnly','cmbComp','chkFullGlass','cmbColl','chkLoanLease','cmbTowLabor','cmbTrans','rniElecCov','chkMediaCov','chkRepairReplace','chkRoadsideAssistance','chkOEM','chkTripInterruption','chkALockBrake2W','chkALockBrake4W','chkAutoBelts','chkAirBagDriver','chkAirBagPass','chkSideAirBag','chkSideAirBagPass','chkRearAirBag','chkPassiveDisabling','chkActiveDisabling','chkAlarmOnly','chkVinEtch','chkRecovery','chkWindowEtch'];
 const kind=s=>s.startsWith('chk')?'checkbox':s.startsWith('cmb')?'select':'text';
 for(let n=1;n<=3;n++){
   for(const [suffix,p] of Object.entries({txtVIN:'vin',cmbYear:'year',cmbMake:'make',cmbModel:'model'}))put(`${kind(suffix)}:AutoCtlHeader_${n}$${suffix}`,`vehicle${n}.${p}`);
   put(`text:AutoCtlBody_${n}$rdiPurchaseDate`,`vehicle${n}.purchaseDate`);
   for(const [suffix,col] of Object.entries(vehicleTyped))put(`${kind(suffix)}:AutoCtlBody_${n}$${suffix}`,`crm:vehicle${n}.${col}`);
   for(const suffix of vehicleFallback)put(`${kind(suffix)}:AutoCtlBody_${n}$${suffix}`,`note:vehicle${n}`);
+  for(const [suffix,col] of Object.entries({rniLengthOwnershipYrs:'iacrm_ownershipyears',rniLengthOwnershipMonths:'iacrm_ownershipmonths',txtLicensePlate:'iacrm_licenseplatenumber',chkCompanyCar:'iacrm_companycar',chkFourWheel:'iacrm_fourwheeldrive'}))
+    put(`${kind(suffix)}:AutoCtlBody_${n}$${suffix}`,'targets:'+JSON.stringify([`crm:vehicle${n}.${col}`,`note:vehicle${n}`]));
 }
 const interest={txtName:'iacrm_name',txtAddress:'iacrm_street',txtCity:'iacrm_city',cmbState:'iacrm_state',txtZipCode:'iacrm_zip',cmbType:'iacrm_interesttype',txtLoanNumber:'iacrm_loanoraccountnumber'};
 for(const [suffix,col] of Object.entries(interest))put(`${kind(suffix)}:rptAdditionalInterestData$ctl01$${suffix}`,`crm:additionalinterest1.${col}`);
 // Primary insured is distinct from related contacts: the first driver is Tracey.
-const driverTyped={rdiDateOfBirth:'birthdate',cmbSex:'gendercode',cmbMaritalStatus:'familystatuscode',cmbLicStatus:'iacrm_dlstatus',cmbStateLic:'iacrm_dlstate',cmbOccupation:'iacrm_occupation',rniYearsCurrentEmployer:'iacrm_yearsemployed',cmbEducationLevel:'educationcode',cmbEnrollTelematics:'iacrm_telematicsagreement',chkDriveTrain:'iacrm_drivereducation',chkGoodStudent:'iacrm_goodstudent'};
+const driverTyped={rdiDateOfBirth:'birthdate',cmbSex:'gendercode',cmbMaritalStatus:'familystatuscode',cmbLicStatus:'iacrm_dlstatus',cmbStateLic:'iacrm_dlstate',cmbOccupation:'iacrm_occupation',rniYearsAtOccupation:'iacrm_yearsatoccupation',rniYearsCurrentEmployer:'iacrm_yearsemployed',cmbEducationLevel:'educationcode',cmbEnrollTelematics:'iacrm_telematicsagreement',chkDriveTrain:'iacrm_drivereducation',chkGoodStudent:'iacrm_goodstudent'};
 for(let n=1;n<=3;n++){
   const prefix=n===1?'crm:primarycontact':`crm:contact${n}`;
   for(const [suffix,col] of Object.entries({txtFirstName:'firstname',txtMiddleName:'middlename',txtLastName:'lastname'}))put(`text:DriverCtlHeader_${n}$${suffix}`,`${prefix}.${col}`);
   for(const [suffix,col] of Object.entries(driverTyped))put(`${kind(suffix)}:DriverCtlBody_${n}$${suffix}`,`${prefix}.${col}`);
+  put(`text:DriverCtlBody_${n}$rniYearsAtOccupation`,'targets:'+JSON.stringify([`${prefix}.iacrm_yearsatoccupation`,n===1?'note:contact':`note:contact${n}`]));
   if(n>1)put(`select:DriverCtlBody_${n}$cmbRelationship`,`${prefix}.iacrm_driverrelationship`);
-  for(const suffix of ['chkOperatorExcl','chkCustody','cmbPOMF','cmbAuto','chkForeignInternationalLicense','rdiDateLicensed','cmbFiling','cmbIndustry','rniYearsAtOccupation','rniSchoolMile'])put(`${kind(suffix)}:DriverCtlBody_${n}$${suffix}`,n===1?'note:contact':`note:contact${n}`);
+  for(const suffix of ['chkOperatorExcl','chkCustody','cmbPOMF','cmbAuto','chkForeignInternationalLicense','rdiDateLicensed','cmbFiling','cmbIndustry','rniSchoolMile'])put(`${kind(suffix)}:DriverCtlBody_${n}$${suffix}`,n===1?'note:contact':`note:contact${n}`);
 }
 // Reviewed against the live Minnesota package screens. Notes retain source labels.
 for(const s of ['txtRiskDescription','cmbCreditAuth','cmbBusinessType','cmbTerm','chkPaperless','cmbPriorType','cmbPriorBI','rniLenCovYears','rniLenCovMonths','chkPriorLapse','cmbCarefulDriver'])put(`${kind(s)}:${s}`,'note:opportunity');
@@ -34,7 +37,7 @@ const paQuestions={2:'cmb500446_2_0_0',4:'cmb500225_2_0_0',7:'cmb500078_2_0_0',1
 for(const [row,s] of Object.entries(paQuestions))put(`select:dgQuestions$ctl${row.padStart(2,'0')}$${s}`,['23','24','25'].includes(row)?`note:vehicle${Number(row)-22}`:row==='28'?'crm:primarycontact.iacrm_telematicsagreement':['16','17'].includes(row)?'note:contact':['11','30'].includes(row)?'note:contact3':'note:opportunity');
 for(let n=1;n<=3;n++)put(`text:dgQuestions$ctl${String(n+7).padStart(2,'0')}$rdi500080_2_${n}_0`,`${n===1?'crm:primarycontact':`crm:contact${n}`}.iacrm_defensivedrivercoursedate`);
 for(let n=0;n<4;n++)put(`checkbox:dgQuestions$ctl29$cbl500610_2_0_0$${n}`,'note:opportunity');
-const homeTyped={rniYearBuilt:'yearbuilt',cmbConstruction:'constructiontype',rniNumberOfFamilies:'families',rniNumberOfHouseholdMembers:'householdresidents',rdiPurchasedDate:'purchasedate',rniSquareFootage:'totallivingarea',cmbNumStories:'numberofstories',cmbFoundationType:'foundation',rniFullBaths:'fullbathroomcount',rniHalfBaths:'halfbathroomcount',cmbRoofType:'roofmaterial',cmbRoofShape:'roofdesign',cmbPrimaryHeat:'heatingdetail',cmbAuxiliaryHeat:'secondaryheat',chkTrampoline:'trampoline',cmbSwimmingPool:'swimmingpool',chkHotTub:'jacuzzis',chkGated:'gatedcommunity',chkGuarded:'guardsorwatchmen',chk24HourSecurity:'mannedsecurity',chkRetirement:'retirementcommunity',chkAnimalsOnPremises:'animalsonpremises',rniRoofYearComplete:'roofyear',cmbProtectionClass:'protectionclass',chkUseClientAddress:'sameasinsuredaddress',cmbPrimarySecondary:'usage'};
+const homeTyped={rniYearBuilt:'yearbuilt',cmbConstruction:'constructiontype',rniNumberOfFamilies:'families',rniNumberOfHouseholdMembers:'householdresidents',rdiPurchasedDate:'purchasedate',rniSquareFootage:'totallivingarea',cmbNumStories:'numberofstories',cmbFoundationType:'foundationconstructiontype',rniFullBaths:'fullbathroomcount',rniHalfBaths:'halfbathroomcount',cmbRoofType:'roofmaterial',cmbRoofShape:'roofdesign',cmbPrimaryHeat:'heatingdetail',cmbAuxiliaryHeat:'secondaryheat',chkTrampoline:'trampoline',cmbSwimmingPool:'swimmingpool',chkHotTub:'hottubpresent',chkGated:'gatedcommunity',chkGuarded:'guardedcommunity',chk24HourSecurity:'mannedsecurity',chkRetirement:'retirementcommunity',chkAnimalsOnPremises:'animalsonpremises',rniRoofYearComplete:'roofyear',cmbProtectionClass:'protectionclass',chkUseClientAddress:'sameasinsuredaddress',cmbPrimarySecondary:'usage'};
 for(const [s,col] of Object.entries(homeTyped))put(`${kind(s)}:${s}`,`crm:property1.iacrm_${col}`);
 for(const s of ['rniAgeOfHome','rniNoMortgages','cmbBasementType','cmbFinishedBasementPct','rniThreeFourBaths','chkRoofAcv','cmbRoofHailResistive','rniRoofLayers','rniPrimaryHeatCount','rniAuxiliaryHeatCount','cmbSmokersInHousehold','chkMonitored','chkPassKey','cmbHeating','rniHeating','cmbPlumbing','rniPlumbing','cmbWiring','rniWiring','rniRoofYearPartial','rniExteriorPaint','cmbTimeInsured','rniAgeOfInsured','cmbEmployedFT'])put(`${kind(s)}:${s}`,'note:property1');
 for(const s of ['cmbHoForm','cmbBillType','cmbDeductible','rniDwellingCoverage','rniOtherStructures','rniPersonalProperty','chkRCovC','rniLossOfUse','cmbPersonalLiability','cmbMedicalPayments','chkRCC','chkRCD','cmbAddlAmtIns'])put(`${kind(s)}:${s}`,'note:opportunity');
@@ -79,15 +82,23 @@ for(let n=1;n<=3;n++){
 for(const s of ['rniBodilyInjuryAmount','rniPropertyDamgeAmount','rniUMAmount','rniMedPaymentAmount','rniCollisionAmount','chkDeathOccurred','rniSpeed','rniPostedLimit','cmbCompLossType','rniCompLossAmt','rniMonthsSuspension','chkPrayerJudgement'])put(`${kind(s)}:rptMVRData$ctl01$${s}`,'note:opportunity');
 for(const s of ['chkAgentMVR','chkMARMV','chkIncidentPrefill'])put(`checkbox:${s}`,'skip');
 for(const [s,col] of Object.entries({rdiLossDate:'lossdate',rniLossAmount:'amountpaid',chkCatastrophicRelated:'catastrophe',cmbClaimStatus:'status',cmbCauseofLoss:'losstype',txtLossDescription:'description'}))put(`${s==='txtLossDescription'?'textarea':kind(s)}:${s}`,`crm:propertyloss1.iacrm_${col}`);
-// A checkbox is presence, not a count. Preserve it without inventing one.
-put('checkbox:chkHotTub','note:property1');
-put('checkbox:chkGuarded','note:property1');
+// Presence checkboxes have their own three-state CRM choices; do not write counts.
+put('checkbox:chkHotTub','targets:'+JSON.stringify(['crm:property1.iacrm_hottubpresent','note:property1']));
+put('checkbox:chkGuarded','targets:'+JSON.stringify(['crm:property1.iacrm_guardedcommunity','note:property1']));
+// This answer is read-only text on Home General Information. Preserve the
+// displayed band verbatim instead of coercing it into the exact-distance integer.
+put('field:distance to recognized water source','targets:'+JSON.stringify(['crm:properties[].iacrm_firehydrantdistancerange','note:properties[]']));
+// These read-only PL Rater answers are ranges/labels without lossless scalar
+// CRM equivalents. Keep them with the matching Property record.
+put('field:distance to fire department','note:properties[]');
+put('field:alternate water supply','note:properties[]');
 // Preserve the exact source choice alongside coarser CRM classifications.
 for(const [key,target] of Object.entries(maps))if(key.startsWith('select:')&&target.startsWith('crm:')&&!target.includes('additionalinterest')&&!key.endsWith('$cmbEducationLevel')&&key!=='select:cmbResType'){
   const note=target.startsWith('crm:property')?'note:property1':target.startsWith('crm:vehicle')?`note:vehicle${/vehicle(\d+)/.exec(target)[1]}`:target.startsWith('crm:primarycontact')?'note:contact':target.startsWith('crm:contact')?`note:contact${/contact(\d+)/.exec(target)[1]}`:null;
   if(note)maps[key]='targets:'+JSON.stringify([target,note]);
 }
 const options={'https://rating.vertafore.com':{'iacrm_additionalinterest.iacrm_interesttype':{'Leasing Company':298400002},'iacrm_vehicle.iacrm_use':{Work:298400001},'contact.educationcode':{'Less than High School':298400001,GED:298400002,'High School':298400002,'Some College':298400003,'Community or Junior College':298400005,"Bachelor's Degree":298400006,'Masters Degree':298400007,'Ph. D.':298400008,'Medical Degree':298400009,'Law Degree':298400010},'contact.iacrm_occupation':{Undergraduate:298400402},'iacrm_property.iacrm_roofdesign':{'Hip - Partial':298400004,'Hip - Full':298400004},'iacrm_property.iacrm_swimmingpool':{'In-Ground':298400002}}};
+for(const column of ['iacrm_vehicle.iacrm_companycar','iacrm_vehicle.iacrm_fourwheeldrive','iacrm_property.iacrm_hottubpresent','iacrm_property.iacrm_guardedcommunity'])options['https://rating.vertafore.com'][column]={Yes:298400000,No:298400001};
 options['https://rating.vertafore.com']['iacrm_property.iacrm_residencetype']=PL_RATER_RESIDENCE_CHOICES;
 const collectionMaps=collectionFieldMap(maps);
 const doc={type:'iacrm-quote-connector-fieldmaps',version:1,exportedAt:new Date().toISOString(),maps:{'https://rating.vertafore.com':collectionMaps},options};
