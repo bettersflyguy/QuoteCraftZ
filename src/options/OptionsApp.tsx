@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { DataServicesSection } from "./DataServicesSection";
+import { MappingRelationships } from "./MappingRelationships";
 import { useSettingsTransfer } from "./SettingsTransfer";
 import {
   Button,
@@ -35,10 +35,10 @@ import {
 function SiteRow({ origin, count, onRemove }: { origin: string; count: number; onRemove: () => void }) {
   const t = useSettingsTransfer({ kind: "site", origin });
   return (
-    <div style={{ marginTop: 8 }}>
+    <div style={{ marginTop: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Text style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-          {origin}: {count} field{count === 1 ? "" : "s"}
+        <Text size={200} title={origin} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {new URL(origin).hostname}: {count} field{count === 1 ? "" : "s"}
         </Text>
         {t.icons}
         <Tooltip content="Remove this site's mapping" relationship="label" withArrow>
@@ -72,14 +72,14 @@ function FieldMapsSection() {
     setMaps(next);
   };
   return (
-    <div style={{ marginTop: 32 }}>
-      <Text as="h2" size={500} weight="semibold">Pages Mapped</Text>
+    <section className="qr-config-section qr-pages">
+      <Text as="h2" size={300} weight="semibold">Pages Mapped</Text>
       {origins.length === 0
-        ? <Text block style={{ marginTop: 12 }}>No saved mappings yet.</Text>
+        ? <Text block size={200}>No saved mappings yet.</Text>
         : origins.map(origin => (
             <SiteRow key={origin} origin={origin} count={Object.keys(maps[origin]!).length} onRemove={() => void removeSite(origin)} />
           ))}
-    </div>
+    </section>
   );
 }
 const URL_PATTERN = /^https:\/\/[a-z0-9-]+\.crm\d*\.dynamics\.com$/;
@@ -91,18 +91,18 @@ function makeId(): string {
 
 const useStyles = makeStyles({
   root: {
-    padding: "24px",
-    maxWidth: "1040px",
+    padding: "12px",
+    maxWidth: "1800px",
     fontFamily: tokens.fontFamilyBase
   },
   /* one shared grid for header + rows so the columns always line up and
    * every field owns its own track - no intrinsic-width overlap */
   grid: {
-    marginTop: "16px",
+    marginTop: "6px",
     display: "grid",
     gridTemplateColumns: "56px minmax(120px, 1fr) minmax(240px, 1.8fr) minmax(220px, 1.6fr) 130px 40px",
-    columnGap: "12px",
-    rowGap: "10px",
+    columnGap: "6px",
+    rowGap: "4px",
     alignItems: "center"
   },
   headerCell: {
@@ -116,11 +116,11 @@ const useStyles = makeStyles({
   cellStack: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 },
   fullWidth: { width: "100%", minWidth: 0 },
   footer: {
-    marginTop: "16px",
+    marginTop: "6px",
     color: tokens.colorNeutralForeground3
   },
   actions: {
-    marginTop: "12px",
+    marginTop: "6px",
     display: "flex",
     alignItems: "center",
     gap: "8px"
@@ -178,13 +178,21 @@ export function OptionsApp() {
 
   return (
     <div className={styles.root}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <img src="/icons/32.png" alt="" style={{ width: 28, height: 28, marginRight: 2 }} />
-        <Text size={600} weight="semibold">QuoteCraftZ Settings</Text>
+      <div className="qr-settings-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <img src="/icons/32.png" alt="" style={{ width: 22, height: 22, marginRight: 2 }} />
+        <Text size={400} weight="semibold">QuoteCraftZ Settings</Text>
         {allTransfer.icons}
       </div>
       {allTransfer.panel}
-      <Text as="h2" size={500} weight="semibold" block style={{ marginTop: 24 }}>Environments</Text>
+      <div className="qr-config-top">
+      <section className="qr-config-section">
+        <div className="qr-env-quick">
+          <Text as="h2" size={300} weight="semibold">Environments</Text>
+          <RadioGroup aria-label="Active environment" value={activeId} onChange={(_,d)=>void makeActive(d.value)} layout="horizontal">
+            {envs.map(e=><Radio key={e.id} value={e.id} label={e.name} title={e.orgUrl}/>) }
+          </RadioGroup>
+        </div>
+        <details className="qr-env-config"><summary>Configure environments</summary>
 
       <RadioGroup value={activeId} onChange={(_, d) => makeActive(d.value)} layout="vertical">
         <div className={styles.grid}>
@@ -269,8 +277,11 @@ export function OptionsApp() {
         Each environment requires your account to have a Dataverse security role in that org.
       </Text>
 
+      </details>
+      </section>
       <FieldMapsSection />
-      <DataServicesSection />
+      </div>
+      <MappingRelationships />
     </div>
   );
 }

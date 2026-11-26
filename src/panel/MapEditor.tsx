@@ -3,34 +3,24 @@ import { CursorClickRegular, DeleteRegular, EyeFilled, EyeRegular, NotepadRegula
 import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { choiceColumnOf } from "@/portal/choiceRouting";
 import { columnKeyOf, type ColumnOptionMap } from "@/portal/optionMaps";
-import { TargetPicker } from "./TargetPicker";
+import { MultiTargetPicker } from "./MultiTargetPicker";
+import { mappingTargets, packMappingTargets, preferredTarget, nativeCollectionKey, nativeCollectionTarget } from "@/portal/mappingTargets";
 import { Button, Spinner, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import type { PeekItem, PeekResult, PortalScanResult, PortalScanRow } from "@/boldpenguin/types";
 import {
-  ARRAY_ROW_MAX, MAP_PATH_GROUPS, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget, noteLabelOf,
-  familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
+  ARRAY_ROW_MAX, NOTE_TARGETS, PATH_LABEL, isArrayPath, isNoteTarget, isSecureTarget, noteLabelOf,
+  arrayFamilyTargets, familyKeyOf, isSensitiveLabel, rowTargetOf, toRowTarget
 } from "@/portal/fieldMaps";
 import { catalogLabel, type FieldCatalog } from "@/crm/fieldCatalog";
 import { catalogUnavailableNote, classifyCatalogError } from "@/crm/catalogNote";
 import { send } from "./api";
 import { capturedTargets } from "./capturedTargets";
+import {matchesMappingSearch} from "./mappingSearch";
 export { capturedTargets };
+import { captureGroups } from "./captureGroups";
+export { captureGroups };
 
 type OptionGroup = { group: string; paths: { path: string; label: string }[] };
-
-/** Capture targets: every core column of each CRM entity (live metadata, in
- * hierarchy order) plus the semantic risk-data groups that have no CRM table
- * (building, payroll, vehicles). Without a catalog (not signed in), the
- * built-in semantic vocabulary stands in. */
-export function captureGroups(catalog: FieldCatalog | null): OptionGroup[] {
-  const riskData = MAP_PATH_GROUPS.filter(g => /risk data/.test(g.group));
-  if (!catalog?.entities.length) return MAP_PATH_GROUPS;
-  const crm = catalog.entities.map(e => ({
-    group: e.label,
-    paths: e.columns.map(c => ({ path: `crm:${e.key}${e.array ? "[]" : ""}.${c.name}`, label: c.label }))
-  }));
-  return [...crm, ...riskData];
-}
 
 /** Secured pass-through targets (SSN, license number, field-secured
  * columns): they map only to secured CRM columns or fill quote forms,
@@ -81,7 +71,8 @@ const useStyles = makeStyles({
  * addresses and any other repeated record reach a quote form. */
 export interface CapturedTarget { value: string; label: string }
 
-export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek, highlightKey, onHighlight }: {
+export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCancel, onPick, onPickCancel, onPeek, choices, setChoices, capturedFields, onReadChoices, title, hideAuto, inject, routePick, extraPeek, highlightKey, onHighlight, search="" }: {
+  search?:string;
   highlightKey?: string | null;
   onHighlight?: (key: string) => void;
   /** Header text (defaults to "Field mapping for <origin>"). */
@@ -159,10 +150,11 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   }, [focusKey]);
 
   const [choicesOpen, setChoicesOpen] = useState<Set<string>>(() => new Set());
+  // Filtering must not remount previously opened readers: opening several
+  // styled menus together mixes their option inventories on the source page.
+  useEffect(() => { setChoicesOpen(new Set()); }, [search]);
   const toggleChoices = (key: string) => setChoicesOpen(s => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
+    return s.has(key) ? new Set() : new Set([key]);
   });
   const stopRequested = useRef(false);
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
@@ -226,9 +218,9 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
   useEffect(() => {
     const moves = allRows.flatMap(r => {
       if (r.key.startsWith("pick:") || r.key.startsWith("field:") || (r.repeats ?? 0) < 2) return [];
-      const slot = rowTargetOf(draft[r.key] ?? "");
-      const fam = slot ? familyKeyOf(r) : null;
-      return fam && slot && !(fam.key in draft) ? [{ from: r.key, fam, target: slot.arrayPath }] : [];
+      const targets = mappingTargets(draft[r.key]);
+      const fam = targets.some(t=>rowTargetOf(t)) ? familyKeyOf(r) : null;
+      return fam && !(fam.key in draft) ? [{ from:r.key, fam, target:arrayFamilyTargets(draft[r.key] || "") }] : [];
     });
     if (!moves.length) return;
     setExtraRows(x => [...x, ...moves.filter(m => !allRows.some(r => r.key === m.fam.key))
@@ -247,12 +239,12 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
 
   /* peek: what the current (unsaved) draft covers, including hidden rows that
    * auto-match - so the page shows exactly what still needs mapping */
-  const targetText = (v: string) =>
+  const targetText = (v: string):string => mappingTargets(v).length > 1 ? mappingTargets(v).map(targetText).join(" + ") : isNoteTarget(v) ? noteLabelOf(v) :
     targetLabel(v, catalog) ??
     (v.startsWith("label:") ? (captured.find(c => c.value === v)?.label ?? v.slice(6)) : v);
   const peekItems: PeekItem[] = allRows.flatMap<PeekItem>(r => {
     const v = draft[r.key] ?? "";
-    if (r.payment) return [];
+    if (r.payment) return [{ key: r.key, label: "Payment field, never filled", kind: "skip" }];
     if (v === "skip") return [{ key: r.key, label: "Never fill", kind: "skip" }];
     if (isNoteTarget(v)) return [{ key: r.key, label: noteLabelOf(v), kind: "mapped", array: true }];
     if (v) return [{ key: r.key, label: targetText(v), kind: "mapped", array: isArrayPath(v), family: r.key.startsWith("field:") && isArrayPath(v) }];
@@ -306,39 +298,51 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
           {picking ? <><Spinner size="extra-tiny" style={{ display: "inline-flex", verticalAlign: "middle" }} /> Click a field on the page. Esc cancels.</> : pickNote}
         </div>
       )}
-      {rows.map(r => {
-        const current = draft[r.key] ?? "";
-        const orphanLabel = current.startsWith("label:") && !capturedValues.has(current)
-          ? current.slice(6) : null;
+      {(search.trim()?allRows:rows).filter(r=>matchesMappingSearch(search,r.label,r.fieldLabel,r.key,r.section,draft[r.key],targetText(draft[r.key]??r.autoPath??""))).map(r => {
+        const binding = draft[r.key] ?? "";
+        const current = preferredTarget(binding);
         // identifier fields (SSN, ITIN, passport) map ONLY to secured targets
         const identifier = isSensitiveLabel(r.label) || isSecureTarget(current);
         // picked text and labelled fields are capture teachings
         const isPick = r.key.startsWith("pick:") || r.key.startsWith("field:");
         // a form control names ONE row of a list ("Driver 2" = row 1 of related contacts)
-        const slot = !isPick ? rowTargetOf(current) : null;
-        const pickerValue = slot ? slot.arrayPath : current;
         // a list target on a sub-section's control ("Other Address" City ->
         // Addresses): every card of that kind is a row, so it maps by label
         // across them all instead of naming one row
         const choose = (v: string) => {
-          const fam = !isPick && isArrayPath(v) ? familyKeyOf(r) : null;
+          const selected = mappingTargets(v);
+          if (nativeCollectionKey(r.key)) {
+            setTarget(r.key, packMappingTargets(selected.map(nativeCollectionTarget)));
+            return;
+          }
+          const fam = !isPick && selected.some(isArrayPath) ? familyKeyOf(r) : null;
           if (fam) {
             if (!allRows.some(x => x.key === fam.key)) {
               setExtraRows(x => [...x, { key: fam.key, label: fam.label, type: "text", payment: false, autoPath: null, mapped: null }]);
             }
-            setDraft(d => ({ ...d, [r.key]: "", [fam.key]: v }));
+            setDraft(d => ({ ...d, [r.key]: "", [fam.key]: arrayFamilyTargets(v) }));
             reveal(fam.key);
             setFocusKey(fam.key);
             return;
           }
-          setTarget(r.key, !isPick && isArrayPath(v) ? (toRowTarget(v, 1) ?? v) : v);
+          const routed = selected.map(target => {
+            if (isPick || !isArrayPath(target)) return target;
+            const previous = mappingTargets(binding).find(t => rowTargetOf(t)?.arrayPath === target);
+            return toRowTarget(target, rowTargetOf(previous || "")?.row || 1) || target;
+          });
+          setTarget(r.key, packMappingTargets(routed));
         };
         // a CRM choice target: each of this field's options binds to one CRM choice
-        const choiceCol = setChoices ? choiceColumnOf(current, catalog) : null;
-        const choiceKey = choiceCol ? columnKeyOf(current) : null;
-        const choiceSources = choiceCol
-          ? [...(r.options ?? []), ...(capturedFields ?? []).filter(f => f.mapped === current).map(f => f.value)]
-          : [];
+        const targetExtras = (target:string,change:(target:string)=>void) => {
+          const row = !isPick && !nativeCollectionKey(r.key) ? rowTargetOf(target) : null;
+          const col = setChoices ? choiceColumnOf(target,catalog) : null;
+          return <>
+            {row && <select aria-label="Row" value={row.row} onChange={e=>change(toRowTarget(row.arrayPath,Number(e.target.value)) || target)} style={{fontSize:12}}>
+              {Array.from({length:ARRAY_ROW_MAX},(_,i)=><option key={i+1} value={i+1}>Row {i+1}</option>)}
+            </select>}
+            {col && <Tooltip content="Map each choice to its CRM choice" relationship="label" withArrow><Button size="small" appearance={choicesOpen.has(`${r.key}|${target}`)?"primary":"subtle"} icon={<TextBulletListLtrRegular/>} onClick={()=>toggleChoices(`${r.key}|${target}`)}/></Tooltip>}
+          </>;
+        };
         return (
           <Fragment key={r.key}>
           <div
@@ -357,25 +361,28 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
               ? <span>Payment field, never filled</span>
               : isPick ? (
                 /* read-only text teaching: capture direction, CRM fields only */
-                <TargetPicker
-                  value={current}
+                <MultiTargetPicker
+                  value={binding}
                   onChange={choose}
+                  allowAdd={!identifier}
+                  extra={targetExtras}
                   groups={identifier ? secured : groups}
                   specials={[
                     { value: "", label: "Not captured" },
                     // secured data never goes to a timeline note
                     ...(identifier ? [] : NOTE_TARGETS.map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> })))
                   ]}
-                  currentText={current && !groupValues.has(current)
-                    ? `${targetText(current)} (saved)`
-                    : undefined}
+                  currentText={t=>t && !groupValues.has(t) ? `${targetText(t)} (saved)` : undefined}
                   groupPrefix="Capture as: "
                 />
               ) : (
                 <>
-                  <TargetPicker
-                    value={pickerValue}
+                  <MultiTargetPicker
+                    value={binding}
+                    pickerTarget={t=>rowTargetOf(t)?.arrayPath || t}
                     onChange={choose}
+                    allowAdd={!identifier}
+                    extra={targetExtras}
                     groups={identifier ? secured : fillGroups}
                     specials={[
                       { value: "", label: identifier ? "Not mapped" : r.autoPath ? `Auto (${PATH_LABEL.get(r.autoPath) ?? r.autoPath})` : "Auto (no match)" },
@@ -384,49 +391,29 @@ export function MapEditor({ scan, draft, setDraft, captured, busy, onSave, onCan
                       // on Ingest (never a secured/identifier field)
                       ...(identifier ? [] : NOTE_TARGETS.map(t => ({ value: t.value, label: t.label, icon: <NotepadRegular /> })))
                     ]}
-                    currentText={orphanLabel ? `${orphanLabel} (saved; not in current capture)`
-                      : current && !groupValues.has(pickerValue) ? `${targetText(current)} (saved)` : undefined}
+                    currentText={t=>t.startsWith("label:") && !capturedValues.has(t) ? `${t.slice(6)} (saved; not in current capture)` : t && !groupValues.has(t) ? `${targetText(t)} (saved)` : undefined}
                   />
-                  {slot && (
-                    <Tooltip content="Which row of the list this field is (row 1 = first related contact)" relationship="label" withArrow>
-                      <select
-                        aria-label="Row"
-                        value={slot.row}
-                        onChange={e => setTarget(r.key, toRowTarget(slot.arrayPath, Number(e.target.value)) ?? current)}
-                        style={{ fontSize: 12, flexShrink: 0 }}
-                      >
-                        {Array.from({ length: ARRAY_ROW_MAX }, (_, i) => i + 1).map(n => <option key={n} value={n}>Row {n}</option>)}
-                      </select>
-                    </Tooltip>
-                  )}
                 </>
               )}
-            {choiceCol && (
-              <Tooltip content="Map each choice to its CRM choice" relationship="label" withArrow>
-                <Button
-                  size="small"
-                  appearance={choicesOpen.has(r.key) ? "primary" : "subtle"}
-                  icon={<TextBulletListLtrRegular />}
-                  aria-pressed={choicesOpen.has(r.key)}
-                  onClick={() => toggleChoices(r.key)}
-                />
-              </Tooltip>
-            )}
             {!r.payment && current && (
               <Tooltip content="Delete this mapping (saved with Save mapping)" relationship="label" withArrow>
                 <Button size="small" appearance="subtle" icon={<DeleteRegular />} onClick={() => setTarget(r.key, "")} />
               </Tooltip>
             )}
           </div>
-          {choiceCol && choiceKey && choicesOpen.has(r.key) && (
+          {mappingTargets(binding).map(t=>{
+            const choiceCol=setChoices ? choiceColumnOf(t,catalog) : null;
+            const choiceKey=choiceCol ? columnKeyOf(t) : null;
+            return choiceCol && choiceKey && choicesOpen.has(`${r.key}|${t}`) ? (
             <OptionMapEditor
+              key={t}
               column={choiceCol}
-              sources={choiceSources}
+              sources={[...(r.options ?? []),...(capturedFields ?? []).filter(f=>f.mapped===t).map(f=>f.value)]}
               value={choices?.[choiceKey] ?? {}}
               onChange={next => setChoices?.(c => ({ ...c, [choiceKey]: next }))}
               onRead={onReadChoices ? () => onReadChoices(r.key, { label: r.fieldLabel || r.label, section: r.section }) : undefined}
             />
-          )}
+          ) : null;})}
           </Fragment>
         );
       })}

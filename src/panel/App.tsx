@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, makeStyles, tokens } from "@fluentui/react-components";
 import { HomeRegular } from "@fluentui/react-icons";
+import {CrmAgentPicker} from "./CrmAgentPicker";
+import {CrmConnection} from "./CrmConnection";
 import { EnvBadge } from "./EnvBadge";
 import { MappingsManager } from "./MappingsManager";
 import { CommercialCapture } from "./steps/CommercialCapture";
@@ -73,9 +75,12 @@ export function App() {
   // interactive sign-in popup (login.microsoftonline.com) briefly becomes the
   // active tab, and following it would unmount the in-flight flow and dump
   // the user onto another screen mid-commit.
+  const [agentBusy,setAgentBusy]=useState(false);
+  const [connectionBusy,setConnectionBusy]=useState(false);
+  const [connectionNotice,setConnectionNotice]=useState("");
   const [flowActive, setFlowActive] = useState(false);
   const [showMappings, setShowMappings] = useState(false);  const lastModeRef = useRef(rawMode);
-  const mode = flowActive ? lastModeRef.current : rawMode;
+  const mode = flowActive || agentBusy || connectionBusy ? lastModeRef.current : rawMode;
   lastModeRef.current = mode;
 
   return (
@@ -87,7 +92,9 @@ export function App() {
           <img className={styles.logo} src="/icons/32.png" alt="QuoteCraftZ" title="QuoteCraftZ" />
           <span style={{ fontSize: "13px", fontWeight: 600 }}>{showMappings ? "Mappings" : "Intake"}</span>
         </div>
+        <CrmAgentPicker onBusy={setAgentBusy}/>
         <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+          <CrmConnection onBusy={setConnectionBusy} onNotice={setConnectionNotice}/>
           <Button
             appearance="subtle"
             icon={<HomeRegular />}
@@ -98,6 +105,7 @@ export function App() {
           <EnvBadge onOpenMappings={() => setShowMappings(true)} onEnvChanged={() => setEnvNonce(n => n + 1)} />
         </div>
       </div>
+      {connectionNotice&&<div role={connectionBusy?"status":"alert"} style={{padding:"6px 12px",fontSize:12,background:connectionBusy?"#edf5ff":"#fff1f1",borderBottom:"1px solid #d9b8b8"}}>{connectionNotice}</div>}
       <div className={styles.body}>
         {showMappings && <MappingsManager />}
         {!showMappings && <>

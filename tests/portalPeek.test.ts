@@ -2,7 +2,7 @@
 /** Mapping-editor peek: outlines exactly what the draft covers, keyed the
  * same way the fill and capture resolve elements, and restores the page. The
  * scripts ship as plain injected files - tested as shipped, on a real DOM. */
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -10,6 +10,7 @@ type Item = { key: string; label: string; kind: "mapped" | "auto" | "skip"; arra
 let peek: (items: Item[] | null) => { shown: number; missing: number };
 
 beforeAll(() => {
+  (globalThis as {CSS?:{escape:(v:string)=>string}}).CSS ??= {escape:v=>v.replace(/[^a-zA-Z0-9_-]/g,"\\$&")};
   // jsdom has no layout: give elements a box like a browser would - zero
   // inside a display:none ancestor (a hidden table row's cells), real otherwise
   HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
@@ -27,6 +28,28 @@ beforeAll(() => {
 });
 
 describe("peek", () => {
+  it("covers previous-address fields with conditional heading text without merging their identity with primary",()=>{
+    document.body.innerHTML='<mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Applicant Info</mat-panel-title></mat-expansion-panel-header><mat-expansion-panel><mat-expansion-panel-header><mat-panel-title>Previous Address (if current less than 3 years)</mat-panel-title></mat-expansion-panel-header><label for="previousCity">City</label><input id="previousCity" name="previousCity"></mat-expansion-panel></mat-expansion-panel>';
+    const mapper=(globalThis as unknown as {BettersPortalMapper:{scopesOf:(el:Element)=>string[]}}).BettersPortalMapper;
+    expect(mapper.scopesOf(document.getElementById("previousCity")!)).toContain("previous address");
+    peek([{key:"service:city",label:"Addresses: City",labels:["applicant info/*address>city"],kind:"mapped"}]);
+    expect(document.getElementById("previousCity")!.style.outline).toContain("solid");peek(null);
+  });
+  it("inventories service controls once for many mappings and discards the snapshot after repaint",()=>{
+    document.body.innerHTML='<label for="g">Gender</label><input id="g" name="g">';
+    const all=(globalThis as unknown as {__bettersPortalPeekAll:(arg:unknown)=>unknown}).__bettersPortalPeekAll;
+    const selector="input, select, textarea, [role='combobox'], mat-select, [aria-haspopup='listbox'], .k-dropdownlist, .k-picker";
+    const spy=vi.spyOn(document,"querySelectorAll");
+    try {
+      all({items:Array.from({length:60},(_,i)=>({key:`service:${i}`,label:"Gender",labels:["gender"],kind:"mapped"})),map:{},pageLabels:["gender"]});
+      expect(spy.mock.calls.filter(([s])=>s===selector)).toHaveLength(1);
+      expect(document.getElementById("g")!.style.outline).toContain("solid");
+      all(null);
+      document.body.innerHTML='<label for="g2">Gender</label><input id="g2" name="g2">';
+      all({items:[{key:"service:g",label:"Gender",labels:["gender"],kind:"mapped"}],map:{},pageLabels:["gender"]});
+      expect(document.getElementById("g2")!.style.outline).toContain("solid");
+    } finally {all(null);spy.mockRestore();}
+  });
   it("outlines mapped controls, taught text and every array row, then restores the page", () => {
     document.body.innerHTML = `
       <input type="text" name="zip" style="outline: 1px dotted red">

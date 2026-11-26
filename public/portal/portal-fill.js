@@ -72,8 +72,95 @@
     return "";
   }
 
+  /* PL Rating lays its vehicle editor out as a column grid.  Its controls
+   * have durable ASP.NET ids, but no per-control label association: the
+   * generic container fallback consequently finds the first header (VIN) or
+   * first body caption (Cost New Amount) for every field.  Resolve those ids
+   * before looking at generic accessibility metadata so the mapping editor
+   * identifies every column correctly and rows can be mapped as a vehicle
+   * collection. */
+  function plRaterVehicleLabel(element) {
+    if (!/rating\.vertafore\.com$/i.test(location.hostname)) return "";
+    const id = clean(element.id || element.name);
+    const match = /^(?:AutoCtlHeader|AutoCtlBody|DriverCtlHeader|DriverCtlBody)_\d+_([A-Za-z0-9]+)/.exec(id);
+    if (!match) {
+      // PL Rater's layout containers often contain many captions. Choosing
+      // their first caption labels an entire form "Opt Out" or "Name".
+      // Native control names are stable and distinguish these inputs.
+      if (/^rptrOptionSections/.test(id)) return clean(document.getElementById(id.replace(/_chkOption$/, "_lblOption"))?.textContent);
+      if (/^dgQuestions/.test(id)) return "";
+      const suffix = id.split(/[_$]/).pop();
+      if (!/^(?:txt|rni|rdi|rmi|cmb|chk)/.test(suffix || "")) return "";
+      const special = { rmiSocialSecurity: "Social Security Number", rmiAddSSN: "Additional Insured Social Security Number", txtDriversLicenseNumber: "Driver License Number", rdiDateofBirth: "Date of Birth" };
+      const own = element.labels && element.labels.length ? clean(element.labels[0].textContent) : "";
+      const readable = special[suffix] || own || suffix.replace(/^(?:txt|rni|rdi|rmi|cmb|chk)/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Za-z])(\d+)/g, "$1 $2").trim();
+      const detail = /^(.*?)_ascx[_$]/.exec(id);
+      return detail ? detail[1].replace(/([a-z])([A-Z])/g, "$1 $2") + ": " + readable : readable;
+    }
+    const labels = {
+      txtFirstName: "First Name", txtMiddleName: "Middle Name", txtLastName: "Last Name",
+      rdiDateOfBirth: "Date of Birth", chkOperatorExcl: "Excluded Driver",
+      cmbRelationship: "Relationship", cmbSex: "Gender", cmbMaritalStatus: "Marital Status",
+      chkCustody: "Custody", rmiSocialSecurity: "Social Security Number",
+      cmbPOMF: "Driver Usage", cmbAuto: "Assigned Vehicle", cmbLicStatus: "License Status",
+      chkForeignInternationalLicense: "Foreign or International License",
+      cmbStateLic: "License State", txtDriversLicenseNumber: "Driver License Number",
+      rdiDateLicensed: "Date Licensed", cmbFiling: "Financial Responsibility Filing",
+      cmbIndustry: "Industry", cmbOccupation: "Occupation",
+      rniYearsAtOccupation: "Years at Occupation", rniYearsCurrentEmployer: "Years with Current Employer",
+      cmbEducationLevel: "Education", cmbEnrollTelematics: "Enroll in Telematics",
+      chkDriveTrain: "Driver Training", chkGoodStudent: "Good Student",
+      rniSchoolMile: "School Distance (Miles)",
+      txtVIN: "VIN", cmbYear: "Year", cmbMake: "Make", cmbModel: "Model",
+      rniCostNew: "Cost New Amount", cmbPurchaseType: "Purchase Type",
+      rdiPurchaseDate: "Purchase Date", cmbOwnershipStatus: "Ownership Status",
+      rniLengthOwnershipYrs: "Length of Ownership (Years)",
+      rniLengthOwnershipMonths: "Length of Ownership (Months)",
+      cmbUse: "Use", chkDeliveryUsage: "Used for Delivery",
+      chkRideshareUsage: "Used for Rideshare", txtLicensePlate: "License Plate Number",
+      rniAnnualMiles: "Annual Miles", rniOdometer: "Odometer",
+      chkCompOnly: "Comprehensive Only", cmbComp: "Comprehensive Deductible",
+      chkFullGlass: "Full Glass", cmbColl: "Collision Deductible",
+      chkLoanLease: "Loan Lease", cmbTowLabor: "Towing & Labor",
+      cmbTrans: "Transportation Expense", rniElecCov: "Electronic Equipment",
+      chkMediaCov: "Media Coverage", chkRepairReplace: "Repair/Replacement Cost Coverage",
+      chkRoadsideAssistance: "Roadside Assistance", chkOEM: "OEM Coverage",
+      chkTripInterruption: "Trip Interruption", chkCompanyCar: "Company Car",
+      chkAddress: "Garaged at Different Address", cmbPerformance: "Performance",
+      chkFourWheel: "4 Wheel Drive", chkDayLight: "Daytime Lights"
+    };
+    if (labels[match[1]]) return labels[match[1]];
+
+    /* Vehicle Attributes are rendered in the same three-column grid but do
+     * not have individual HTML labels.  Falling through to containerLabel()
+     * gave every one of them the grid's first caption, "Cost New Amount".
+     * Keep an explicit name for the known terse ASP.NET ids and use a safe
+     * camel-case fallback for newly introduced attributes. */
+    const attributes = {
+      chkALockBrake2W: "Anti-lock Brakes (2 wheel)",
+      chkALockBrake4W: "Anti-lock Brakes (4 wheel)",
+      chkAutoBelts: "Automatic Belts",
+      chkAirBagDriver: "Driver Airbag",
+      chkAirBagPass: "Passenger Airbag",
+      chkSideAirBag: "Side Airbag",
+      chkSideAirBagPass: "Passenger Side Airbag",
+      chkRearAirBag: "Rear Airbag",
+      chkPassiveDisabling: "Passive Disabling",
+      chkActiveDisabling: "Active Disabling",
+      chkAlarmOnly: "Alarm Only",
+      chkVinEtch: "VIN Etching",
+      chkRecovery: "Vehicle Recovery System",
+      chkWindowEtch: "Window Etching"
+    };
+    if (attributes[match[1]]) return attributes[match[1]];
+    const suffix = match[1].replace(/^(?:chk|cmb|txt|rni|rdi)/, "");
+    return suffix.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Za-z])(\d+)/g, "$1 $2").trim();
+  }
+
   /* the one VISIBLE label a human would read for this control */
   function primaryLabel(element) {
+    const plRaterLabel = plRaterVehicleLabel(element);
+    if (plRaterLabel) return plRaterLabel;
     /* EZLynx carrier selects point aria-labelledby at the selected answer.
      * The question's own caption is the stable field identity. */
     const question = element.tagName === "MAT-SELECT" ? element.closest("icq-question") : null;
@@ -164,6 +251,15 @@
   function keyBase(el) {
     const tag = el.tagName === "SELECT" ? "select" : (el.type || "text").toLowerCase();
     return (tag + ":" + (clean(el.name) || clean(el.id))).slice(0, 120);
+  }
+  function nativeFamily(key) {
+    return /(^|\.)rating\.vertafore\.com$/i.test(location.hostname) && globalThis.BettersMappingTargets
+      ? globalThis.BettersMappingTargets.nativeCollectionKey(key) : null;
+  }
+  function collectionMap(map) {
+    if (!/(^|\.)rating\.vertafore\.com$/i.test(location.hostname) || !globalThis.BettersMappingTargets) return map || {};
+    const keys=Array.from(document.querySelectorAll('input,select,textarea')).filter(captureVisible).map(keyBase);
+    return globalThis.BettersMappingTargets.resolveCollectionFieldMap(map || {},keys);
   }
   function sharedBases() {
     const c = tick();
@@ -345,6 +441,8 @@
    * - Otherwise its current key, as before. */
   function rowKeyOf(map, element) {
     const key = controlKey(element);
+    const family = nativeFamily(keyBase(element));
+    if (family) return family;
     const own = labelKeyOf(element);
     if (!own) return key;
     if (map && map[own]) return own;
@@ -656,7 +754,7 @@
     return dropRadioKeys;
   }
   async function fillPass(payload, overwrite, autoAdvance, overrides) {
-    const ov = overrides || {};
+    const ov = globalThis.BettersMappingTargets ? globalThis.BettersMappingTargets.preferredFieldMap(collectionMap(overrides)) : overrides || {};
     const candidates = mapper.buildCandidates(payload);
     const fillRoot = activeModal() || document;
     const controls = pageControls(fillRoot);
@@ -786,7 +884,7 @@
    * mapping names a secured target that `values` carries. Values are never
    * echoed back; the result lists labels and target paths. */
   async function fillSecure(values, overwrite, overrides) {
-    const ov = overrides || {};
+    const ov = collectionMap(overrides);
     const vals = values || {};
     const filled = [];
     let missing = 0;
@@ -875,10 +973,17 @@
     }).filter((w) => w.label);
   }
   /* every on-screen field a data-service field covers, as its outlined box */
+  var peekServiceSnapshot = null;
   function serviceElements(labels) {
     const wanted = parseLabels(labels);
     if (!wanted.length) return [];
     const out = [];
+    if (peekServiceSnapshot) {
+      peekServiceSnapshot.forEach(function (entry) {
+        if (wanted.some(function (w) { return w.label === entry.label && mapper.scopeMatches(w.section, entry.scopes); }) && out.indexOf(entry.box) < 0) out.push(entry.box);
+      });
+      return out;
+    }
     Array.from(document.querySelectorAll(LABELLED_FIELDS))
       .filter((el) => visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0) && labelsHit(wanted, el))
       .forEach((el) => {
@@ -914,6 +1019,7 @@
     /* never a password, hidden, file or button control, on any path */
     const all = Array.from(document.querySelectorAll(LABELLED_FIELDS))
       .filter((c) => !isNotChoice(c));
+    if (nativeFamily(key) === key) return all.find(c => captureVisible(c) && nativeFamily(keyBase(c)) === key) || null;
     /* keys are computed lazily and kept: an exact hit must not pay for every
      * other control (controlKey can run a document-wide label lookup) */
     const keyOf = new Map();
@@ -1011,6 +1117,12 @@
     if (isNotChoice(el) || isNotChoice(host)) return null;
     const name = fieldName(host) || fieldName(el) || "";
     if (isSensitiveSource(name) || PAYMENT_FIELD.test(name)) return { current: "", options: [], refused: true };
+    // A checkbox can feed a CRM Choice (e.g. Yes -> Inside). Reading its
+    // alternatives must never use the dropdown click path, which toggles it.
+    if ((el.type || "").toLowerCase() === "checkbox" || el.getAttribute("role") === "checkbox") {
+      const state = el.getAttribute("aria-checked");
+      return { current: state === "mixed" ? "" : (el.checked === true || state === "true" ? "Yes" : "No"), options: ["Yes", "No"] };
+    }
     if (host.tagName === "SELECT") {
       const sel = host.options[host.selectedIndex];
       return { current: sel ? clean(sel.textContent) : "", options: choiceOptions(host) || [] };
@@ -1109,14 +1221,15 @@
   /* mapping editor's view of this frame: every visible control with its key,
    * visible label, what auto-matching would pick, and any saved mapping */
   function scanControls(payload, overrides) {
-    const ov = overrides || {};
+    const ov = collectionMap(overrides);
     const candidates = payload ? mapper.buildCandidates(payload) : [];
     const rows = [];
     const seen = new Set();
     /* saved keys of controls that now carry their own key: the key stays a
      * row of its own (below) so a Save writes it back untouched */
     const legacyShared = new Map();
-    for (const element of pageControls(activeModal() || document, true)) {
+    const scanRoot = globalThis.__bettersOneLead && typeof globalThis.__bettersCaptureRoot === "function" ? globalThis.__bettersCaptureRoot() : activeModal() || document;
+    for (const element of pageControls(scanRoot, true)) {
       const name = fieldName(element);
       if (!name) continue;
       /* a box whose own-label key holds a mapping is listed under it even when
@@ -1130,7 +1243,7 @@
       if ((element.disabled || element.readOnly) && (!ov[key] || inherited)) continue;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (legacy !== key) {
+      if (legacy !== key && !nativeFamily(key)) {
         const hit = legacyShared.get(legacy) || { element, count: 0 };
         hit.count += 1;
         legacyShared.set(legacy, hit);
@@ -1173,6 +1286,24 @@
         options: undefined
       });
     });
+    // Read-only values must be discoverable BEFORE a mapping has been saved.
+    const readable = typeof globalThis.__bettersCaptureElements === "function" ? globalThis.__bettersCaptureElements() : [];
+    // PL Rater's native forms put column captions and the client banner in
+    // plain table cells. They are labels, not additional data inputs. Keep
+    // manual text picking and existing pick teachings available, while not
+    // advertising every caption as another unmapped field on those forms.
+    const plRaterNativeForm = /rating\.vertafore\.com$/i.test(location.hostname) && rows.some(r => /^(?:text|select|checkbox):/.test(r.key));
+    for (const element of readable) {
+      if (plRaterNativeForm) continue;
+      if (element.matches("input,select,textarea,[role='combobox'],[role='checkbox'],[role='switch']") || !visible(element) || !textPickable(element)) continue;
+      const label = inferTextLabel(element);
+      if (!label) continue;
+      const local = typeof globalThis.__bettersLocalTextLabel === "function" ? globalThis.__bettersLocalTextLabel(element) : "";
+      const key = local ? "field:" + local.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "pick:" + cssPath(element);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ key, label, type:"text", payment:PAYMENT_FIELD.test(label), autoPath:null, mapped:typeof ov[key] === "string" ? ov[key] : null });
+    }
     /* saved read-only-text teachings ("pick:<selector>" -> CRM field) show as
      * rows too, so a revisit can review/retarget/clear them */
     for (const key of Object.keys(ov)) {
@@ -1287,6 +1418,8 @@
     var prior = amount && amount.previousElementSibling;
     var caption = prior && prior.querySelector("mat-label, label");
     if (caption) return clean(caption.innerText || caption.textContent) + ": Amount";
+    const local = typeof globalThis.__bettersLocalTextLabel === "function" ? globalThis.__bettersLocalTextLabel(el) : "";
+    if (local) return local;
     var cell = el.closest ? el.closest("td") : null;
     if (cell) {
       var row = cell.parentElement;
@@ -1305,7 +1438,7 @@
       }
     }
     var prev = el.previousElementSibling;
-    if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV)$/.test(prev.tagName)) {
+    if (prev && /^(STRONG|B|LABEL|DT|TH|SPAN|DIV|LI)$/.test(prev.tagName)) {
       var p = clean(prev.innerText || prev.textContent).replace(/[:*]+$/, "");
       if (p && p.length <= 60 && p !== clean(el.innerText || el.textContent)) return p;
     }
@@ -1327,6 +1460,18 @@
     for (i = 0; i < path.length; i += 1) {
       var hit = pickable(path[i]);
       if (hit) return { control: hit, box: hit };
+    }
+    // A known read-only pair is its own field. Do not climb into a broad
+    // expanded-lead wrapper and steal its unrelated notes textarea.
+    if (typeof globalThis.__bettersLocalTextLabel === "function") {
+      for (i = 0; i < path.length; i += 1) {
+        var leaf = textPickable(path[i]);
+        if (leaf && globalThis.__bettersLocalTextLabel(leaf)) {
+          var value = typeof globalThis.__bettersLocalTextValue === "function" ? globalThis.__bettersLocalTextValue(leaf) || leaf : leaf;
+          return { control:null, textEl:value, box:value };
+        }
+        if (path[i]?.tagName && PICK_STOP[path[i].tagName.toLowerCase()]) break;
+      }
     }
     for (i = 0; i < path.length; i += 1) {
       var node = path[i];
@@ -1456,11 +1601,14 @@
           var hostLabel = host !== tx ? primaryLabel(host) : "";
           var inferred = hostLabel || inferTextLabel(tx);
           var snippet = clean(tx.innerText || tx.textContent).slice(0, 60);
+          // Scan and pick share a label key for read-only pairs. Optional
+          // fields and reordered lead rows must not move the binding.
+          var localPair = !hostLabel && typeof globalThis.__bettersLocalTextLabel === "function" && globalThis.__bettersLocalTextLabel(tx);
           /* inside a LABELLED form field (any site's design system): map the
            * field by its label - it survives re-renders and covers every
            * card that repeats it; otherwise a re-locatable selector */
           var boxLabel = typeof globalThis.__bettersFormFieldLabel === "function" ? globalThis.__bettersFormFieldLabel(tx) : "";
-          var labelKey = boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
+          var labelKey = localPair ? localPair.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : boxLabel ? boxLabel.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() : "";
           // A truncated label cannot match the full source question later.
           // Long carrier captions use the stable control selector instead.
           if (labelKey.length > 140) labelKey = "";
@@ -1469,8 +1617,8 @@
           var sec = mapper && mapper.sectionOf ? mapper.sectionOf(tx) : { key: "", text: "" };
           var pickedPage = /(?:^| )address$/.test(sec.key) ? repeatInfo(boxLabel).page : "";
           finish({
-            key: labelKey && !isSensitiveSource(boxLabel) ? "field:" + (pickedPage ? pickedPage + "|" : "") + (sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
-            label: (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
+            key: labelKey && !isSensitiveSource(localPair || boxLabel) ? "field:" + (!localPair && pickedPage ? pickedPage + "|" : "") + (!localPair && sec.key ? sec.key.slice(0, 40) + ">" : "") + labelKey : "pick:" + cssPath(tx),
+            label: localPair || (labelKey && inSection(tx, boxLabel)) || boxLabel || hostLabel || ((inferred ? inferred + ": " : "") + snippet),
             fieldLabel: boxLabel || hostLabel || inferred,
             section: sec.key,
             scopes: mapper && mapper.scopesOf ? mapper.scopesOf(tx) : [],
@@ -1531,17 +1679,21 @@
    * scrolled out of view, including clipped inside a scrolling panel. */
   var peekRaf = 0;
   function placeBadges() {
-    peekMarks.forEach(function (m) {
-      if (!m.badge) return;
+    // Read all layout before writing badge styles: alternating them forces
+    // a layout for every highlighted field on large Angular forms.
+    var positions = peekMarks.filter(function (m) { return m.badge; }).map(function (m) {
       var r = m.el.getBoundingClientRect();
       var inView = r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
       if (inView && typeof document.elementFromPoint === "function") {
         var hit = document.elementFromPoint(Math.min(innerWidth - 1, Math.max(0, r.left + r.width / 2)), Math.min(innerHeight - 1, Math.max(0, r.top + r.height / 2)));
         inView = !hit || hit === m.el || m.el.contains(hit) || hit.contains(m.el);
       }
-      m.badge.style.display = inView ? "" : "none";
-      m.badge.style.left = Math.max(0, r.left) + "px";
-      m.badge.style.top = Math.max(0, r.top - 15) + "px";
+      return { badge: m.badge, visible: inView, left: Math.max(0, r.left) + "px", top: Math.max(0, r.top - 15) + "px" };
+    });
+    positions.forEach(function (p) {
+      if (p.badge.style.display !== (p.visible ? "" : "none")) p.badge.style.display = p.visible ? "" : "none";
+      if (p.badge.style.left !== p.left) p.badge.style.left = p.left;
+      if (p.badge.style.top !== p.top) p.badge.style.top = p.top;
     });
   }
   function onPeekScroll() {
@@ -1638,6 +1790,8 @@
       if (["hidden", "password", "file", "submit", "button", "reset", "image"].indexOf(type) !== -1 || !visible(el)) return;
       var k = controlKey(el);
       (byKey[k] = byKey[k] || []).push(el);
+      var family = nativeFamily(keyBase(el));
+      if (family) (byKey[family] = byKey[family] || []).push(el);
       var ok = labelKeyOf(el);
       if (ok && ok !== k) (byKey[ok] = byKey[ok] || []).push(el);
     });
@@ -1703,6 +1857,12 @@
   }
 
   function peekAll(arg, redo) {
+    // One label/scope inventory per repaint, not a full document scan for
+    // every one of the data-service mappings (including off-screen fields).
+    peekServiceSnapshot = Array.from(document.querySelectorAll(LABELLED_FIELDS))
+      .filter(function (el) { return visible(el) && !(el.type && ["hidden", "submit", "button"].indexOf(el.type) >= 0); })
+      .map(function (el) { return { label: mapper.canonical(primaryLabel(el)), scopes: mapper.scopesOf(el), box: el.closest("mat-form-field, .mat-mdc-form-field") || el }; });
+    try {
     lastPeekArg = arg;
     if (!redo) watchPage(true);
     clearPeek();
@@ -1720,6 +1880,7 @@
     lastFocusedKey = focusedKey;
     watchBadges(true);
     return { shown: r.shown, missing: r.missing, unmapped: u.shown };
+    } finally { peekServiceSnapshot = null; }
   }
 
   /* "peek unmapped": outline in RED every element the capture reads that
@@ -1735,6 +1896,7 @@
     const covered = [];
     const keys = arg && arg.map && typeof arg.map === "object" ? arg.map : {};
     const coveredKeys = new Set(Object.keys(keys).filter(function (k) { return keys[k]; }));
+    const plRaterNativeForm = /rating\.vertafore\.com$/i.test(location.hostname) && all.some(el => el.matches("input:not([type='hidden']),select,textarea"));
     try {
       scanControls(arg && arg.payload ? arg.payload : null, keys).forEach(function (r) { if (r.autoPath) coveredKeys.add(r.key); });
     } catch (_e) { /* auto-matching is best-effort here */ }
@@ -1766,9 +1928,11 @@
     });
     let shown = 0;
     all.forEach(function (el) {
+      if (!visible(el)) return;
       const tag = el.tagName;
       const isControl = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || el.getAttribute("role");
-      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(labelKeyOf(el)))) return;
+      if (plRaterNativeForm && !isControl) return;
+      if (isControl && (coveredKeys.has(controlKey(el)) || coveredKeys.has(labelKeyOf(el)) || coveredKeys.has(nativeFamily(keyBase(el))))) return;
       if (isControl && serviceLabels.length && serviceCovers(el)) return;
       if (covered.some(function (c) { return c === el || c.contains(el) || el.contains(c); })) return;
       markPeek(el, "unmapped", "");
@@ -1790,6 +1954,9 @@
    * on capture exactly as it does on fill */
   globalThis.__bettersControlKey = controlKey;
   globalThis.__bettersSavedKey = savedKeyOf;
+  // Capture and mapping must use the same site-specific control captions.
+  globalThis.__bettersSourceControlLabel = plRaterVehicleLabel;
+  globalThis.__bettersCollectionFieldMap = collectionMap;
   globalThis.__bettersIsSensitiveLabel = isSensitiveSource;
   globalThis.__bettersPortalScan = (payload, overrides) => scanControls(payload, overrides || {});
   globalThis.__bettersPortalPick = (timeoutMs, overrides) => pickField(timeoutMs, overrides || {});

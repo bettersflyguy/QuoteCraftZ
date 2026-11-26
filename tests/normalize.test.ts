@@ -62,6 +62,12 @@ describe("normalizeQuoteResult", () => {
 });
 
 describe("normalizeApplicant", () => {
+  it("keeps previous addresses after the current address without duplicating a repeated previous record", () => {
+    const previous = {address1:"42 OLD RD",city:"Old Town",state:"MN",postalCode:"55111",type:"Previous"};
+    const a = normalizeApplicant({...applicant,previousAddress:previous,previousAddresses:[previous]});
+    expect(a.address?.street).toBe("100 EXAMPLE RD");
+    expect(a.addresses?.map(x=>[x.street,x.type])).toEqual([["100 EXAMPLE RD",""],["42 OLD RD","Previous"]]);
+  });
   it("extracts identity, address, phones, co-applicants", () => {
     const a = normalizeApplicant(applicant);
     expect(a).toEqual({

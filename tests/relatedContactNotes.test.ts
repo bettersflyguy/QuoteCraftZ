@@ -43,7 +43,8 @@ describe("related contact notes", () => {
     expect(relatedNoteSlots(app)).toEqual([2, 3]);
     const karen = buildRelatedContactNote(app, 2)!;
     expect(karen.count).toBe(2);
-    expect(karen.html).toContain("<tr><td>Maiden name</td><td>Smith</td></tr>");
+    expect(karen.html).toContain("<th>Maiden name</th>");
+    expect(karen.html).toContain("<td>Smith</td>");
     expect(karen.html).not.toContain("Child");
     expect(coApplicantsFromCapture(app).map(c => [c.firstName, c.slot])).toEqual([["Karen", 2], ["Sam", 3]]);
   });

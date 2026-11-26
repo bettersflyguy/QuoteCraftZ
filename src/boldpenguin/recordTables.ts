@@ -25,6 +25,7 @@
  *    side by side. */
 import { ROW_TABLES } from "@/portal/assetTables";
 import { usDate } from "@/util/usDate";
+import { parsePersonName, personNameKey } from "@/util/personName";
 import { canonical, clean, isGridRow } from "./normalize";
 import { samePerson } from "./people";
 import type { CapturedAppField } from "./types";
@@ -59,7 +60,7 @@ const SINGULAR: Record<string, string> = {
 /** Columns that say WHICH record a row is. A kind without an entry has no
  * identity to check, so none of its rows are ever unmatched. */
 const IDENTITY: Record<string, readonly string[]> = {
-  contact: ["firstname", "lastname", "fullname"],
+  contact: ["firstname", "lastname", "fullname", "latinfullname"],
   vehicle: ["vin", "year", "make", "model"],
   address: ["line1", "street1", "street", "addressline1", "city", "postalcode", "zip"]
 };
@@ -146,12 +147,12 @@ function identityOf(r: Rec): { has: boolean; person?: Parameters<typeof samePers
   if (!keys) return { has: true };
   const has = keys.some(k => clean(first(r, k)));
   if (r.kind === "contact") {
-    const letters = (s: string) => canonical(s).replace(/[^a-z]/g, "");
+    const letters = personNameKey;
     let fn = first(r, "firstname"), ln = first(r, "lastname");
     if (!fn && !ln) {
-      const full = first(r, "fullname");
-      if (full.includes(",")) { const [l, f] = full.split(","); ln = clean(l); fn = clean(f).split(" ")[0] ?? ""; }
-      else { const p = full.split(" ").filter(Boolean); fn = p[0] ?? ""; ln = p.length > 1 ? p[p.length - 1]! : ""; }
+      const latin = first(r, "latinfullname");
+      const parts = parsePersonName(latin || first(r, "fullname"), latin ? "two-surnames" : "auto");
+      fn = parts.firstName; ln = parts.lastName;
     }
     if (!fn && !ln) return { has };
     return { has, person: { first: letters(fn), last: letters(ln), dob: first(r, "dateofbirth").replace(/\D/g, ""), email: first(r, "email").toLowerCase() } };

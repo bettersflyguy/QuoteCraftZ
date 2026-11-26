@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Spinner, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
 import { CursorClickRegular, NotepadRegular, StopRegular, TextBulletListLtrRegular } from "@fluentui/react-icons";
-import { TargetPicker } from "./TargetPicker";
-import { captureGroups, securedGroups } from "./MapEditor";
+import { MultiTargetPicker } from "./MultiTargetPicker";
+import { mappingTargets, preferredTarget } from "@/portal/mappingTargets";
+import { captureGroups, securedGroups, targetLabel } from "./MapEditor";
+import {matchesMappingSearch} from "./mappingSearch";
 import { OptionMapEditor, type ChoicesRead } from "./OptionMapEditor";
 import { send } from "./api";
 import type { FieldCatalog } from "@/crm/fieldCatalog";
@@ -74,7 +76,7 @@ const SECTION_NOTE: Record<string, string> = {
 
 /** Every field a data service returns, each routed to a CRM target, with
  * one-for-one choice mappings for CRM choice columns. Saves as you go. */
-export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlightKey }: { source?: string; page?: DataServicePageHooks; focusId?: { id: string } | null; highlightKey?: string | null }) {
+export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlightKey, search="" }: { source?: string; page?: DataServicePageHooks; focusId?: { id: string } | null; highlightKey?: string | null; search?:string }) {
   const styles = useStyles();
   const scope = dataServiceScope(source);
   const [saved, setSaved] = useState<Record<string, string> | undefined>(undefined);
@@ -82,6 +84,7 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlig
   const [catalogNote, setCatalogNote] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => { setOpen(null); }, [search]);
   const [focus, setFocus] = useState<string | null>(null);
   const [heldValues, setHeldValues] = useState<Record<string, string[]>>({});
   const [picking, setPicking] = useState(false);
@@ -209,18 +212,15 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlig
       )}
       {(["Insured", "Contacts", "Phones", "Emails", "Addresses"] as const).map(section => {
         // a field picked on the page always shows, whatever the filter
-        const listed = EZLYNX_FIELDS.filter(f => f.section === section &&
+        const listed = EZLYNX_FIELDS.filter(f => f.section === section && matchesMappingSearch(search,f.id,f.label,f.section,...(f.pageLabels??[]),targets[f.id],...mappingTargets(targets[f.id]??"").map(t=>targetLabel(t,catalog)??t)) &&
           (show === "all" || f.id === focus || (show === "mapped" ? Boolean(targets[f.id]) : !targets[f.id])));
         if (!listed.length) return null;
         return (
         <div key={section}>
           <Text size={200} className={styles.section} block>{section === "Insured" ? "Insured (account)" : section}{SECTION_NOTE[section]}</Text>
           {listed.map(f => {
-            const target = targets[f.id] ?? "";
-            // co-applicant list targets resolve per row; the CRM column is the same
-            const concrete = target.replace("crm:contacts[]", "crm:contact2").replace("crm:primarycontact", "crm:contact2").replace("crm:addresses[]", "crm:address1");
-            const col = choiceColumnOf(concrete, catalog);
-            const key = col ? columnKeyOf(concrete) : null;
+            const binding = targets[f.id] ?? "";
+            const target = preferredTarget(binding);
             return (
               <Fragment key={f.id}>
                 <div
@@ -233,34 +233,32 @@ export function DataServiceMapEditor({ source = "ezlynx", page, focusId, highlig
                   <button type="button" className={styles.label} aria-label={`Highlight ${f.label} on page`}
                     style={{ background: "none", border: 0, padding: 0, textAlign: "left", font: "inherit", cursor: "pointer" }}
                   >{f.label}</button>
-                  <TargetPicker
-                    value={target}
+                  <MultiTargetPicker
+                    value={binding}
                     onChange={v => choose(f.id, v)}
+                    allowAdd={!f.secured}
                     groups={f.secured ? secured : groups}
                     specials={f.secured ? [{ value: "", label: "Not mapped (never captured)" }] : specialsFor(section)}
-                    currentText={target || undefined}
+                    currentText={t=>t || undefined}
+                    extra={t=>{
+                      const c=choiceColumnOf(t.replace("crm:contacts[]","crm:contact2").replace("crm:addresses[]","crm:address1"),catalog);
+                      return c ? <Tooltip content="Map each choice to its CRM choice" relationship="label" withArrow><Button size="small" appearance={open===`${f.id}|${t}`?"primary":"subtle"} icon={<TextBulletListLtrRegular/>} onClick={()=>setOpen(o=>o===`${f.id}|${t}`?null:`${f.id}|${t}`)}/></Tooltip> : null;
+                    }}
                   />
-                  {col && (
-                    <Tooltip content="Map each choice to its CRM choice" relationship="label" withArrow>
-                      <Button
-                        size="small"
-                        appearance={open === f.id ? "primary" : "subtle"}
-                        icon={<TextBulletListLtrRegular />}
-                        aria-pressed={open === f.id}
-                        onClick={() => setOpen(o => (o === f.id ? null : f.id))}
-                      />
-                    </Tooltip>
-                  )}
                 </div>
-                {col && key && open === f.id && (
+                {mappingTargets(binding).map(t=>{
+                  const col=choiceColumnOf(t.replace("crm:contacts[]","crm:contact2").replace("crm:addresses[]","crm:address1"),catalog);
+                  const key=col ? columnKeyOf(t) : null;
+                  return col && key && open===`${f.id}|${t}` ? (
                   <OptionMapEditor
+                    key={t}
                     column={col}
                     sources={heldValues[`${section}|${f.label}`] ?? []}
                     value={choices[key] ?? {}}
                     onChange={next => { setChoices(c => ({ ...c, [key]: next })); void setOptionMaps(scope, { [key]: next }); }}
                     onRead={page ? () => page.onRead(labelsOf(f)) : undefined}
                   />
-                )}
+                ) : null;})}
               </Fragment>
             );
           })}

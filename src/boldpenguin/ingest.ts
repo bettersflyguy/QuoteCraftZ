@@ -4,6 +4,7 @@
  * next portal. Existing data always wins - ingest only adds. */
 import { canonical, clean, normalize } from "./normalize";
 import { alignPeople } from "./people";
+import { parsePersonName, personNameKey } from "@/util/personName";
 import { isIdentifierColumn } from "@/portal/fieldMaps";
 import type { CapturedApplication, CapturedAppField, NormalizedApplication } from "./types";
 
@@ -46,13 +47,13 @@ function signalsOf(n: NormalizedApplication): IdentitySignals {
   const phoneRaw = typeof contact["phone"] === "string" ? contact["phone"].replace(/\D/g, "") : "";
   let lastName = typeof contact["lastName"] === "string" ? contact["lastName"] : "";
   if (!lastName && typeof contact["fullName"] === "string") {
-    lastName = contact["fullName"].trim().split(" ").slice(-1)[0] ?? "";
+    lastName = parsePersonName(contact["fullName"]).lastName;
   }
   const businessRaw = n["business"]?.["legalName"];
   return {
     email,
     phone: phoneRaw.length >= 7 ? phoneRaw.slice(-10) : "",
-    lastName: canonical(lastName),
+    lastName: personNameKey(lastName),
     business: typeof businessRaw === "string" ? canonical(businessRaw) : ""
   };
 }
@@ -73,7 +74,7 @@ export function identityConflict(existing: NormalizedApplication, incoming: Norm
 }
 
 function fieldKey(field: CapturedAppField): string {
-  return [field.section, field.group, canonical(field.label), field.value].join("|");
+  return [field.section, field.group, canonical(field.label), field.value, field.mapped ?? ""].join("|");
 }
 
 function sanitize(fields: CapturedAppField[]): CapturedAppField[] {
@@ -143,7 +144,17 @@ export function mergeIngestedFields(
   // current value: the old one is replaced, never kept beside it
   const slot = (f: CapturedAppField) => [f.section, f.group, canonical(f.label)].join("|");
   const reread = new Set(incoming.map(slot));
-  const held = withoutIdentifiers(existing.fields, secured);
+  const samePlRater = [existing.source.url, site.url].every(url => {
+    try { return new URL(url ?? "").origin === "https://rating.vertafore.com"; } catch { return false; }
+  });
+  // Older PL Rater captures labelled whole grid columns with their first
+  // caption. A re-read has the same durable control name and target but a
+  // corrected caption. Replace that stale row, retaining other pages/targets.
+  const captions = new Map(incoming.filter(f => f.name).map(f => [`${f.name}|${f.mapped ?? ""}`, f.label]));
+  const held = withoutIdentifiers(existing.fields, secured).filter(f => {
+    const corrected = samePlRater && f.name ? captions.get(`${f.name}|${f.mapped ?? ""}`) : undefined;
+    return corrected === undefined || canonical(corrected) === canonical(f.label);
+  });
   const known = new Set(held.map(fieldKey));
   const now = new Set(incoming.map(fieldKey));
   const added = incoming.filter(field => !known.has(fieldKey(field)));

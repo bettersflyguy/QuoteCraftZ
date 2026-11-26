@@ -14,6 +14,12 @@ import type { CapturedApplicant } from "@/types";
 const ENV = { id: "dev", name: "DEV", orgUrl: "https://o.crm.dynamics.com", color: "green" as const };
 
 describe("saved mappings carry over to the merged list", () => {
+  it("migrates occupation tenure to its dedicated Contact column", () => {
+    expect(effectiveTargets({ "person.yearsAtOccupation": "crm:contacts[].iacrm_yearsemployed" })["person.yearsAtOccupation"])
+      .toBe("crm:contacts[].iacrm_yearsatoccupation");
+    expect(effectiveTargets(undefined)["person.yearsAtOccupation"]).toBe("crm:contacts[].iacrm_yearsatoccupation");
+  });
+
   it("the applicant's mapping wins and applies to every person", () => {
     const t = effectiveTargets({
       "applicant.gender": "crm:primarycontact.gendercode",

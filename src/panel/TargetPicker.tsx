@@ -38,7 +38,7 @@ const useStyles = makeStyles({
 /** Searchable mapping-target picker. Unfiltered it browses by entity
  * (group headers); while searching it lists flat hits, each still tagged
  * with its entity so the agent always knows which record a mapping lands on. */
-export function TargetPicker({ value, onChange, groups, specials, currentText, groupPrefix = "" }: {
+export function TargetPicker({ value, onChange, groups, specials, currentText, groupPrefix = "", defaultOpen = false }: {
   value: string;
   onChange: (value: string) => void;
   groups: TargetGroup[];
@@ -48,9 +48,10 @@ export function TargetPicker({ value, onChange, groups, specials, currentText, g
   currentText?: string;
   /** Header prefix in browse mode ("Capture as - "). */
   groupPrefix?: string;
+  defaultOpen?: boolean;
 }) {
   const styles = useStyles();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);

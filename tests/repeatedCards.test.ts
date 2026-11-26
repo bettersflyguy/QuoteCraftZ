@@ -96,10 +96,10 @@ describe("click-to-map on any site", () => {
     expect(row).toMatchObject({ key: "field:line of business", label: "Line of Business" });
   });
 
-  it("otherwise a selector that never anchors on a generated id", async () => {
+  it("uses a read-only pair's stable label instead of its generated container id", async () => {
     document.body.innerHTML = `<main><div id="mat-tab-content-3"><div class="summary"><b>Premium</b><span>$1,200</span></div></div></main>`;
     const row = await pickAfterClick(() => document.querySelector(".summary span")!);
-    expect(row && row !== "timeout" ? row.key : "").toMatch(/^pick:/);
+    expect(row && row !== "timeout" ? row.key : "").toBe("field:premium");
     expect(row && row !== "timeout" ? row.key : "").not.toContain("mat-tab-content-3");
   });
 });

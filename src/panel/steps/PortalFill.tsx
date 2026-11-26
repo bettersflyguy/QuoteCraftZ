@@ -1,19 +1,22 @@
-import { usDate } from "@/util/usDate";
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactElement } from "react";
+import {DestinationCart} from "../DestinationCart";
+import {captureDisplayFields} from "../captureDisplay";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Button, Checkbox, Input, Spinner, Tab, TabList, Text, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
-import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, LockClosedRegular, NotepadRegular, RecordRegular, RecordStopRegular } from "@fluentui/react-icons";
+import { ArrowDownloadRegular, DatabaseArrowDownRegular, EyeFilled, EyeRegular, FormRegular, LockClosedRegular, NotepadRegular, RecordRegular, RecordStopRegular, PersonRegular } from "@fluentui/react-icons";
 import type { InsuredSearchRow } from "@/crm/dataverse";
 import { grantActiveTab } from "../portalAccess";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { exportCaptureToExcel } from "../downloadCapture";
 import { LoadToCrm } from "./LoadToCrm";
+import { NameReview } from "../NameReview";
+import { pendingNameReviews } from "@/boldpenguin/nameReview";
 import { QuotesView } from "../QuotesView";
-import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult } from "@/messages";
+import type { CaptureUpdatedBroadcast, CapturedApplication, CrmLink, PageContext, PortalFillResult, LeadSelection } from "@/messages";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
-import { isGridRow } from "@/boldpenguin/normalize";
-import { recordTables } from "@/boldpenguin/recordTables";
-import { PATH_LABEL, isNoteTarget, noteLabelOf } from "@/portal/fieldMaps";
+import { captureTables, securedCaptureTable } from "../captureTables";
+import { additionalNoteFields, noteTables } from "@/boldpenguin/noteTables";
+import { isNoteTarget } from "@/portal/fieldMaps";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: "12px" },
@@ -27,6 +30,8 @@ const useStyles = makeStyles({
     padding: "8px"
   },
   buttons: { display: "flex", gap: "8px", flexWrap: "wrap" },
+  leadIcon: { position: "relative", display: "inline-flex", paddingRight: "5px" },
+  leadBadge: { position: "absolute", right: "-2px", bottom: "-3px", fontSize: "10px", fontWeight: 600, lineHeight: "12px", backgroundColor: tokens.colorNeutralBackground1, color: tokens.colorBrandForeground1 },
   // spreadsheet-style capture grid: sticky header, cell borders, zebra rows
   grid: {
     maxHeight: "260px",
@@ -36,7 +41,7 @@ const useStyles = makeStyles({
   },
   table: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: "12px" },
   th: {
-    position: "sticky", top: 0, zIndex: 1, textAlign: "left", fontWeight: 600,
+    position: "sticky", top: 0, zIndex: 1, textAlign: "left", fontWeight: 600, whiteSpace: "nowrap",
     padding: "3px 6px", backgroundColor: tokens.colorNeutralBackground4,
     borderBottom: `1px solid ${tokens.colorNeutralStroke1}`, borderRight: `1px solid ${tokens.colorNeutralStroke2}`
   },
@@ -86,23 +91,11 @@ function businessName(app: CapturedApplication | null): string | null {
  * grid's own column headers, one line per row, in page order. */
 interface GridTable { title: string; label?: string; columns: string[]; rows: Record<string, string>[] }
 
-function gridTables(fields: CapturedApplication["fields"]): GridTable[] {
-  // one table per kind of record, a record on one row however it was read (see recordTables)
-  return recordTables(fields);
-}
 
 /** A policy page's table ("Opportunity Policy - Auto", "Prior Auto Policy"):
  * every value from it shows together, wherever it is mapped to. */
 const isPolicySection = (section: string | undefined): boolean =>
   /^opportunity policy - /i.test(section ?? "") || /^prior .{1,30} policy$/i.test(section ?? "");
-/** Where a captured value goes, in words. */
-function targetText(mapped: string | undefined): string {
-  if (!mapped) return "";
-  if (isNoteTarget(mapped)) return noteLabelOf(mapped);
-  const m = /^crm:([a-z]+)\d*\.(.+)$/.exec(mapped);
-  return PATH_LABEL.get(mapped) ?? (m ? `CRM ${m[1]}: ${m[2]}` : mapped);
-}
-
 /** Icon-only action with its description as the hover tooltip. Disabled
  * actions stay hoverable so the tooltip still says why/what. */
 function ActionIcon({ tip, icon, onClick, disabled, active }: {
@@ -139,6 +132,54 @@ export function PortalFill({ onChanged, onFlowActive }: {
   const [ingestResult, setIngestResult] = useState<IngestOutcome | null>(null);
 
   const [autoCap, setAutoCap] = useState(false);
+  const [lead, setLead] = useState<LeadSelection | null>(null);
+  const leadPicking = useRef(false);
+  const leadTab = useRef<number | null>(null);
+  const refreshLead = useCallback(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    setLead(tab?.id ? await send<LeadSelection | null>({ type: "panel/leadStatus", tabId: tab.id }) : null);
+  }, []);
+  useEffect(() => {
+    const refreshSelection = () => { void refreshLead().catch(() => {}); };
+    refreshSelection();
+    chrome.tabs.onActivated.addListener(refreshSelection);
+    return () => {
+      chrome.tabs.onActivated.removeListener(refreshSelection);
+      leadPicking.current = false;
+      if (leadTab.current !== null) void send({ type: "panel/leadCancel", tabId: leadTab.current }).catch(() => {});
+    };
+  }, [refreshLead]);
+  const pickLead = async () => {
+    if (leadPicking.current) {
+      leadPicking.current = false;
+      if (leadTab.current !== null) await send({ type: "panel/leadCancel", tabId: leadTab.current }).catch(() => {});
+      return;
+    }
+    setBusy("lead");setError(null);leadPicking.current = true;
+    try {
+      const tab = await grantActiveTab(setAwaitingGrant);
+      leadTab.current = tab.id;
+      let chosen:LeadSelection|null=null;
+      while (leadPicking.current) {
+        const result = await send<LeadSelection | "timeout" | null>({ type: "panel/leadPick", tabId: tab.id });
+        if (result !== "timeout") {chosen=result;break;}
+      }
+      await refreshLead();
+      if(chosen&&leadPicking.current) {
+        setBusy("ingest");setFillResult(null);setIngestResult(null);
+        const outcome=await send<IngestOutcome>({type:"panel/portalIngest",tabId:tab.id});
+        setIngestResult(outcome);setApp(outcome.app);refresh();onChanged();
+      }
+    } catch (e) { setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message))); }
+    finally { leadPicking.current = false;setBusy(null); }
+  };
+  const clearLead = async () => {
+    try {
+      const tab = await grantActiveTab(setAwaitingGrant);
+      await send({ type: "panel/leadClear", tabId: tab.id });
+      setLead(null);setAutoCap(false);setLive(null);setError(null);
+    } catch (e) { setError(e instanceof PanelError ? e : new PanelError("unknown", String((e as Error).message))); }
+  };
   const [live, setLive] = useState<CaptureUpdatedBroadcast | null>(null);
   const [crmOpen, setCrmOpen] = useState(false);
   // move between the captured data and the quotes held for import
@@ -218,6 +259,13 @@ export function PortalFill({ onChanged, onFlowActive }: {
     send<PageContext>({ type: "panel/getPageContext" }).then(c => setAutoCap(c.autoCapturing)).catch(() => {});
     // live merges from the auto-capture driver while the agent works the site
     const onMsg = (m: unknown) => {
+      const paused = m as { type?: string; tabId?: number; error?: string };
+      if (paused?.type === "portal/leadPaused") {
+        void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+          if (tab?.id === paused.tabId) setError(new PanelError("session", paused.error || "1 Lead paused. Select the lead again."));
+        });
+        return;
+      }
       const b = m as CaptureUpdatedBroadcast;
       if (b?.type === "portal/captureUpdated") {
         setLive(b);
@@ -315,10 +363,12 @@ export function PortalFill({ onChanged, onFlowActive }: {
   };
 
   const name = businessName(app);
+  const displayFields=app?captureDisplayFields(app.fields):[];
+  const namesPending=Boolean(app && pendingNameReviews(app).length);
   // values tagged for a timeline note show apart from the regular capture
-  const noteFields = app ? app.fields.filter(f => isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
+  const noteFields = app ? additionalNoteFields(app.fields.filter(f => isNoteTarget(f.mapped)),app.fields) : [];
   const regular = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && !isPolicySection(f.section)) : [];
-  const policyFields = app ? app.fields.filter(f => isPolicySection(f.section)) : [];
+  const policyFields = app ? app.fields.filter(f => !isNoteTarget(f.mapped) && isPolicySection(f.section)) : [];
   const renderGrid = (t: GridTable, at = 0) => (
     <div key={`${at}:${t.title}`}>
       {t.label === "Fields" && <div className={styles.gridTitle}>{t.title}</div>}
@@ -359,9 +409,9 @@ export function PortalFill({ onChanged, onFlowActive }: {
           onClick={() => run("ingest")}
         />
         <ActionIcon
-          tip={app ? "Fill this page from the capture" : "Fill this page (capture or ingest something first)"}
+          tip={namesPending ? "Confirm the name split below before filling" : app ? "Fill this page from the capture" : "Fill this page (capture or ingest something first)"}
           icon={busy === "fill" ? <Spinner size="tiny" /> : <FormRegular />}
-          disabled={busy !== null || !app}
+          disabled={busy !== null || !app || namesPending}
           onClick={() => run("fill")}
         />
         <ActionIcon
@@ -371,6 +421,14 @@ export function PortalFill({ onChanged, onFlowActive }: {
           disabled={busy !== null}
           onClick={() => { setCrmOpen(v => !v); setCrmNote(null); }}
         />
+        <ActionIcon
+          tip={busy === "lead" ? "1 Lead: click one expanded lead on the page. Click again to cancel." : "1 Lead: select a lead section and ingest it immediately"}
+          icon={busy === "lead" ? <Spinner size="tiny" /> : <span className={styles.leadIcon}><PersonRegular /><span className={styles.leadBadge}>1</span></span>}
+          active={lead !== null || busy === "lead"}
+          disabled={busy !== null && busy !== "lead"}
+          onClick={() => void pickLead()}
+        />
+        <DestinationCart app={app} busy={busy!==null||loadFlow} onFill={()=>void run("fill")} onSaved={updated=>{setApp(updated);onChanged();}}/>
         <Tooltip
           content={peekUnmapped
             ? `${mappedCount} mapped in green, ${peekCount ?? 0} unmapped in red. Click to hide.`
@@ -388,9 +446,13 @@ export function PortalFill({ onChanged, onFlowActive }: {
           />
         </Tooltip>
       </div>
+      {lead && <div className={styles.match}>
+        <span className={styles.matchText}>1 Lead · {lead.label}. Selected section only. Click 1 Lead to select and ingest another lead.</span>
+        <Button appearance="subtle" size="small" disabled={busy !== null} onClick={() => void clearLead()}>Clear selection</Button>
+      </div>}
       {app
         ? <div className={styles.ready}>
-            {name ?? "Application ready"}: {app.fields.length} field{app.fields.length === 1 ? "" : "s"} held
+            {busy === "lead" || busy === "ingest" ? "Capture pending · previous data shown" : `${name ?? "Application ready"}: ${displayFields.length} field${displayFields.length === 1 ? "" : "s"} held`}
             {crmLink && env && (
               <>
                 {" · "}
@@ -399,6 +461,7 @@ export function PortalFill({ onChanged, onFlowActive }: {
             )}
           </div>
         : <div className={styles.hint}>Nothing captured yet.</div>}
+      {app && <NameReview app={app} onChange={next=>{setApp(next);onChanged();}}/>}
       {awaitingGrant && (
         <Text size={200} style={{ display: "block", marginTop: 6, fontWeight: 600 }}>
           Waiting for browser approval to access {awaitingGrant}. Look for the permission
@@ -439,82 +502,25 @@ export function PortalFill({ onChanged, onFlowActive }: {
         <div className={styles.result}>New person detected. Started a fresh capture.</div>
       )}      {app && (
         <TabList size="small" selectedValue={view} onTabSelect={(_, d) => setView(d.value as "data" | "quotes")}>
-          <Tab value="data">Data ({app.fields.length})</Tab>
+          <Tab value="data">Data ({displayFields.length})</Tab>
           <Tab value="quotes">Quotes ({(app.quotes ?? []).length})</Tab>
         </TabList>
       )}
       {app && view === "quotes" && <QuotesView app={app} onChange={setApp} />}
-      {app && view === "data" && regular.some(f => !isGridRow(f)) && (
-        <div className={styles.grid}>
-          <table className={styles.table}>
-            <colgroup><col style={{ width: "42%" }} /><col /></colgroup>
-            <thead>
-              <tr>
-                <th className={styles.th}>Field</th>
-                <th className={styles.th}>Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...new Set(regular.filter(f => !isGridRow(f)).map(f => f.section))].map(section => (
-                <Fragment key={section}>
-                  <tr>
-                    <td colSpan={2} className={styles.groupCell}>
-                      {section === "Insured profile" && crmLink && env ? (
-                        <a href={crmRecordUrl(env, crmLink.kind, crmLink.id)} target="_blank" rel="noreferrer"
-                          title="Open this insured's CRM record in a new tab">
-                          {section} ↗
-                        </a>
-                      ) : (section || "Page")}
-                    </td>
-                  </tr>
-                  {regular.filter(f => f.section === section && !isGridRow(f)).map((f, i) => (
-                    <tr key={`${f.label}:${i}`} className={i % 2 ? styles.zebra : undefined}>
-                      <td className={styles.td} title={f.group ? `${f.group}: ${f.label}` : f.label}>
-                        {f.group ? `${f.group}: ` : ""}{f.label}
-                      </td>
-                      <td className={styles.td} title={f.value}>{usDate(f.value)}</td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {app && view === "data" && gridTables(regular).map((t, i) => renderGrid(t, i))}
-      {app && view === "data" && [...new Set(policyFields.map(f => f.section))].map(sec => renderGrid({
-        title: sec, label: "Fields", columns: ["Field", "Value", "Goes to"],
-        rows: policyFields.filter(f => f.section === sec).map(f => ({
-          Field: f.group ? `${f.label} (${f.group})` : f.label, Value: usDate(f.value), "Goes to": targetText(f.mapped)
-        }))
-      }))}
+      {app && view === "data" && captureTables(captureDisplayFields(regular)).map((t, i) => renderGrid(t, i))}
+      {app && view === "data" && captureTables(captureDisplayFields(policyFields)).map((t, i) => renderGrid(t, i))}
       {app && view === "data" && secureHeld.length > 0 && (
         <div>
           <div className={styles.gridTitle} title="Held in memory for this session only. Written to the secured CRM columns on load; never exported or noted.">
             <LockClosedRegular /> Secured ({secureHeld.length})
           </div>
-          {renderGrid({ title: "secured", label: "Notes", columns: ["Field", "Value"], rows: secureHeld.map(s => ({ Field: s.label, Value: s.masked })) })}
+          {renderGrid({ ...securedCaptureTable(secureHeld), label: "Notes" })}
         </div>
       )}
       {app && view === "data" && noteFields.length > 0 && (
         <div className={styles.notesBlock}>
-          <div className={styles.notesTitle}><NotepadRegular /> Non Mapped Timeline Entries</div>
-          {[...new Set(noteFields.map(f => f.mapped!))].map(target => {
-            const forRecord = noteFields.filter(f => f.mapped === target);
-            const singles = forRecord.filter(f => !isGridRow(f));
-            return (
-              <div key={target}>
-                <div className={styles.gridTitle}>On {noteLabelOf(target).replace(/^Notes: /, "")}</div>
-                {/* single values grouped by where they came from ("Opportunity
-                    Policy - Auto", "Prior Auto Policy"...), each its own table */}
-                {[...new Set(singles.map(f => f.section ?? ""))].map(sec => renderGrid({
-                  title: sec || `${target}:singles`, label: sec ? "Fields" : "Notes", columns: ["Field", "Value"],
-                  rows: singles.filter(f => (f.section ?? "") === sec).map(f => ({ Field: f.label, Value: usDate(f.value) }))
-                }))}
-                {gridTables(forRecord).map((t, i) => renderGrid(t, i))}
-              </div>
-            );
-          })}
+          <div className={styles.notesTitle}><NotepadRegular /> Additional timeline data</div>
+          {noteTables(noteFields,app.fields).map((t,i)=>renderGrid(t,i))}
         </div>
       )}
       {app && (

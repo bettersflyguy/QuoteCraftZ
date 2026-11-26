@@ -25,11 +25,13 @@ export interface CapturedApplication {
   schemaVersion: "1.1";
   capturedAt: string;
   /** "Bold Penguin" for application captures; the site hostname for portal ingests. */
-  source: { system: string; url: string; title: string };
+  source: { system: string; url: string; title: string; leadKey?: string };
   completion: { likelyCompleted: boolean; matchedPhrases: string[]; hasReviewStep: boolean };
   scannedSections: string[];
   normalized: NormalizedApplication;
   fields: CapturedAppField[];
+  /** User-confirmed boundaries for this captured person's original name. */
+  nameReviews?: Record<string, import("./nameReview").ReviewedName>;
   /** Quotes held for import, from any source (EZLynx data service, a
    * carrier portal's quote page). The agent selects them, maps carriers and
    * sets Firm/Estimated before loading. */

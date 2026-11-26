@@ -35,6 +35,7 @@ export function MappingsManager() {
   const [scanTabId, setScanTabId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const [fieldSearch,setFieldSearch]=useState("");
   // this site's one-for-one choice mappings, saved with the field mapping
   const [choices, setChoices] = useState<Record<string, ColumnOptionMap>>({});
   const [app, setApp] = useState<CapturedApplication | null>(null);
@@ -80,7 +81,7 @@ export function MappingsManager() {
   const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
   useEffect(() => {
     const read = () => {
-      void chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => {
+      void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
         const url = tab?.url ?? "";
         setCurrentOrigin(/^https:\/\//i.test(url) ? new URL(url).origin : null);
       }).catch(() => setCurrentOrigin(null));
@@ -227,10 +228,15 @@ export function MappingsManager() {
         </Text>
       )}
       {dsTabId !== null && currentOrigin && DATA_SERVICE_ORIGINS[currentOrigin] && (
+        <input aria-label="Search mappings" placeholder="Search source or CRM column…" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} style={{width:"100%",boxSizing:"border-box",height:26,fontSize:12}}/>
+      )}
+      {scan && dsTabId === null && <input aria-label="Search mappings" placeholder="Search source or CRM column…" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} style={{width:"100%",boxSizing:"border-box",height:26,fontSize:12}}/>}
+      {dsTabId !== null && currentOrigin && DATA_SERVICE_ORIGINS[currentOrigin] && (
         <DataServiceMapEditor
+          search={fieldSearch}
           source={DATA_SERVICE_ORIGINS[currentOrigin]!.source}
           page={{
-            onPick: () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: dsTabId }),
+            onPick: () => {setFieldSearch("");return send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: dsTabId });},
             onPickCancel: () => send<null>({ type: "panel/portalPickCancel", tabId: dsTabId }),
             onRead: labels => send<ChoicesRead | null>({ type: "panel/portalChoices", tabId: dsTabId, labels }),
             onHighlight: setHighlightKey,
@@ -242,6 +248,7 @@ export function MappingsManager() {
       )}
       {scan && (
         <MapEditor
+          search={fieldSearch}
           scan={scan}
           draft={draft}
           setDraft={u => setDraft(u)}
@@ -263,7 +270,7 @@ export function MappingsManager() {
           onHighlight={setHighlightKey}
           onPick={scanTabId === null
             ? undefined
-            : () => send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: scanTabId })}
+            : () => {setFieldSearch("");return send<PortalScanRow | "timeout" | null>({ type: "panel/portalPick", tabId: scanTabId });}}
           // a field the data service returns jumps to its data-service row
           routePick={dsMode ? row => {
             const hit = dataServiceFieldOf(row);

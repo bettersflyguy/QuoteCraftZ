@@ -129,7 +129,7 @@ describe("field-map share files", () => {
     expect(parsed.perOrigin[0]!.picks).toBe(3);
   });
 
-  it("accepts CRM-column capture targets on pick keys only, never the AMS-reserved or identifier-class columns", () => {
+  it("accepts CRM-column targets on picked and native controls, never AMS-reserved or identifier-class columns", () => {
     const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport({
       "https://ams.example.com": {
         "pick:#a > span": "crm:account.address1_city",           // kept
@@ -142,11 +142,11 @@ describe("field-map share files", () => {
         "pick:#h > span": "crm:account.Address1_City",           // not a logical name - dropped
         "pick:#i > span": "crm:policies[].iacrm_synctoams",      // AMS-owned sync flag - dropped
         "text:city": "crm:account.address1_city",                // form control: concrete CRM column - kept
-        "text:dob2": "crm:contacts[].birthdate"                  // form control: needs a row - dropped
+        "text:dob2": "crm:contacts[].birthdate"                  // native control: fan out in source row order
       }
     })));
-    expect(Object.keys(parsed.maps["https://ams.example.com"]!).sort()).toEqual(["pick:#a > span", "pick:#b > span", "pick:#c > span", "pick:#d > span", "text:city"]);
-    expect(parsed.dropped).toBe(6);
+    expect(Object.keys(parsed.maps["https://ams.example.com"]!).sort()).toEqual(["pick:#a > span", "pick:#b > span", "pick:#c > span", "pick:#d > span", "text:city", "text:dob2"]);
+    expect(parsed.dropped).toBe(5);
     expect(parsed.perOrigin[0]!.picks).toBe(4);
   });
 
@@ -191,6 +191,20 @@ describe("field-map share files", () => {
       "pick:#x > span": "contacts[].email",
       "text:vin": "vehicles[].vin"
     });
+    expect(parsed.dropped).toBe(0);
+  });
+
+  it("round-trips native controls bound to CRM arrays without dropping property or contact rows", () => {
+    const maps = { "https://app.ezlynx.com": {
+      "checkbox:retireesCredit": "crm:properties[].iacrm_retireecredit",
+      "number:numberOfEmployees": "crm:properties[].iacrm_employeesonpremises",
+      "text:maidenName": "crm:contacts[].iacrm_maidenname",
+      "text:vin": "crm:vehicles[].iacrm_vin",
+      "text:zip4": "crm:addresses[].iacrm_zip4suffix"
+    } };
+    const parsed = parseFieldMapImport(JSON.stringify(buildFieldMapExport(maps)));
+    expect(parsed.maps).toEqual(maps);
+    expect(parsed.fields).toBe(5);
     expect(parsed.dropped).toBe(0);
   });
 });

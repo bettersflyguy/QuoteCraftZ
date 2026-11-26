@@ -9,6 +9,18 @@ function field(label: string, value: string, section = "Quote details"): Capture
 }
 
 describe("portal ingest merge", () => {
+  it("repairs PL Rater captions by control and target while keeping other held pages", () => {
+    const pl={system:'rating.vertafore.com',url:'https://rating.vertafore.com/UserInterface/USA/PA/DriverEditCol.aspx',title:'PL Rater'};
+    const bad={...field('Date of Birth / Age','Female','Drivers'),name:'DriverCtlBody_1$cmbSex',mapped:'crm:primarycontact.gendercode'};
+    const other={...field('Annual Miles','12000','Vehicles'),name:'AutoCtlBody_1$rniAnnualMiles',mapped:'crm:vehicle1.iacrm_annualmiles'};
+    const old=mergeIngestedFields(null,[bad,other],pl).app;
+    const corrected={...bad,label:'Gender'};
+    const result=mergeIngestedFields(old,[corrected],pl).app;
+    expect(result.fields.filter(f=>f.name===bad.name)).toEqual([corrected]);
+    expect(result.fields).toContainEqual(other);
+    const unrelated=mergeIngestedFields(old,[corrected],site).app;
+    expect(unrelated.fields).toContainEqual(bad);
+  });
   it("starts a fresh capture from an ingested page, normalized and deduped", () => {
     const { app, added, total } = mergeIngestedFields(null, [
       field("Legal Business Name *", "Northwind Bakery LLC"),

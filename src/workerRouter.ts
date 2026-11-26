@@ -1,4 +1,12 @@
+import {addExpressAnswer} from "@/portal/expressAnswers";
+import {pickLeadFrame} from "@/portal/pickLeadFrame";
+import {mappingServices} from "@/options/mappingGraph";
+import {destinationReadiness} from "@/portal/destinationReadiness";
+import {cachedFieldCatalog} from "@/crm/fieldCatalog";
+import {getCrmAgent} from "@/crm/agent";
 import type { BridgeRequest, PanelRequest, Res } from "@/messages";
+import {confirmNameSplit,requireReviewedNames,withReviewedNames} from "@/boldpenguin/nameReview";
+import { expandedFieldMap, mappingTargets, packMappingTargets, preferredFieldMap } from "@/portal/mappingTargets";
 import type { CrmEnvironment } from "@/crm/environments";
 import { getEnvironments, getActiveEnvironment, setActiveEnvironment } from "@/crm/environments";
 import { getAccessToken, clearToken } from "@/crm/auth";
@@ -36,6 +44,8 @@ import {
 } from "@/crm/dataverse";
 import { getCarrierAliases, saveCarrierAlias } from "@/crm/carrierAliases";
 import { mergeIngestedFields } from "@/boldpenguin/ingest";
+import { mergeLeadCapture } from "@/portal/leadCapture";
+import type { LeadSelection } from "@/messages";
 import { slotOf, withSlot } from "@/boldpenguin/people";
 import { ACCOUNT_ADDRESS_COLUMNS, addressRows, buildRelatedContactNote, noteOutcomeText, primarySlots, relatedNoteSlots, buildSupplementalNote, buildTimelineNote, coverageLinesFromCapture, crmGroup, parseMoney, quoteFromCapture, writeApplicationKnowledge, assetRowQuestionKeys } from "@/crm/appCommit";
 import { EZLYNX_FIELDS, coveredPageLabels, dataServicePeekItems, effectiveTargets, ezlynxFields, ezlynxSecure, getDataServiceMaps, mergeHeldQuotes, quotesFromRun, withoutSsn } from "@/sources/ezlynxSource";
@@ -118,6 +128,7 @@ export interface Deps {
   ) => Promise<import("@/boldpenguin/types").PortalFillResult>;
   /** Injects the page harvester into the tab and returns its visible fields. */
   ingestPortalTab: (tabId: number) => Promise<{
+    leadKey?: string;
     fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string;
     /** Values of controls mapped to SECURED targets: held apart, never captured. */
     secure?: { path: string; value: string }[];
@@ -432,6 +443,8 @@ async function withExtrasFallback<T>(extra: Record<string, unknown>, create: (ex
   try { return await create(extra); } catch { return create({}); }
 }
 
+let expressAnswerQueue:Promise<unknown>=Promise.resolve();
+
 export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<unknown>> {
   try {
     switch (msg.type) {
@@ -493,6 +506,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       }
 
       case "panel/createAccount": {
+        if (msg.fromCapture) {
+          const app=await deps.getCapturedApplication();
+          if (!app) throw new Error("Capture the person again before creating an account.");
+          requireReviewedNames(app);
+        }
         const env = await deps.getActiveEnvironment();
         return { ok: true, data: await deps.createAccount(env, msg.fields) };
       }
@@ -755,6 +773,32 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/bpGetCaptured":
         return { ok: true, data: await deps.getCapturedApplication() };
 
+      case "panel/saveApplicationAnswer": {
+        const operation=expressAnswerQueue.then(async()=>{
+        const app=await deps.getCapturedApplication();
+        if(!app||app.capturedAt!==msg.revision||(app.source.leadKey||app.source.url)!==msg.leadKey)throw new Error("The application changed. Refresh the flyout before saving.");
+        const [maps,ds,env]=await Promise.all([getAllFieldMaps(),getDataServiceMaps(),deps.getActiveEnvironment()]);
+        const catalog=await cachedFieldCatalog(env.id);
+        const missing=destinationReadiness(mappingServices(maps,ds),app,catalog).flatMap(d=>d.missing).find(f=>f.target===msg.target);
+        if(!missing)throw new Error("This answer is no longer missing or mapped. Refresh the flyout.");
+        const next=addExpressAnswer(app,msg.target,msg.value,missing.label,catalog);
+        const latest=await deps.getCapturedApplication();
+        if(!latest||latest.capturedAt!==app.capturedAt||(latest.source.leadKey||latest.source.url)!==msg.leadKey)throw new Error("The application changed. Refresh the flyout before saving.");
+        await deps.setCapturedApplication(next);
+        return next;
+        });
+        expressAnswerQueue=operation.catch(()=>{});
+        return {ok:true,data:await operation};
+      }
+
+      case "panel/confirmNameSplit": {
+        const app=await deps.getCapturedApplication();
+        if (!app) throw new Error("Capture the person again before reviewing the name.");
+        const reviewed=confirmNameSplit(app,msg);
+        await deps.setCapturedApplication(reviewed);
+        return {ok:true,data:reviewed};
+      }
+
       case "panel/bpClear":
         await deps.setCapturedApplication(null);
         await chrome.storage.session.remove("bp/crmLink");
@@ -785,7 +829,8 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         if (!app) {
           return { ok: false, error: "The captured application is no longer available. Capture it again in Bold Penguin.", kind: "session" };
         }
-        return { ok: true, data: await deps.fillPortalTab(msg.tabId, app, msg.overwrite, msg.autoAdvance) };
+        requireReviewedNames(app);
+        return { ok: true, data: await deps.fillPortalTab(msg.tabId, withReviewedNames(app), msg.overwrite, msg.autoAdvance) };
       }
 
       case "panel/portalScan":
@@ -797,7 +842,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       case "panel/portalChoices": {
         // one field's current value and options (styled dropdowns opened,
         // read and closed); the first frame holding the field answers
-        await chrome.scripting.executeScript({ target: { tabId: msg.tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+        await chrome.scripting.executeScript({ target: { tabId: msg.tabId, allFrames: true }, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-fill.js"] });
         const frames = await chrome.scripting.executeScript({
           target: { tabId: msg.tabId, allFrames: true },
           func: (k: string, l: string[], h: { label?: string; section?: string } | null) =>
@@ -823,20 +868,36 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         if (msg.options) await setOptionMaps(msg.origin, msg.options);
         return { ok: true, data: null };
 
+      case "panel/leadStatus":
+        return { ok: true, data: await leadSelection(msg.tabId) };
+      case "panel/leadCancel":
+        await leadAction(msg.tabId, "cancel");
+        return { ok: true, data: null };
+      case "panel/leadClear":
+        await deps.setAutoCapture(msg.tabId, false);
+        await leadAction(msg.tabId, "clear");
+        await chrome.storage.session.remove(leadStorageKey(msg.tabId));
+        return { ok: true, data: null };
+      case "panel/leadPick":
+        return { ok: true, data: await pickLead(msg.tabId) };
       case "panel/portalIngest": {
         // EZLynx is a DATA-SERVICE source: same intake, exact data (applicant
         // + rating run from its own service), routed by Settings mappings
         const tab = await chrome.tabs.get(msg.tabId).catch(() => null);
-        if (tab?.url && /^https:\/\/app\.ezlynx\.com\//i.test(tab.url)) return await ingestEzlynx(deps, tab.url, msg.tabId);
+        if (tab?.url && /^https:\/\/app\.ezlynx\.com\//i.test(tab.url) && !await leadSelection(msg.tabId)) return await ingestEzlynx(deps, tab.url, msg.tabId);
         const harvested = await deps.ingestPortalTab(msg.tabId);
         const existing = await deps.getCapturedApplication();
         // this site's wording for choices -> the exact CRM choice
         const pageOrigin = (() => { try { return new URL(harvested.url).origin; } catch { return ""; } })();
-        harvested.fields = translateCapturedChoices(harvested.fields, (await getOptionMaps())[pageOrigin], await catalogOrNull(deps));
-        const outcome = mergeIngestedFields(existing, harvested.fields, {
+        // A read-only lead with no CRM-column mappings needs no metadata or
+        // interactive CRM sign-in just to hold its visible data.
+        const catalog = harvested.fields.some(f => f.mapped?.startsWith("crm:")) ? await catalogOrNull(deps) : null;
+        harvested.fields = translateCapturedChoices(harvested.fields, (await getOptionMaps())[pageOrigin], catalog);
+        const outcome = mergeLeadCapture(existing, harvested.fields, {
           system: new URL(harvested.url).hostname,
           url: harvested.url,
-          title: harvested.title
+          title: harvested.title,
+          leadKey: (harvested as { leadKey?: string }).leadKey
         });
         // a premium mapped to the quote premium holds a quote for this site;
         // without one, a quote an earlier version held for the site goes
@@ -873,12 +934,22 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       }
 
       case "panel/appCommit": {
-        const app = await deps.getCapturedApplication();
-        if (!app) {
+        const held = await deps.getCapturedApplication();
+        if (!held) {
           return { ok: false, error: "The captured application is no longer available. Capture or ingest it again.", kind: "session" };
         }
+        requireReviewedNames(held);
+        const app=withReviewedNames(held);
         const env = await deps.getActiveEnvironment();
         const results: import("@/crm/dataverse").BatchItemResult[] = [];
+        const agent=await getCrmAgent(env);
+        if(agent) {
+          try {
+            await ensureServicingAssignment(env,{accountId:msg.accountId,ownerId:agent.userId,ownerName:agent.fullName,accountCreatedByPanel:false,createdOpportunityIds:[]},{assignOwner:deps.assignOwner,hasServicingTeamMember:deps.hasServicingTeamMember,createServicingTeamMember:deps.createServicingTeamMember});
+            results.push({key:`CRM Agent: ${agent.fullName} on insured servicing team`,status:204,error:null,entityId:null});
+          }catch(e){results.push({key:"CRM Agent servicing assignment",status:0,error:(e as Error).message,entityId:null});}
+        }
+
         // same best-effort structure as the EZLynx commit: enrichment first,
         // then the knowledge write, each surfacing its own result row.
         // captured CRM-column values, coerced against the live catalog (a
@@ -1034,6 +1105,11 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
       }
 
       case "panel/createLead": {
+        if (msg.fromCapture) {
+          const app=await deps.getCapturedApplication();
+          if (!app) throw new Error("Capture the person again before creating a lead.");
+          requireReviewedNames(app);
+        }
         const env = await deps.getActiveEnvironment();
         return { ok: true, data: await deps.createLead(env, msg.fields) };
       }
@@ -1080,6 +1156,14 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         return { ok: true, data: { quoteId, linesWritten } };
       }
 
+      case "auth/status": {
+        const env = await deps.getActiveEnvironment();
+        // A status check can refresh an existing session, but must never open
+        // an account picker merely because the panel mounted after a reload.
+        await deps.getAccessToken(env.orgUrl, { interactive: false });
+        await deps.dvQuery(env, "WhoAmI");
+        return { ok: true, data: { environment: env.name } };
+      }
       case "auth/signIn": {
         const env = await deps.getActiveEnvironment();
         // force a fresh interactive sign-in: the cached token may be VALID but
@@ -1103,7 +1187,7 @@ export async function routeMessage(msg: PanelRequest, deps: Deps): Promise<Res<u
         : "This is usually the wrong account picked at sign-in. Use Sign in and choose your work account.";
       return { ok: false, error: `${who} was rejected by ${envName} (${err.orgUrl}, HTTP ${err.status}). ${why}`, kind: "auth" };
     }
-    if (err.name === "AuthRequiredError") return { ok: false, error: "Sign-in required", kind: "auth" };
+    if (err.name === "AuthRequiredError") return { ok: false, error: err.message || "Sign-in required", kind: "auth" };
     return { ok: false, error: String(err.message ?? err), kind: "unknown" };
   }
 }
@@ -1208,12 +1292,15 @@ async function tabOrigin(tabId: number): Promise<string> {
 
 async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanResult> {
   const origin = await tabOrigin(tabId);
+  const selection = await leadSelection(tabId);
+  if (selection && selection.frameId < 0) return { origin, rows:[] };
+  const target = selection ? { tabId, frameIds:[selection.frameId] } : { tabId, allFrames:true };
   const overrides = origin ? await fieldMapFor(origin) : {};
   const app = await getCapturedApplication();
   // the ingester names labelled-field rows ("field:vehicles|vin")
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
+  await chrome.scripting.executeScript({ target, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
   const frames = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
+    target,
     func: (p: unknown, ov: unknown) =>
       (globalThis as { __bettersPortalScan?: (p: unknown, ov: unknown) => unknown }).__bettersPortalScan?.(p, ov) ?? null,
     args: [app, overrides]
@@ -1222,7 +1309,8 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
     .map(f => f.result as import("@/boldpenguin/types").PortalScanRow[] | null)
     .filter((r): r is import("@/boldpenguin/types").PortalScanRow[] => r !== null)
     .flat();
-  if (!rows.length) throw new Error("No fillable fields found on this page. Open the quote form, then retry.");
+  // Empty scans still open the editor so its click-to-map selector can teach
+  // custom text/shadow fields. A read-only lead is not a missing quote form.
   // dedupe by key; a "pick:" teaching that resolved in SOME frame beats
   // another frame's "not on this page" placeholder for the same key
   const unresolved = (r: import("@/boldpenguin/types").PortalScanRow) => r.label === "(taught text, not on this page)";
@@ -1243,7 +1331,7 @@ async function scanPortalTab(tabId: number): Promise<import("@/boldpenguin/types
 async function pickPortalTab(tabId: number): Promise<import("@/boldpenguin/types").PortalScanRow | "timeout" | null> {
   // the ingester supplies form-field labels, so a click inside a labelled
   // field maps it by label (robust on any site's design system)
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"] });
   // the site's saved mappings, so a picked box is keyed the way its mapping is
   const origin = await tabOrigin(tabId);
   const overrides = origin ? await fieldMapFor(origin) : {};
@@ -1291,6 +1379,7 @@ function arrayTableOf(path: string, catalog: FieldCatalog | null): { title: stri
  * missing), so missing = items found nowhere. */
 /** A saved target as the peek's badge text. */
 function peekLabel(target: string, catalog: FieldCatalog | null): string {
+  if (mappingTargets(target).length > 1) return mappingTargets(target).map(t=>peekLabel(t,catalog)).join(" + ");
   if (target === "skip") return "Never fill";
   if (isNoteTarget(target)) return noteLabelOf(target);
   if (target.startsWith("label:")) return target.slice(6);
@@ -1320,7 +1409,7 @@ async function peekPortalTab(
   if (items) {
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
-      files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"]
+      files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-fill.js"]
     });
     const origin = await tabOrigin(tabId);
     let catalog: FieldCatalog | null = null;
@@ -1411,12 +1500,12 @@ async function fillPortalTab(
   autoAdvance: boolean
 ): Promise<import("@/boldpenguin/types").PortalFillResult> {
   const origin = await tabOrigin(tabId);
-  const overrides = origin ? await fieldMapFor(origin) : {};
+  const overrides = preferredFieldMap(origin ? await fieldMapFor(origin) : {});
   // On-demand injection: the filler ships as plain scripts (public/portal/) so it
   // can run on ANY carrier portal the user granted, without a declared match.
   // allFrames: agent portals (Progressive FAO among them) often render the quote
   // form inside an iframe - every frame fills its own fields.
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js"] });
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-fill.js"] });
   // every value any mapping target can name (CRM columns, row slots...);
   // secured values are NOT in here
   let catalog: FieldCatalog | null = null;
@@ -1501,22 +1590,53 @@ async function fillPortalTab(
   return total;
 }
 
-async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string; secure: { path: string; value: string }[] }> {
+const leadStorageKey = (tabId: number) => "portal/lead/" + tabId;
+async function leadSelection(tabId: number): Promise<LeadSelection | null> {
+  return (await chrome.storage.session.get(leadStorageKey(tabId)))[leadStorageKey(tabId)] as LeadSelection || null;
+}
+async function leadAction(tabId: number, action: "cancel" | "clear") {
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: (a: "cancel" | "clear") => {
+    const scope = (globalThis as { __bettersLead?: { cancel(): void; clear(): void } }).__bettersLead;
+    if (a === "clear") scope?.cancel();
+    scope?.[a]();
+    if (a === "clear") (globalThis as { __bettersOneLead?: boolean }).__bettersOneLead = false;
+  }, args: [action] });
+}
+async function pickLead(tabId: number): Promise<LeadSelection | "timeout" | null> {
+  if (autoRun.running) await autoRun.running.catch(() => {});
+  // The pending guard also survives a reload. Capture must never silently
+  // fall back to the whole dashboard after losing its live DOM boundary.
+  await chrome.storage.session.set({ [leadStorageKey(tabId)]: { frameId: -1, label: "Select one lead section", key: "" } });
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-lead.js"] });
+  const result = await pickLeadFrame(tabId);
+  if (result && result !== "timeout") {
+    await chrome.storage.session.set({ [leadStorageKey(tabId)]: result });
+    return result;
+  }
+  return result;
+}
+
+async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string; leadKey?: string; secure: { path: string; value: string }[] }> {
+  const selection = await leadSelection(tabId);
+  if (selection && selection.frameId < 0) throw new Error("1 Lead paused: select one expanded lead section first.");
+  const target = selection ? { tabId, frameIds: [selection.frameId] } : { tabId, allFrames: true };
   // the filler supplies controlKey, so saved control mappings route on capture
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["portal/portal-mapper.js", "portal/portal-fill.js", "portal/portal-ingest.js"] });
-  type FrameHarvest = { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string; secure?: { path: string; value: string }[] };
+  await chrome.scripting.executeScript({ target, files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-fill.js", "portal/portal-ingest.js", "portal/portal-lead.js"] });
+  type FrameHarvest = { fields: import("@/boldpenguin/types").CapturedAppField[]; title: string; url: string; leadKey?: string; secure?: { path: string; value: string }[] };
   // agent-taught read-only-text extractions for this site: "pick:<selector>"
   // entries resolve to the taught CRM field's display label, which the
   // normalizer recognizes - the page never chooses its own labels
   const origin = await tabOrigin(tabId);
-  const siteMap = Object.fromEntries(Object.entries(origin ? await fieldMapFor(origin) : {}).map(([k, v]) => [k, securedIfIdentifier(v)]));
+  const rawMap = origin ? await fieldMapFor(origin) : {};
+  const entries = expandedFieldMap(rawMap).map(([k,v])=>[k,securedIfIdentifier(v)] as [string,string]);
+  const siteMap = Object.fromEntries(Object.keys(rawMap).map(k=>[k,packMappingTargets(entries.filter(([key])=>key===k).map(([,v])=>v))]));
   // CRM-column teachings label themselves from the cached catalog (falling
   // back to the column's logical name when the catalog isn't loaded yet)
   let catalog: FieldCatalog | null = null;
-  if (Object.values(siteMap).some(v => isCrmTarget(v))) {
+  if (entries.some(([,v]) => isCrmTarget(v))) {
     try { catalog = await getFieldCatalog(await getActiveEnvironment(), { dvJson }); } catch { catalog = null; }
   }
-  const taught = Object.entries(siteMap)
+  const taught = entries
     .filter(([k, v]) => k.startsWith("pick:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v) || isSecureTarget(v)))
     .map(([k, v]) => {
       // note teachings are labeled on the page (column header / field label)
@@ -1531,7 +1651,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
     });
   // labelled-field teachings ("field:vehicles|vin"): every card's field
   // with that label on that step, routed like a pick
-  const labelled = Object.entries(siteMap)
+  const labelled = entries
     .filter(([k, v]) => k.startsWith("field:") && v !== "skip" && (PATH_LABEL.has(v) || isCrmTarget(v) || isNoteTarget(v) || isSecureTarget(v)))
     .map(([k, v]) => {
       const m = FIELD_KEY_PARTS.exec(k);
@@ -1544,11 +1664,19 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   // control mappings (form inputs) route their values on capture as on fill
   const controls = Object.fromEntries(Object.entries(siteMap).filter(([k, v]) => !k.startsWith("pick:") && !k.startsWith("field:") && v !== "skip"));
   const frames = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
-    func: (t: unknown, c: unknown) => (globalThis as { __bettersPortalIngest?: (t: unknown, c: unknown) => unknown }).__bettersPortalIngest?.(t, c) ?? null,
-    args: [taught, controls]
+    target,
+    // Return intentional capture failures as data: Chromium can omit a
+    // frame's result when the injected function throws, leaving a blank
+    // iframe to look like a successful zero-field capture.
+    func: (t: unknown, c: unknown, one: boolean) => {
+      try { return (globalThis as { __bettersPortalIngest?: (t: unknown, c: unknown, one: boolean) => unknown }).__bettersPortalIngest?.(t, c, one) ?? null; }
+      catch (error) { return { captureError:String((error as Error)?.message || error) }; }
+    },
+    args: [taught, controls, Boolean(selection)]
   });
-  const results = frames.map(f => f.result as FrameHarvest | null).filter((r): r is FrameHarvest => r !== null);
+  const failure = frames.map(f => f.result as {captureError?:string} | null).find(r => r?.captureError);
+  if (failure?.captureError) throw new Error(failure.captureError);
+  const results = frames.map(f => f.result as FrameHarvest | null).filter((r): r is FrameHarvest => Boolean(r && Array.isArray(r.fields)));
   const top = results[0];
   if (!top) throw new Error("The page did not respond. Reload it and retry.");
   // the top frame names the capture; every frame (iframed quote forms included)
@@ -1556,7 +1684,7 @@ async function ingestPortalTab(tabId: number): Promise<{ fields: import("@/boldp
   return {
     fields: results.flatMap(r => r.fields),
     secure: results.flatMap(r => r.secure ?? []).filter(s => isConcreteSecureTarget(s.path)),
-    title: top.title, url: top.url
+    title: top.title, url: top.url, leadKey: top.leadKey
   };
 }
 
@@ -1570,7 +1698,7 @@ async function autoCapTabs(): Promise<number[]> {
 async function injectAutoCapture(tabId: number): Promise<void> {
   await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    files: ["portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-autocap.js"]
+    files: ["portal/person-name.js", "portal/mapping-targets.js", "portal/portal-mapper.js", "portal/portal-ingest.js", "portal/portal-autocap.js"]
   });
   await chrome.tabs.sendMessage(tabId, { type: "portal/autoCaptureStart" }).catch(() => {});
 }
@@ -1615,14 +1743,15 @@ type AutoOutcome = { added: number; total: number; replaced: boolean };
 async function runAutoOnce(url: string, tabId: number): Promise<Res<AutoOutcome | null>> {
   let r: Res<AutoOutcome | null>;
   try {
-    r = EZLYNX_PAGE.test(url)
+    r = EZLYNX_PAGE.test(url) && !await leadSelection(tabId)
       ? await ingestEzlynx(realDeps, url, tabId) as Res<AutoOutcome>
       : { ok: true, data: await autoIngestMapped(tabId) };
   } catch (e) {
     r = { ok: false, error: String((e as Error)?.message ?? e), kind: "unknown" };
   }
   if (!r.ok) console.warn("QuoteCraftZ auto-capture:", r.error);
-  else if (r.data) chrome.runtime.sendMessage({
+  if (!r.ok && await leadSelection(tabId)) chrome.runtime.sendMessage({ type: "portal/leadPaused", tabId, error: r.error }).catch(() => {});
+  if (r.ok && r.data) chrome.runtime.sendMessage({
     type: "portal/captureUpdated", added: r.data.added, total: r.data.total, replaced: r.data.replaced
   } satisfies import("@/messages").CaptureUpdatedBroadcast).catch(() => {});
   return r;
@@ -1632,11 +1761,13 @@ const isMappedField = (f: import("@/boldpenguin/types").CapturedAppField): boole
 async function autoIngestMapped(tabId: number): Promise<AutoOutcome | null> {
   const page = await realDeps.ingestPortalTab(tabId);
   const origin = (() => { try { return new URL(page.url).origin; } catch { return ""; } })();
-  const fields = translateCapturedChoices(page.fields.filter(f => isMappedField(f) && String(f.value ?? "").trim()), (await getOptionMaps())[origin], await catalogOrNull(realDeps));
+  const mappedFields = page.fields.filter(f => isMappedField(f) && String(f.value ?? "").trim());
+  const catalog = mappedFields.some(f => f.mapped?.startsWith("crm:")) ? await catalogOrNull(realDeps) : null;
+  const fields = translateCapturedChoices(mappedFields, (await getOptionMaps())[origin], catalog);
   const secure = page.secure ?? [];
   if (!fields.length && !secure.length) return null;
   const existing = await getCapturedApplication();
-  const outcome = mergeIngestedFields(existing, fields, { system: new URL(page.url).hostname, url: page.url, title: page.title });
+  const outcome = mergeLeadCapture(existing, fields, { system: new URL(page.url).hostname, url: page.url, title: page.title, leadKey: page.leadKey });
   await setCapturedApplication(outcome.app);
   if (outcome.replaced) { await chrome.storage.session.remove("bp/crmLink"); await clearPendingSecure(); }
   // secured values bypass the capture entirely, and follow their people

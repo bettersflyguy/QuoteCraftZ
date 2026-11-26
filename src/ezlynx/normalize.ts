@@ -139,11 +139,20 @@ function addressOf(r: Record<string, unknown>): import("@/types").CapturedAddres
 
 /** The primary address, then every other one (addresses[]), skipping empties. */
 function allAddresses(a: Record<string, unknown>): import("@/types").CapturedAddress[] {
-  const raw: unknown[] = [a["primaryAddress"], ...(Array.isArray(a["addresses"]) ? a["addresses"] as unknown[] : [])];
+  const previous = [a["previousAddress"], ...(Array.isArray(a["previousAddresses"]) ? a["previousAddresses"] as unknown[] : [])]
+    .filter((x): x is Record<string,unknown> => Boolean(x) && typeof x === "object")
+    .map(x => ({...x, type: text(x["type"]) || "Previous"}));
+  const raw: unknown[] = [a["primaryAddress"], ...(Array.isArray(a["addresses"]) ? a["addresses"] as unknown[] : []), ...previous];
+  const seen = new Set<string>();
   return raw
     .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
     .map(addressOf)
-    .filter(x => x.street || x.city || x.postalCode);
+    .filter(x => x.street || x.city || x.postalCode)
+    .filter(x => {
+      const key = [x.type,x.street,x.address2,x.unit,x.city,x.state,x.postalCode].map(v => v.trim().toLowerCase()).join("|");
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
 }
 
 /** A person's phones and emails as lists, in the source's order: the FIRST

@@ -8,7 +8,12 @@ import type { CapturedApplicant } from "@/types";
 import { getActiveEnvironment, crmRecordUrl, type CrmEnvironment } from "@/crm/environments";
 import { accountAddressColumns, addressChoices, otherLine, priorCoverageColumns, priorCoveragesFromCapture, rowSections, applicantFromIdentity, noteOutcomeText, type AddressChoice, buildTimelineNote, carrierGuess, coApplicantsFromCapture, crmGroup, guessInsuredType, policyDraftsFromCapture, identityFromCapture, leadSourceGuess, parseMoney, policyFromCapture, quoteFromCapture, toIsoDate, type CaptureIdentity } from "@/crm/appCommit";
 import { ARRAY_ROW_MAX, ASSET_TABLES, CHILD_TABLES } from "@/portal/fieldMaps";
-import { writePropertyNotes } from "@/crm/propertyNotes";
+import { writePropertyNotes, writeVehicleNotes } from "@/crm/propertyNotes";
+import { parsePersonName } from "@/util/personName";
+import { pendingNameReviews } from "@/boldpenguin/nameReview";
+import {quoteLobMatch} from "@/crm/lobMatch";
+import {resolveOpportunitySelections,suggestedOpportunityLines,type QuoteRoute} from "@/crm/opportunitySelection";
+import {OpportunityChoices} from "../OpportunityChoices";
 
 const useStyles = makeStyles({
   root: {
@@ -23,6 +28,8 @@ const useStyles = makeStyles({
   label: { fontSize: "11px", color: tokens.colorNeutralForeground3, marginBottom: "-6px" },
   row: { display: "flex", gap: "6px" },
   grow: { flex: 1, minWidth: 0 },
+  quoteRoute: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "4px", paddingBottom: "4px" },
+  quoteSelect: { width: "100%", minWidth: 0, maxWidth: "100%", boxSizing: "border-box" },
   match: {
     display: "flex",
     justifyContent: "space-between",
@@ -52,8 +59,8 @@ interface PolicyRow {
   extra?: Record<string, string>;
 }
 interface PolicyState { create: boolean; rows: PolicyRow[] }
-interface QuoteGroupChoice { lobId: string | null; mode: "reuse" | "new" }
-interface PendingOpp { accountId: string; accountName: string; opps: OppSummary[] }
+interface QuoteGroupChoice { lobId: string | null }
+interface PendingOpp { accountId: string | null; accountName: string; opps: OppSummary[]; returnStep: "review" | "target"; created?:boolean }
 
 /** Loads the held captured application into the active CRM environment.
  * Step 1 reviews and EDITS the identity (captured data is a starting point,
@@ -64,8 +71,10 @@ const MATCH_LABEL = { email: "email match", phone: "phone match", name: "name ma
 
 export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplication; onFlowActive?: (active: boolean) => void; onLoaded?: () => void }) {
   const styles = useStyles();
-  const [step, setStep] = useState<"closed" | "review" | "target">("closed");
+  const [step, setStep] = useState<"closed" | "review" | "target" | "opportunity">("closed");
   const [identity, setIdentity] = useState<CaptureIdentity>(() => identityFromCapture(app));
+  const sourceFullName = String(app.normalized["contact"]?.["fullName"] || "");
+  const sourceNameParts = parsePersonName(sourceFullName, app.normalized["contact"]?.["latinFullName"] ? "two-surnames" : "auto");
   const [target, setTarget] = useState<"insured" | "lead">("insured");
   const [insuredType, setInsuredType] = useState<1 | 2>(() => guessInsuredType(app));
   // the account's primary contact: the applicant unless the agent picks one
@@ -118,7 +127,12 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   const quoteLobs = [...new Set(heldQuotes.map(q => q.lob))];
   const [quoteGroups, setQuoteGroups] = useState<Record<string, QuoteGroupChoice>>({});
   const setGroup = (lob: string, patch: Partial<QuoteGroupChoice>) =>
-    setQuoteGroups(g => ({ ...g, [lob]: { lobId: null, mode: "reuse", ...g[lob], ...patch } }));
+    setQuoteGroups(g => ({ ...g, [lob]: { lobId: null, ...g[lob], ...patch } }));
+  const [pendingOpp,setPendingOpp]=useState<PendingOpp|null>(null);
+  const [opportunityChoices,setOpportunityChoices]=useState<Record<string,string>>({});
+  const [additionalRoutes,setAdditionalRoutes]=useState<QuoteRoute[]>([]);
+  const [opportunityNames,setOpportunityNames]=useState<Record<string,string>>({});
+  const opportunityRoutes:QuoteRoute[]=[...quoteLobs.map(source=>({source,lobId:quoteGroups[source]?.lobId??null})),...additionalRoutes];
   // servicing agent (record owner) - required when quotes are written; shared
   // rating logins make the signed-in identity no safe default
   const [owner, setOwner] = useState<UserRow | null>(null);
@@ -166,13 +180,12 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   };
 
   useEffect(() => {
-    getActiveEnvironment().then(async e => {
-      setEnv(e);
-      // sticky servicing-agent default, per environment
-      const key = `owner/default:${e.orgUrl}`;
-      const d = (await chrome.storage.local.get(key))[key] as UserRow | undefined;
-      if (d) { setOwner(d); setOwnerQuery(d.fullName); }
-    }).catch(() => {});
+    let disposed=false;
+    const load=async()=>{const e=await getActiveEnvironment();const key=`owner/default:${e.orgUrl}`;const d=(await chrome.storage.local.get(key))[key] as UserRow|undefined;if(!disposed){setEnv(e);setOwner(d??null);setOwnerQuery(d?.fullName??"");}};
+    void load().catch(()=>{});
+    const changed=(changes:Record<string,unknown>)=>{if(Object.keys(changes).some(k=>k.startsWith("owner/default:")))void load().catch(()=>{});};
+    chrome.storage.onChanged.addListener(changed);
+    return()=>{disposed=true;chrome.storage.onChanged.removeListener(changed);};
   }, []);
 
   const searchOwners = async (q: string) => {
@@ -247,7 +260,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
 
   const loadLobs = async () => {
     if (lobs !== null) return;
-    try { setLobs(await send<LobRow[]>({ type: "panel/getLobs" })); } catch { setLobs([]); }
+    try { setLobs(await send<LobRow[]>({ type: "panel/getLobs" })); } catch (e) { setError(asPanelError(e)); }
   };
 
   const toggleOpp = async (create: boolean) => {
@@ -276,7 +289,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
 
   // sale/quote captures arrive with the checkboxes pre-checked: hydrate dropdowns
   useEffect(() => {
-    if (step === "review" && (policy.create || heldQuotes.length)) { void loadLobs(); void loadCarriers(); }
+    if (step === "review") { void loadLobs(); if(policy.create || heldQuotes.length)void loadCarriers(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -284,18 +297,21 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     if (!lobs) return;
     for (const lob of quoteLobs) {
       if (quoteGroups[lob]?.lobId) continue;
-      const match = lob ? lobs.find(l => l.name.toLowerCase().includes(lob.toLowerCase())) : undefined;
+      const match = quoteLobMatch(lobs, lob);
       if (match) setGroup(lob, { lobId: match.lobId });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lobs]);
+  }, [lobs, quoteLobs.join("\u0000")]);
 
-  /** Load an account: `existingOppId` attaches the quote to that opportunity,
-   * `createOpp` forces one even when the review checkbox is off (the picker's
-   * "create new" path). */
-  const commit = async (accountId: string, accountName: string, opts?: { existingOppId?: string; createOpp?: boolean; created?: boolean }) => {
+  /** Validate opportunity choices before any enrichment or quote write. */
+  const commit = async (accountId: string, accountName: string, opts?: { created?: boolean; choices?:Record<string,string> }) => {
     setBusy(accountId); setError(null);
     try {
+      if(target==="insured"&&opportunityRoutes.length&&!owner)throw new Error("Select the servicing agent before loading opportunities.");
+      const planned = target === "insured" && opportunityRoutes.length
+        ? resolveOpportunitySelections(opportunityRoutes,
+            await send<OppSummary[]>({type:"panel/getOpportunities",accountId}),opts?.choices??{})
+        : [];
       const rows = await send<BatchItemResult[]>({
         type: "panel/appCommit",
         accountId,
@@ -307,26 +323,6 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
         ...(accountAddress?.explicit && pickedAddress ? { accountAddress: accountAddressColumns(pickedAddress) } : {})
       });
       let createdOppId: string | null = null;
-      const oppLobId = opp.lobId;
-      if ((opp.create || opts?.createOpp) && oppLobId) {
-        const lobName = lobs?.find(l => l.lobId === oppLobId)?.name ?? null;
-        const name = opp.name.trim() || oppName(lobName);
-        try {
-          const stages = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId: oppLobId, insuredType, lobName });
-          const createdOpp = await send<OppSummary>({
-            type: "panel/createOpportunity",
-            accountId, lobId: oppLobId, name,
-            pipelineId: stages?.pipelineId ?? null,
-            stageId: stages?.stages[0]?.stageId ?? null,
-            leadSource: leadSourceGuess(app),
-            extra: crmGroup(app, "crm:opportunity") ?? undefined
-          });
-          createdOppId = createdOpp.opportunityId;
-          rows.push({ key: `Opportunity: created "${name}"`, status: 204, error: null, entityId: null });
-        } catch (e) {
-          rows.push({ key: "Opportunity", status: 0, error: String((e as Error).message ?? e), entityId: null });
-        }
-      }
       const policyIds: string[] = [];
       const quoteIds: string[] = [];
       const quoteOppIds: string[] = [];
@@ -359,41 +355,41 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           }
         }
       }
-      if (target === "insured" && heldQuotes.length) {
-        // one opportunity per line of business: the open one for that line
-        // (re-captures update it) unless the agent asked for a new one
+      if (target === "insured" && planned.length) {
+        // Each quote group uses the explicitly reviewed opportunity or creates
+        // a new one. Never choose the first matching open opportunity.
         try {
-          const open = await send<OppSummary[]>({ type: "panel/getOpportunities", accountId });
           const groups: { lob: string; opportunityId: string; lobId: string | null; desiredEffectiveDate: string | null; created: boolean }[] = [];
-          for (const lob of quoteLobs) {
-            const g = quoteGroups[lob];
-            const lobId = g?.lobId ?? null;
+          for (const plan of planned) {
+            const lob = plan.source;
+            const lobId = plan.lobId;
             const lobName = lobs?.find(l => l.lobId === lobId)?.name ?? lob;
-            const hit = g?.mode !== "new" && lobId ? open.find(o => o.lobId === lobId) : undefined;
+            const hit = plan.opportunity;
             if (hit) {
-              groups.push({ lob, opportunityId: hit.opportunityId, lobId, desiredEffectiveDate: hit.desiredEffectiveDate?.slice(0, 10) ?? null, created: false });
+              quoteOppIds.push(hit.opportunityId);oppLine.set(hit.opportunityId,quoteLobs.includes(lob)?lob:lobName);
+              rows.push({key:`Opportunity: selected "${hit.name}"`,status:204,error:null,entityId:null});
+              if(quoteLobs.includes(lob))groups.push({ lob, opportunityId: hit.opportunityId, lobId, desiredEffectiveDate: hit.desiredEffectiveDate?.slice(0, 10) ?? null, created: false });
               continue;
             }
             if (!lobId) continue;
             const stages = await send<PipelineStages | null>({ type: "panel/getStagesForLob", lobId, insuredType, lobName });
-            const name = `${accountName || recordName} - ${lobName}`;
+            const name = opportunityNames[lob]?.trim() || `${accountName || recordName} - ${lobName}`;
             const made = await send<OppSummary>({
               type: "panel/createOpportunity", accountId, lobId, name,
               pipelineId: stages?.pipelineId ?? null, stageId: stages?.stages[0]?.stageId ?? null,
               leadSource: leadSourceGuess(app), extra: crmGroup(app, "crm:opportunity") ?? undefined
             });
             rows.push({ key: `Opportunity: created "${name}"`, status: 204, error: null, entityId: null });
-            groups.push({ lob, opportunityId: made.opportunityId, lobId, desiredEffectiveDate: null, created: true });
+            quoteOppIds.push(made.opportunityId);oppLine.set(made.opportunityId,quoteLobs.includes(lob)?lob:lobName);
+            if(quoteLobs.includes(lob))groups.push({ lob, opportunityId: made.opportunityId, lobId, desiredEffectiveDate: null, created: true });
           }
-          quoteOppIds.push(...groups.map(g => g.opportunityId));
-          for (const g of groups) oppLine.set(g.opportunityId, g.lob);
-          const written = await send<BatchItemResult[]>({
+          const written = groups.length ? await send<BatchItemResult[]>({
             type: "panel/writeQuotes",
             accountId, recordName,
             accountCreatedByPanel: Boolean(opts?.created),
             ownerId: owner?.userId ?? null, ownerName: owner?.fullName ?? null,
             groups
-          });
+          }) : [];
           rows.push(...written);
           quoteIds.push(...written.filter(r => r.entityId && r.key.startsWith("Quote:")).map(r => r.entityId!));
         } catch (e) {
@@ -445,6 +441,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       }
       rows.push(...await writePropertyNotes(app, loadedAssets, (id, subject, html) =>
         send({ type: "panel/upsertNote", record: "property", id, subject, html })));
+      rows.push(...await writeVehicleNotes(app, loadedAssets, (id, subject, html) =>
+        send({ type: "panel/upsertNote", record: "vehicle", id, subject, html })));
       // records on an asset (lienholder, mortgagee, a property's renovations,
       // losses, parties) attach to the asset mapped on the same page, or the
       // only one this load wrote
@@ -519,13 +517,30 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     } catch (e) { setError(asPanelError(e)); } finally { setBusy(null); }
   };
 
-  const loadAccount = (accountId: string, accountName: string) => commit(accountId, accountName);
+  const loadAccount = async (accountId: string, accountName: string) => {
+    setBusy(accountId);setError(null);
+    try {
+      const catalog=lobs??await send<LobRow[]>({type:"panel/getLobs"});setLobs(catalog);
+      const opps=await send<OppSummary[]>({type:"panel/getOpportunities",accountId});
+      setPendingOpp({accountId,accountName,opps,returnStep:step==="review"?"review":"target"});
+      setAdditionalRoutes(suggestedOpportunityLines(app,catalog,quoteLobs.map(source=>quoteGroups[source]?.lobId??quoteLobMatch(catalog,source)?.lobId??null)));
+      setOpportunityChoices({});setOpportunityNames({});setStep("opportunity");
+    }catch(e){setError(asPanelError(e));}finally{setBusy(null);}
+  };
 
-  const createAndCommit = async () => {
+  const createAndCommit = async (choices?:Record<string,string>) => {
+    if(!choices){
+      setPendingOpp({accountId:null,accountName:query.trim()||recordName,opps:[],returnStep:"target"});
+      setAdditionalRoutes(suggestedOpportunityLines(app,lobs??[],quoteLobs.map(source=>quoteGroups[source]?.lobId??null)));
+      setOpportunityChoices({});setOpportunityNames({});setError(null);setStep("opportunity");return;
+    }
     setBusy("create"); setError(null);
     try {
+      if(opportunityRoutes.length&&!owner)throw new Error("Select the servicing agent before loading opportunities.");
+      resolveOpportunitySelections(opportunityRoutes,[],choices);
       const created = await send<{ accountId: string; name: string }>({
         type: "panel/createAccount",
+        fromCapture:true,
         fields: {
           name: query.trim() || recordName,
           street: identity.street || null, city: identity.city || null,
@@ -533,7 +548,10 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           phone: identity.phone || null, email: identity.email || null
         }
       });
-      await commit(created.accountId, created.name, { created: true });
+      // If later enrichment fails, retry against this account rather than
+      // creating another account from the same opportunity screen.
+      setPendingOpp(p=>p?{...p,accountId:created.accountId,accountName:created.name,created:true}:p);
+      await commit(created.accountId, created.name, { created: true, choices });
     } catch (e) { setError(asPanelError(e)); setBusy(null); }
   };
 
@@ -543,6 +561,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
       const lobName = opp.lobId ? lobs?.find(l => l.lobId === opp.lobId)?.name ?? null : null;
       const created = await send<{ leadId: string; name: string }>({
         type: "panel/createLead",
+        fromCapture:true,
         fields: {
           topic: `${oppName(lobName)} - ${recordName}`,
           name: insuredType === 2 ? identity.businessName || recordName : personName,
@@ -585,7 +604,8 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
   if (step === "closed") {
     return (
       <div className={styles.root}>
-        <Button appearance="primary" onClick={openReview}>Load into CRM ({app.fields.length} fields)</Button>
+        {pendingNameReviews(app).length > 0 && <div className={styles.hint}>Confirm the name split above before loading CRM.</div>}
+        <Button appearance="primary" disabled={pendingNameReviews(app).length > 0} onClick={openReview}>Load into CRM ({app.fields.length} fields)</Button>
       </div>
     );
   }
@@ -594,7 +614,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     const identityEmpty = !personName && !identity.businessName;
     const missing: string[] = [];
     if (!recordName) missing.push("the insured's name (or business name)");
-    if (opp.create && target === "insured" && !opp.lobId) missing.push("a line of business for the opportunity");
+
     if (policy.create && target === "insured" && policy.rows.some(r => !r.number.trim())) missing.push("a policy number on every policy row (or remove the empty row)");
     if (target === "insured" && heldQuotes.length) {
       if (quoteLobs.some(l => !quoteGroups[l]?.lobId)) missing.push("a CRM line of business for each group of quotes");
@@ -628,7 +648,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                   <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                     {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", d.id)} target="_blank">Open</Button>}
                     <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
-                      {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                      {busy === d.id ? <Spinner size="tiny" /> : "Select account"}
                     </Button>
                   </span>
                 ) : (
@@ -638,9 +658,13 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             ))}
           </>
         )}
+        {sourceNameParts.needsReview && <div className={styles.hint}>
+          Captured name: {sourceFullName}. Verify the given names and complete surname below.
+          {sourceNameParts.suffix && ` Suffix: ${sourceNameParts.suffix} (retained in the captured full name).`}
+        </div>}
         <div className={styles.row}>
-          <Input className={styles.grow} value={identity.firstName} onChange={(_, d) => set({ firstName: d.value })} placeholder="First name" />
-          <Input className={styles.grow} value={identity.lastName} onChange={(_, d) => set({ lastName: d.value })} placeholder="Last name" />
+          <Input className={styles.grow} value={identity.firstName} onChange={(_, d) => set({ firstName: d.value })} placeholder="Given name(s)" aria-label="Given names" />
+          <Input className={styles.grow} value={identity.lastName} onChange={(_, d) => set({ lastName: d.value })} placeholder="Surname(s)" aria-label="Surnames" />
         </div>
         <Input value={identity.businessName} onChange={(_, d) => set({ businessName: d.value })} placeholder="Business name (commercial only)" />
         <Input value={identity.street} onChange={(_, d) => set({ street: d.value })} placeholder="Street" />
@@ -692,14 +716,14 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
           <Radio value="insured" label="Insured (Account)" />
           <Radio value="lead" label="Lead" />
         </RadioGroup>
-        {!(target === "insured" && heldQuotes.length > 0) && (
+        {target === "lead" && (
           <Checkbox
             checked={opp.create}
             onChange={(_, d) => void toggleOpp(Boolean(d.checked))}
-            label={target === "insured" ? "Create carrier opportunity" : "Name the lead after a carrier quote"}
+            label="Name the lead after a carrier quote"
           />
         )}
-        {opp.create && (
+        {opp.create && target === "lead" && (
           <>
             <Dropdown
               placeholder="Line of business"
@@ -713,26 +737,21 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
             >
               {(lobs ?? []).map(l => <Option key={l.lobId} value={l.lobId}>{l.name}</Option>)}
             </Dropdown>
-            {target === "insured" && (
-              <Input
-                value={opp.name || oppName(lobs?.find(l => l.lobId === opp.lobId)?.name ?? null)}
-                onChange={(_, d) => setOpp(o => ({ ...o, name: d.value, nameEdited: true }))}
-                placeholder="Opportunity name"
-              />
-            )}
+
           </>
         )}
         {target === "insured" && heldQuotes.length > 0 && (
           <>
             <div className={styles.label}>Quotes: {heldQuotes.length} selected (choose on the Quotes tab)</div>
             {quoteLobs.map(lob => (
-              <div key={lob || "none"} className={styles.row}>
-                <span style={{ width: 64, flexShrink: 0, fontSize: 12 }}>
+              <div key={lob || "none"} className={styles.quoteRoute}>
+                <span style={{ fontSize: 11 }}>
                   {lob || "Quote"} ({heldQuotes.filter(q => q.lob === lob).length})
                 </span>
                 <Dropdown
-                  className={styles.grow}
-                  style={{ minWidth: 0 }}
+                  className={styles.quoteSelect}
+                  style={{ minWidth: 0, width: "100%" }}
+                  aria-label={`${lob || "Quote"}: CRM line of business`}
                   placeholder="CRM line of business"
                   value={lobs?.find(l => l.lobId === quoteGroups[lob]?.lobId)?.name ?? ""}
                   selectedOptions={quoteGroups[lob]?.lobId ? [quoteGroups[lob]!.lobId!] : []}
@@ -740,15 +759,6 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 >
                   {(lobs ?? []).map(l => <Option key={l.lobId} value={l.lobId}>{l.name}</Option>)}
                 </Dropdown>
-                <select
-                  aria-label="Opportunity"
-                  style={{ fontSize: 12 }}
-                  value={quoteGroups[lob]?.mode ?? "reuse"}
-                  onChange={e => setGroup(lob, { mode: e.target.value as "reuse" | "new" })}
-                >
-                  <option value="reuse">Open opportunity, else new</option>
-                  <option value="new">New opportunity</option>
-                </select>
               </div>
             ))}
             <Combobox
@@ -841,6 +851,28 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
     );
   }
 
+  if(step==="opportunity"&&pendingOpp){
+    const routes=opportunityRoutes.map(r=>({...r,label:lobs?.find(l=>l.lobId===r.lobId)?.name??r.source,required:quoteLobs.includes(r.source)}));
+    const complete=(!routes.length||Boolean(owner))&&routes.every(r=>r.lobId&&(opportunityChoices[r.source]==="new"||pendingOpp.opps.some(o=>o.opportunityId===opportunityChoices[r.source]&&o.lobId===r.lobId)));
+    return <div className={styles.root}>
+      <div className={styles.title}>Opportunities · {pendingOpp.accountName}</div>
+      {error&&<ErrorBar error={error}/>}
+      <OpportunityChoices routes={routes} lobs={lobs??[]} open={pendingOpp.opps} choices={opportunityChoices} names={opportunityNames} disabled={busy!==null}
+        onChange={(source,value)=>setOpportunityChoices(c=>({...c,[source]:value}))}
+        onNameChange={(source,value)=>setOpportunityNames(n=>({...n,[source]:value}))}
+        onLineChange={(source,lobId)=>{if(quoteLobs.includes(source))setGroup(source,{lobId});else setAdditionalRoutes(r=>r.map(row=>row.source===source?{...row,lobId}:row));setOpportunityChoices(c=>({...c,[source]:""}));}}
+        onAdd={()=>setAdditionalRoutes(r=>[...r,{source:`extra:${crypto.randomUUID()}`,lobId:null}])}
+        onRemove={source=>setAdditionalRoutes(r=>r.filter(row=>row.source!==source))}/>
+      {!owner&&routes.length>0&&<div className={styles.warn}>Select a servicing agent in Review before loading opportunities.</div>}
+      <div className={styles.row}>
+        <Button appearance="primary" disabled={busy!==null||!complete} onClick={()=>pendingOpp.accountId
+          ?void commit(pendingOpp.accountId,pendingOpp.accountName,{choices:opportunityChoices,created:pendingOpp.created})
+          :void createAndCommit(opportunityChoices)}>{busy?<Spinner size="tiny"/>:"Save to CRM"}</Button>
+        <Button disabled={busy!==null} onClick={()=>{setError(null);setStep(pendingOpp.returnStep);}}>Back</Button>
+      </div>
+    </div>;
+  }
+
   return (
     <div className={styles.root}>
       <div className={styles.title}>{target === "insured" ? "Pick the insured account" : "Create the lead"}</div>
@@ -861,7 +893,7 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
                 <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                   {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", d.id)} target="_blank">Open</Button>}
                   <Button size="small" disabled={busy !== null} onClick={() => loadAccount(d.id, d.name)}>
-                    {busy === d.id ? <Spinner size="tiny" /> : "Load"}
+                    {busy === d.id ? <Spinner size="tiny" /> : "Select account"}
                   </Button>
                 </span>
               ) : (
@@ -896,14 +928,14 @@ export function LoadToCrm({ app, onFlowActive, onLoaded }: { app: CapturedApplic
               <span style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                 {env && <Button size="small" as="a" href={crmRecordUrl(env, "account", m.accountId)} target="_blank">Open</Button>}
                 <Button size="small" disabled={busy !== null} onClick={() => loadAccount(m.accountId, m.name)}>
-                  {busy === m.accountId ? <Spinner size="tiny" /> : "Load"}
+                  {busy === m.accountId ? <Spinner size="tiny" /> : "Select account"}
                 </Button>
               </span>
             </div>
           ))}
           {matches && matches.length === 0 && <div className={styles.hint}>No matching accounts.</div>}
-          <Button disabled={busy !== null} onClick={createAndCommit}>
-            {busy === "create" ? <Spinner size="tiny" /> : `Create "${query.trim() || recordName}"${dupes.length ? " anyway" : ""} and load`}
+          <Button disabled={busy !== null} onClick={()=>void createAndCommit()}>
+            {busy === "create" ? <Spinner size="tiny" /> : `New account${dupes.length ? " anyway" : ""}…`}
           </Button>
         </>
       )}

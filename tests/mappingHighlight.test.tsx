@@ -65,4 +65,16 @@ describe("mapping row selection", () => {
     await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Highlight ZIP code on page"]')!.click());
     expect(onPeek).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ key: "text:zip", focused: true })]));
   });
+
+  it("marks payment fields as intentionally skipped instead of unmapped", async () => {
+    const onPeek = vi.fn(async (_items: PeekItem[] | null) => ({ shown: 1, missing: 0, unmapped: 0 }));
+    await act(async () => root.render(<MapEditor
+      scan={{ origin: "https://rating.vertafore.com", rows: [{ key: "field:payment option", label: "Payment Option", type: "select", payment: true, mapped: null, autoPath: null }] }}
+      draft={{ "field:payment option": "" }} setDraft={() => {}} captured={[]} busy={false}
+      onSave={() => {}} onCancel={() => {}} onPeek={onPeek} highlightKey={null} onHighlight={() => {}}
+    />));
+    expect(onPeek).toHaveBeenCalledWith([
+      expect.objectContaining({ key: "field:payment option", label: "Payment field, never filled", kind: "skip" })
+    ]);
+  });
 });

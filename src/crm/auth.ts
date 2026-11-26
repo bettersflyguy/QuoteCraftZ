@@ -1,7 +1,7 @@
 import { APP_CONFIG } from "@/config/appConfig";
 
 export class AuthRequiredError extends Error {
-  constructor() { super("Interactive sign-in required"); this.name = "AuthRequiredError"; }
+  constructor(message = "Interactive sign-in required") { super(message); this.name = "AuthRequiredError"; }
 }
 
 interface TokenSet { accessToken: string; refreshToken: string | null; expiresAt: number }
@@ -69,8 +69,22 @@ async function tokenRequest(body: URLSearchParams): Promise<TokenSet> {
 async function interactiveSignIn(orgUrl: string): Promise<TokenSet> {
   const redirectUri = chrome.identity.getRedirectURL();
   const { verifier, challenge } = await pkcePair();
-  const cb = await chrome.identity.launchWebAuthFlow({ url: buildAuthorizeUrl(orgUrl, redirectUri, challenge), interactive: true });
-  const code = cb ? new URL(cb).searchParams.get("code") : null;
+  let cb: string | undefined;
+  try {
+    cb = await chrome.identity.launchWebAuthFlow({ url: buildAuthorizeUrl(orgUrl, redirectUri, challenge), interactive: true });
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    if (/only one web auth flow|already.*(?:auth|sign.in).*progress/i.test(reason)) {
+      throw new AuthRequiredError("Another Microsoft sign-in is already open. Close that window, then click Reconnect to CRM again.");
+    }
+    throw new AuthRequiredError("Microsoft sign-in was cancelled or could not open. Click Reconnect to CRM to try again.");
+  }
+  const params = cb ? new URL(cb).searchParams : null;
+  const code = params?.get("code");
+  if (!code && params?.has("error")) {
+    const error = params.get("error") ?? "unknown_error";
+    throw new AuthRequiredError(`Microsoft sign-in failed (${/^[a-z_]+$/.test(error) ? error : "unknown_error"}). Reconnect to CRM to try again.`);
+  }
   if (!code) throw new AuthRequiredError();
   return tokenRequest(new URLSearchParams({
     client_id: APP_CONFIG.clientId, grant_type: "authorization_code", code,
@@ -85,7 +99,22 @@ export async function clearToken(orgUrl: string): Promise<void> {
   await chrome.storage.session.remove(`token:${orgUrl}`);
 }
 
-export async function getAccessToken(orgUrl: string, opts: { interactive?: boolean } = {}): Promise<string> {
+// Chrome allows one interactive flow across the extension, including requests
+// for different environments. Share same-org work and serialize other orgs.
+const acquisitions = new Map<string, Promise<string>>();
+let interactiveQueue: Promise<unknown> = Promise.resolve();
+export function getAccessToken(orgUrl: string, opts: { interactive?: boolean } = {}): Promise<string> {
+  const key = `${orgUrl}|${opts.interactive ?? true}`;
+  const existing = acquisitions.get(key);
+  if (existing) return existing;
+  const pending = acquireToken(orgUrl, opts).finally(() => {
+    if (acquisitions.get(key) === pending) acquisitions.delete(key);
+  });
+  acquisitions.set(key, pending);
+  return pending;
+}
+
+async function acquireToken(orgUrl: string, opts: { interactive?: boolean }): Promise<string> {
   const interactive = opts.interactive ?? true;
   const cached = await __store.get(orgUrl);
   if (cached && cached.expiresAt > Date.now()) return cached.accessToken;
@@ -102,7 +131,14 @@ export async function getAccessToken(orgUrl: string, opts: { interactive?: boole
   }
 
   if (!interactive) throw new AuthRequiredError();
-  const t = await interactiveSignIn(orgUrl);
-  await __store.set(orgUrl, t);
-  return t.accessToken;
+  const pending = interactiveQueue.then(async () => {
+    // Another request may have completed sign-in while this one was queued.
+    const latest = await __store.get(orgUrl);
+    if (latest && latest.expiresAt > Date.now()) return latest.accessToken;
+    const t = await interactiveSignIn(orgUrl);
+    await __store.set(orgUrl, t);
+    return t.accessToken;
+  });
+  interactiveQueue = pending.catch(() => {});
+  return pending;
 }

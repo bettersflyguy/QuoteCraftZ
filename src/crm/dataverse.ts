@@ -1,3 +1,4 @@
+import {getCrmAgent,ownedCreate} from "./agent";
 import { getAccessToken } from "./auth";
 import type { CrmEnvironment } from "./environments";
 import { parseRefusal, safeClaims, safeHost, type TokenClaims } from "./catalogDiagnostics";
@@ -99,6 +100,7 @@ export async function dvJson<T>(env: CrmEnvironment, path: string): Promise<T> {
 function esc(v: string): string { return v.replace(/'/g, "''"); }
 
 async function dvPost<T>(env: CrmEnvironment, path: string, body: unknown): Promise<T> {
+  body=ownedCreate(path,body,await getCrmAgent(env));
   const res = await dv(env, path, {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -501,6 +503,7 @@ export const NOTE_RECORDS = {
   account: { logical: "account", set: "accounts" },
   contact: { logical: "contact", set: "contacts" },
   property: { logical: "iacrm_property", set: "iacrm_properties" },
+  vehicle: { logical: "iacrm_vehicle", set: "iacrm_vehicles" },
   opportunity: { logical: "opportunity", set: "opportunities" },
   quote: { logical: "iacrm_quote", set: "iacrm_quotes" },
   policy: { logical: "iacrm_policy", set: "iacrm_policies" }
@@ -1010,6 +1013,8 @@ export async function executeBatch(
   ops: { key: string; method: "PATCH" | "POST" | "DELETE"; url: string; body?: unknown }[]
 ): Promise<BatchItemResult[]> {
   if (!ops.length) return [];
+  const agent=await getCrmAgent(env);
+  ops=ops.map(op=>op.method==="POST"?{...op,body:ownedCreate(op.url,op.body,agent)}:op);
   const boundary = `batch_${crypto.randomUUID()}`;
   const parts = ops.map(op => {
     const lines = [

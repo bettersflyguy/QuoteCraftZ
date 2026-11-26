@@ -5,6 +5,7 @@
 import type { CapturedAppField, HeldQuote } from "@/boldpenguin/types";
 import type { CapturedApplicant, CapturedRun } from "@/types";
 import { isNoteTarget, isRoutablePath } from "@/portal/fieldMaps";
+import { mappingTargets, packMappingTargets } from "@/portal/mappingTargets";
 
 export interface DataServiceField {
   id: string;
@@ -89,7 +90,7 @@ export const EZLYNX_FIELDS: DataServiceField[] = [
   { id: "person.education", label: "Education", section: "Contacts", defaultTarget: "crm:contacts[].educationcode", pageLabels: PERSON("education"), legacy: both("education") },
   { id: "person.industry", label: "Industry", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_employmentindustry", pageLabels: PERSON("industry"), legacy: both("industry") },
   { id: "person.occupation", label: "Occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_employmentoccupation", pageLabels: PERSON("occupation"), legacy: both("occupation") },
-  { id: "person.yearsAtOccupation", label: "Years at occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_yearsemployed", pageLabels: PERSON("years"), legacy: both("yearsAtOccupation") },
+  { id: "person.yearsAtOccupation", label: "Years at occupation", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_yearsatoccupation", pageLabels: PERSON("years"), legacy: both("yearsAtOccupation") },
   { id: "person.priorEmployerInYears", label: "Prior employer (years)", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_prioryearsemployed", pageLabels: PERSON("prior employer in years"), legacy: both("priorEmployerInYears") },
   { id: "person.driversLicenseStatus", label: "License status", section: "Contacts", defaultTarget: "", pageLabels: PERSON("dl status"), legacy: both("driversLicenseStatus") },
   { id: "person.driversLicenseState", label: "License state", section: "Contacts", defaultTarget: "crm:contacts[].iacrm_dlstate", pageLabels: PERSON("dl state"), legacy: both("driversLicenseState") },
@@ -132,7 +133,7 @@ export function dataServicePeekItems(saved: Record<string, string> | undefined, 
   const targets = effectiveTargets(saved);
   return EZLYNX_FIELDS
     .filter(f => targets[f.id] && f.pageLabels?.length)
-    .map(f => ({ key: `service:${f.id}`, label: labelOf(targets[f.id]!), kind: "mapped" as const, labels: f.pageLabels!, target: targets[f.id]! }));
+    .map(f => ({ key: `service:${f.id}`, label: mappingTargets(targets[f.id]).map(labelOf).join(" + "), kind: "mapped" as const, labels: f.pageLabels!, target: targets[f.id]! }));
 }
 
 export const DATA_SERVICE_STORAGE_KEY = "dataservice/fieldMap";
@@ -165,9 +166,15 @@ function asListTarget(target: string): string {
 export function effectiveTargets(saved: Record<string, string> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   for (const f of EZLYNX_FIELDS) {
-    if (saved && f.id in saved) { out[f.id] = saved[f.id]!; continue; }
+    if (saved && f.id in saved) {
+      const current=saved[f.id]!;
+      out[f.id]=f.id==="person.yearsAtOccupation"&&mappingTargets(current).includes("crm:contacts[].iacrm_yearsemployed")
+        ? packMappingTargets(mappingTargets(current).map(t=>t==="crm:contacts[].iacrm_yearsemployed"?"crm:contacts[].iacrm_yearsatoccupation":t))
+        : current;
+      continue;
+    }
     const legacy = (f.legacy ?? []).find(id => saved && id in saved);
-    out[f.id] = legacy ? asListTarget(saved![legacy]!) : f.defaultTarget;
+    out[f.id] = legacy ? packMappingTargets(mappingTargets(saved![legacy]!).map(asListTarget)) : f.defaultTarget;
   }
   return out;
 }
@@ -247,20 +254,20 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
   const insured = insuredValues(a);
   for (const f of EZLYNX_FIELDS.filter(x => x.section === "Insured")) {
     const value = (insured[f.id] ?? "").trim();
-    if (value) out.push({ label: f.label, value, section: "Insured", group: "", source: "dataservice", mapped: routeFor(targets[f.id]!, null) });
+    if (value) for (const target of mappingTargets(targets[f.id]).length ? mappingTargets(targets[f.id]) : [""]) out.push({ label: f.label, value, section: "Insured", group: "", source: "dataservice", mapped: routeFor(target, null) });
   }
   // secured fields never become capture fields, whatever they map to
   people(a).forEach((person, i) => {
     for (const f of EZLYNX_FIELDS.filter(x => x.section === "Contacts" && !x.secured)) {
       const value = (person[f.id.slice("person.".length)] ?? "").trim();
-      if (value) out.push({ label: f.label, value, section: "Contacts", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, i, true) });
+      if (value) for (const target of mappingTargets(targets[f.id]).length ? mappingTargets(targets[f.id]) : [""]) out.push({ label: f.label, value, section: "Contacts", group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(target, i, true) });
     }
   });
   // additional phones / emails: rows of their own list
   const list = <T extends object>(section: "Phones" | "Emails", prefix: string, rows: T[]) => rows.slice(0, 40).forEach((r, i) => {
     for (const f of EZLYNX_FIELDS.filter(x => x.section === section)) {
       const value = String((r as Record<string, unknown>)[f.id.slice(prefix.length)] ?? "").trim();
-      if (value) out.push({ label: f.label, value, section, group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(targets[f.id]!, null) });
+      if (value) for (const target of mappingTargets(targets[f.id]).length ? mappingTargets(targets[f.id]) : [""]) out.push({ label: f.label, value, section, group: `Row ${i + 1}`, source: "dataservice", mapped: routeFor(target, null) });
     }
   });
   list("Phones", "phone.", a.morePhones ?? []);
@@ -271,7 +278,7 @@ export function ezlynxFields(a: CapturedApplicant, saved: Record<string, string>
     addressRow += 1;
     for (const f of EZLYNX_FIELDS.filter(x => x.section === "Addresses")) {
       const value = (row[f.id.slice("address.".length)] ?? "").trim();
-      if (value) out.push({ label: f.label, value, section: "Addresses", group: `Row ${addressRow}`, source: "dataservice", mapped: routeAddress(targets[f.id]!, person, nth) });
+      if (value) for (const target of mappingTargets(targets[f.id]).length ? mappingTargets(targets[f.id]) : [""]) out.push({ label: f.label, value, section: "Addresses", group: `Row ${addressRow}`, source: "dataservice", mapped: routeAddress(target, person, nth) });
     }
   };
   const owner = `${a.firstName} ${a.lastName}`.trim();

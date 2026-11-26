@@ -24,6 +24,28 @@ const catalog: FieldCatalog = { envId: "e", fetchedAt: 0, entities: [
 ] };
 
 describe("choice mapping", () => {
+  it("translates all ten live PL Rater education choices to the reviewed Contact option values",()=>{
+    const shared=JSON.parse(readFileSync('public/mappings/quotecraftz-pl-rater.json','utf8'));
+    const scope=shared.options['https://rating.vertafore.com'];
+    const choices=[
+      ['Less than High School',298400001,'No High School Diploma'],['GED',298400002,'High School Diploma'],
+      ['High School',298400002,'High School Diploma'],['Some College',298400003,'Some College - No Degree'],
+      ['Community or Junior College',298400005,'Associates Degree'],["Bachelor's Degree",298400006,'Bachelors'],
+      ['Masters Degree',298400007,'Masters'],['Ph. D.',298400008,'PhD'],
+      ['Medical Degree',298400009,'Medical Degree'],['Law Degree',298400010,'Law Degree']
+    ] as const;
+    const options=[...new Map(choices.map(([,value,label])=>[value,{value,label}])).values()];
+    const reviewed={...catalog,entities:catalog.entities.map(e=>({...e,columns:[{name:'educationcode',label:'Education',type:'Picklist' as const,options}]}))};
+    const fields=choices.map(([value],i)=>({label:'Education',value,section:'Drivers',group:'',source:'control' as const,mapped:i===0?'crm:primarycontact.educationcode':`crm:contact${i+1}.educationcode`}));
+    expect(translateCapturedChoices(fields,scope,reviewed).map(f=>f.value)).toEqual(choices.map(([, ,label])=>label));
+    for(const [source,value] of choices)expect(scope['contact.educationcode'][source]).toBe(value);
+    expect(shared.maps['https://rating.vertafore.com']['select:DriverCtlBody_*$cmbEducationLevel']).toBe('crm:contacts[].educationcode');
+  });
+  it("translates collection mappings for primary and newly added contact slots", () => {
+    expect(translateFillChoices({'crm:primarycontact.educationcode':"Associate's",'crm:contact5.educationcode':"Associate's"},
+      {'select:DriverCtlBody_*$cmbEducationLevel':'crm:contacts[].educationcode'},
+      {'contact.educationcode':{'Some College':2}},catalog)).toEqual({'crm:primarycontact.educationcode':'Some College','crm:contact5.educationcode':'Some College'});
+  });
   it("keys per CRM column so every row shares one mapping", () => {
     expect(columnKeyOf("crm:primarycontact.educationcode")).toBe("contact.educationcode");
     expect(columnKeyOf("crm:contact3.educationcode")).toBe("contact.educationcode");

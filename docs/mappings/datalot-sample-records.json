@@ -1,0 +1,56 @@
+{
+  "type": "iacrm-quote-connector-fieldmaps",
+  "version": 1,
+  "exportedAt": "2026-11-21T05:27:42.614647+00:00",
+  "maps": {
+    "https://app.datalot.com": {
+      "field:receipt code": "note",
+      "field:name": "targets:[\"contact.fullName\",\"crm:account.name\"]",
+      "field:home number": "targets:[\"crm:primarycontact.telephone2\",\"crm:account.telephone1\"]",
+      "field:email": "targets:[\"crm:primarycontact.emailaddress1\",\"crm:account.emailaddress1\"]",
+      "field:street": "crm:account.address1_line1",
+      "field:city": "crm:account.address1_city",
+      "field:state": "crm:account.address1_stateorprovince",
+      "field:zip": "crm:account.address1_postalcode",
+      "field:dob": "crm:primarycontact.birthdate",
+      "field:gender": "crm:primarycontact.gendercode",
+      "field:marital status": "crm:primarycontact.familystatuscode",
+      "field:occupation": "crm:primarycontact.iacrm_employmentoccupation",
+      "field:education": "crm:primarycontact.educationcode",
+      "field:own home": "note:contact",
+      "field:accidents": "note:contact",
+      "field:tickets": "note:contact",
+      "field:dui": "note:contact",
+      "field:current carrier": "crm:priorcoverage.iacrm_priorcarriername",
+      "field:years insured": "crm:priorcoverage.iacrm_yearscontinuouscoverage",
+      "field:license state": "crm:primarycontact.iacrm_dlstate",
+      "field:license issued": "crm:primarycontact.iacrm_dlissuedate",
+      "field:policy type": "note:opportunity",
+      "field:collision deductible": "note:opportunity",
+      "field:comprehensive deductible": "note:opportunity",
+      "field:number of vehicles": "note:opportunity",
+      "field:year": "crm:vehicles[].iacrm_year",
+      "field:make": "crm:vehicles[].iacrm_make",
+      "field:model": "crm:vehicles[].iacrm_model",
+      "field:sub model": "crm:vehicles[].iacrm_trim",
+      "field:driving wheels": "note:opportunity",
+      "field:vin": "note:opportunity",
+      "field:ownership": "crm:vehicles[].iacrm_ownership",
+      "field:use": "note:opportunity",
+      "field:garage type": "note:opportunity",
+      "field:annual miles": "crm:vehicles[].iacrm_annualmiles",
+      "field:daily commute miles": "crm:vehicles[].iacrm_onewaycommutemiles",
+      "field:weekly commute days": "crm:vehicles[].iacrm_daysdrivenperweek",
+      "field:notes": "note",
+      "field:select disposition to edit notes": "note"
+    }
+  },
+  "options": {
+    "https://app.datalot.com": {
+      "contact.educationcode": {
+        "Some College": 298400003,
+        "High School Diploma": 298400002
+      }
+    }
+  }
+}

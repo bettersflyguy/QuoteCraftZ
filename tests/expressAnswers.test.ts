@@ -1,0 +1,44 @@
+import {beforeEach,it,expect} from "vitest";
+import {backing,reset} from "./helpers/chromeStub";
+import {answerColumn,validateAnswer,addExpressAnswer} from "@/portal/expressAnswers";
+import {buildFillValues} from "@/portal/fillValues";
+import {destinationReadiness} from "@/portal/destinationReadiness";
+import {mappingServices} from "@/options/mappingGraph";
+import {FIELDMAP_STORAGE_KEY} from "@/portal/fieldMaps";
+import {routeMessage} from "@/workerRouter";
+import type {CapturedApplication} from "@/boldpenguin/types";
+import type {FieldCatalog} from "@/crm/fieldCatalog";
+const catalog:FieldCatalog={envId:"dev",fetchedAt:1,entities:[{key:"primarycontact",logical:"contact",set:"contacts",label:"Primary contact",array:false,columns:[{name:"gendercode",label:"Gender",type:"Picklist",options:[{value:1,label:"Female"},{value:2,label:"Male"}]},{name:"birthdate",label:"DOB",type:"DateTime"},{name:"numberofchildren",label:"Children",type:"Integer"},{name:"emailaddress1",label:"Email",type:"String"}]}]};
+const application=():CapturedApplication=>({schemaVersion:"1.1",capturedAt:"revision1",source:{system:"Datalot",url:"https://app.datalot.com",title:"Lead",leadKey:"lead1"},fields:[],normalized:{contact:{fullName:"Alex Smith"},"crm:property1":{iacrm_city:"First City"}},scannedSections:[],completion:{likelyCompleted:true,matchedPhrases:[],hasReviewStep:false}});
+beforeEach(reset);
+it("uses CRM choices and validates numeric/date/email answers",()=>{
+ expect(answerColumn("contact.gender",catalog)?.type).toBe("Picklist");
+ expect(validateAnswer("contact.gender","Female",catalog)).toBe("Female");
+ expect(()=>validateAnswer("contact.gender","Maybe",catalog)).toThrow("listed");
+ expect(()=>validateAnswer("contact.dateOfBirth","2026-02-30",catalog)).toThrow("valid date");
+ expect(()=>validateAnswer("crm:primarycontact.numberofchildren","3people",catalog)).toThrow("whole number");
+ expect(()=>validateAnswer("contact.email","not-an-email",catalog)).toThrow("valid");
+ expect(validateAnswer("crm:primarycontact.numberofchildren","0",catalog)).toBe("0");
+ expect(()=>validateAnswer("secure:primarycontact.iacrm_ssn","secret",catalog)).toThrow("secure");
+});
+it("saves into the exact asset row, preserves source/quotes and updates every destination sharing the target",()=>{
+ const app=application();app.quotes=[];
+ const next=addExpressAnswer(app,"crm:property2.iacrm_city","Second City","City",null);
+ expect(next.source).toBe(app.source);expect(next.quotes).toBe(app.quotes);expect(app.fields).toHaveLength(0);
+ expect(buildFillValues(next)).toMatchObject({"crm:property1.iacrm_city":"First City","crm:property2.iacrm_city":"Second City"});
+ expect(next.fields[0]).toMatchObject({mapped:"crm:property2.iacrm_city",section:"Express entry"});
+ const services=mappingServices({"https://one.example":{"field:city":"crm:property2.iacrm_city"},"https://two.example":{"field:city":"crm:property2.iacrm_city"}},{});
+ expect(destinationReadiness(services,next).filter(d=>d.id!=="https://app.ezlynx.com").every(d=>d.percent===100)).toBe(true);
+ expect(()=>addExpressAnswer(next,"crm:property1.iacrm_city","Overwrite","City",null)).toThrow("already exists");
+});
+it("worker accepts only missing mapped answers for the unchanged application",async()=>{
+ let held=application();
+ backing[FIELDMAP_STORAGE_KEY]={"https://one.example":{"field:city":"crm:property2.iacrm_city"}};
+ const deps={getCapturedApplication:async()=>held,setCapturedApplication:async(next:CapturedApplication)=>{held=next;},getActiveEnvironment:async()=>({id:"dev"})};
+ const request={type:"panel/saveApplicationAnswer" as const,target:"crm:property2.iacrm_city",value:"Second City",revision:held.capturedAt,leadKey:"lead1"};
+ expect(await routeMessage({...request,leadKey:"different"},deps as never)).toMatchObject({ok:false,error:expect.stringContaining("changed")});
+ expect(await routeMessage({...request,target:"crm:account.description"},deps as never)).toMatchObject({ok:false,error:expect.stringContaining("mapped")});
+ expect(await routeMessage(request,deps as never)).toMatchObject({ok:true});
+ expect(held.fields[0]?.mapped).toBe(request.target);
+ expect(await routeMessage(request,deps as never)).toMatchObject({ok:false,error:expect.stringContaining("changed")});
+});

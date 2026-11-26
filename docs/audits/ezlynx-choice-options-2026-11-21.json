@@ -1,0 +1,77 @@
+{
+  "sourceExport": "2026-11-22T00:24:08.732Z",
+  "origin": "https://app.ezlynx.com",
+  "status": "Applicant and rendered Home/Auto application screens reviewed; conditional occupation/incident branches remain limited to existing sample records",
+  "installedPageMappings": 262,
+  "installedDataServiceMappings": 63,
+  "exportedPageMappings": 260,
+  "exportedDataServiceMappings": 61,
+  "options": {
+    "contact.iacrm_driverrelationship": {
+      "Relative": 298400005
+    },
+    "contact.iacrm_employmentindustry": {
+      "Homemaker/House person": 329910000,
+      "Travel/Transportation/Warehousing": 329910022
+    },
+    "contact.iacrm_occupation": {
+      "Doctor": 298401809,
+      "Graduate Student": 298400403,
+      "High school": 298400401,
+      "Nurse - C.N.A.": 298401806,
+      "Nurse - LPN": 298401805,
+      "Undergraduate": 298400402
+    },
+    "iacrm_property.iacrm_citylimits": {
+      "No": 298400001,
+      "Yes": 298400000
+    },
+    "iacrm_property.iacrm_occupancy": {
+      "Renter Occupied": 298400001
+    },
+    "iacrm_property.iacrm_secondaryheat": {
+      "Coal Non-Professionally Installed": 298400007,
+      "Coal Professionally Installed": 298400007,
+      "Electric": 298400002,
+      "Natural Gas": 298400001
+    },
+    "iacrm_quote.iacrm_term": {
+      "12 Month": 738590205,
+      "6 Month": 738590203
+    },
+    "iacrm_vehicle.iacrm_airbags": {
+      "Airbag (Drvr Side)": 298400001,
+      "Airbag Both Sides": 298400002,
+      "Auto Stbelts/Airbag Both": 298400002,
+      "Auto Stbelts/Drvr Airbag": 298400001
+    },
+    "iacrm_vehicle.iacrm_neworused": {
+      "No": 298400001,
+      "Yes": 298400000
+    },
+    "iacrm_vehicle.iacrm_ownership": {
+      "Lien": 298400001
+    },
+    "iacrm_vehicle.iacrm_use": {
+      "To/From School": 298400001,
+      "To/From Work": 298400001
+    }
+  },
+  "dataServiceOptions": {
+    "account.customertypecode": {
+      "Active Client": 3,
+      "Prospect/Lead": 8
+    },
+    "account.iacrm_insuredtype": {
+      "No": 1,
+      "Yes": 2
+    },
+    "contact.iacrm_driverrelationship": {
+      "Relative": 298400005
+    },
+    "contact.iacrm_employmentindustry": {
+      "Homemaker/House person": 329910000,
+      "Travel/Transportation/Warehousing": 329910022
+    }
+  }
+}

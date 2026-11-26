@@ -25,7 +25,9 @@
       if (signature === lastSignature) return;
       lastSignature = signature;
       chrome.runtime.sendMessage({ type: "portal/autoCaptured", url: location.href }).catch(() => {});
-    } catch (_e) { /* page mid-transition - the next settle retries */ }
+    } catch (_e) {
+      if (globalThis.__bettersOneLead) chrome.runtime.sendMessage({ type: "portal/autoCaptured", url: location.href }).catch(() => {});
+    }
   }
 
   function settleSoon() {

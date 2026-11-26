@@ -7,6 +7,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const type = (msg as { type?: string }).type;
   if (type === "ezlynx/applicantChanged") return false; // panel-bound broadcast
   if (type === "portal/captureUpdated") return false; // panel-bound broadcast
+  if (type === "portal/leadPaused") return false;
+  if (type === "portal/leadPicked") return false; // selection coordinator handles frame replies
 
   if (type === "portal/autoCaptured") {
     handleAutoCaptured(msg as { url: string }, sender.tab?.id)

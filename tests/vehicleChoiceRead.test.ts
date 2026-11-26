@@ -52,6 +52,16 @@ describe("reading a vehicle choice field when the saved key is stale", () => {
     expect(await read("field:drivers|secondary heating source type")).toBeNull();
   });
 
+  it.each([true, false])("reads checkbox alternatives without clicking or changing checked=%s", async checked => {
+    document.body.innerHTML = `<label><input id="city" type="checkbox" ${checked ? "checked" : ""}>Inside City Limits</label>`;
+    const input = document.getElementById("city") as HTMLInputElement;
+    let clicks = 0;
+    input.addEventListener("click", () => { clicks += 1; });
+    expect(await read("pick:#city")).toEqual({ current: checked ? "Yes" : "No", options: ["Yes", "No"] });
+    expect(input.checked).toBe(checked);
+    expect(clicks).toBe(0);
+  });
+
   it("finds a native select whose generated id changed after a re-render", async () => {
     document.body.innerHTML = `<label for="mat-select-12">Use</label>
       <select id="mat-select-12"><option value="">Select</option><option>Pleasure</option><option selected>Commute</option><option>Business</option></select>`;

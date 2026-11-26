@@ -1,0 +1,154 @@
+{
+  "origin": "https://app.ezlynx.com",
+  "scope": "Configuration changes after vehicle-choice checkpoint; schema and selectors only, no captured customer values",
+  "changes": {
+    "checkbox:swimmingPoolOnPremises": {
+      "after": "note:property1",
+      "before": "crm:property1.iacrm_swimmingpool"
+    },
+    "field:applicant info>contact time": {
+      "after": "targets:[\"crm:contacts[].preferredappointmenttimecode\",\"note:contacts[]\"]",
+      "before": "crm:contacts[].preferredappointmenttimecode"
+    },
+    "field:gender": {
+      "after": "targets:[\"crm:contacts[].gendercode\",\"note:contacts[]\"]",
+      "before": "crm:contacts[].gendercode"
+    },
+    "field:home dwelling info|dwelling usage": {
+      "after": "targets:[\"crm:properties[].iacrm_usage\",\"note:properties[]\"]",
+      "before": "crm:properties[].iacrm_usage"
+    },
+    "field:home dwelling info|exterior walls": {
+      "after": "note:properties[]",
+      "before": "crm:properties[].iacrm_walls"
+    },
+    "field:home dwelling info|feet from hydrant": {
+      "after": "note:properties[]",
+      "before": "crm:properties[].iacrm_distancetofirehydrantfeet"
+    },
+    "field:home dwelling info|foundation type": {
+      "after": "note:properties[]",
+      "before": "crm:properties[].iacrm_foundation"
+    },
+    "field:home dwelling info|number of occupants": {
+      "after": "crm:properties[].iacrm_householdresidents",
+      "before": "note:properties[]"
+    },
+    "field:home dwelling info|secondary heating source type": {
+      "after": "targets:[\"crm:properties[].iacrm_secondaryheat\",\"note:properties[]\"]",
+      "before": "crm:properties[].iacrm_secondaryheat"
+    },
+    "field:i also use this vehicle for ridesharing delivery or rental uber lyft amazon flex uber eats door dash turo etc": {
+      "after": "note:opportunity",
+      "before": null
+    },
+    "field:oil storage tank on premises": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "field:vehicles|anti theft": {
+      "after": "targets:[\"crm:vehicles[].iacrm_antitheft\",\"note:opportunity\"]",
+      "before": "crm:vehicles[].iacrm_antitheft"
+    },
+    "field:vehicles|passive restraints": {
+      "after": "targets:[\"crm:vehicles[].iacrm_airbags\",\"note:opportunity\"]",
+      "before": "crm:vehicles[].iacrm_airbags"
+    },
+    "field:vehicles|vehicle use": {
+      "after": "targets:[\"crm:vehicles[].iacrm_use\",\"note:opportunity\"]",
+      "before": "crm:vehicles[].iacrm_use"
+    },
+    "pick:#accounttype_IN__35": {
+      "after": "note:opportunity",
+      "before": null
+    },
+    "pick:#allied_discount__348": {
+      "after": "note:opportunity",
+      "before": null
+    },
+    "pick:#alliedgaragetype__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#alliedlifefinone__348": {
+      "after": "note:opportunity",
+      "before": null
+    },
+    "pick:#alliedmultiline__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#alliednumvehicles__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#alliedpaymentmethod__348": {
+      "after": "note:opportunity",
+      "before": null
+    },
+    "pick:#alliedpaymentmethodhome__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#alliedxmlfireplace__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#homeownerextra_ml__7": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#intellidrivenew_travelers__13": {
+      "after": "note:opportunity",
+      "before": null
+    },
+    "pick:#limitedroof__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#maintenance__35": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#multipolicyoption__35": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#nationxmlboost__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#optpackage1__35": {
+      "after": "note:opportunity",
+      "before": null
+    },
+    "pick:#propertyloss_ml__7": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#smarthome_allied__348": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#solarpanels__35": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "pick:#step-content-carrier-questions > div:nth-of-type(1) > ez-questions:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > icq-questions:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > icq-question:nth-of-type(1) > div:nth-of-type(1)": {
+      "after": "skip",
+      "before": "note"
+    },
+    "pick:#step-content-carrier-questions > div:nth-of-type(1) > ez-questions:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > icq-questions:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > icq-question:nth-of-type(1) > div:nth-of-type(1)": {
+      "after": "skip",
+      "before": "crm:vehicles[].iacrm_transportationnetworkcompany"
+    },
+    "pick:#unoccupied_Common__7": {
+      "after": "note:properties[]",
+      "before": null
+    },
+    "text:questionInput": {
+      "after": "skip",
+      "before": "note:property1"
+    }
+  }
+}

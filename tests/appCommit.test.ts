@@ -302,11 +302,12 @@ describe("buildSupplementalNote", () => {
     expect(note.body).not.toContain("203 Wall St");
     // supplemental facts are in, grouped
     expect(note.count).toBe(3);
-    // ONE rich-text note: a table per section, every field in it
-    expect(note.body).toContain("<h3>Payment</h3>");
-    expect(note.body).toContain("<tr><td>Payment Plan</td><td>6 Pay TMPP</td></tr>");
-    expect(note.body).toContain("<tr><td>Employment Status</td><td>Employed</td></tr>");
-    expect(note.body).toContain("<tr><td>Bodily Injury Liability (BI)</td><td>$30,000/$60,000</td></tr>");
+    // ONE structured fallback table, with field headers and values below.
+    expect(note.body).toContain("<h3>Other risks</h3>");
+    expect(note.body).toContain("<th>Payment Plan</th>");
+    expect(note.body).toContain("<th>Employment Status</th>");
+    expect(note.body).toContain("<th>Bodily Injury Liability (BI)</th>");
+    expect(note.body).toContain("<td>Employed</td><td>6 Pay TMPP</td><td>$30,000/$60,000</td>");
     expect(note.body.match(/<h2>/g)).toHaveLength(1);
     expect(note.subject).toBe("QuoteCraftZ: captured application data (sales.geico.com)");
     // notes written by earlier versions are still found (and renamed) on re-load
@@ -494,8 +495,9 @@ describe("timeline note (Add to notes)", () => {
     expect(note.subject).toBe("QuoteCraftZ: Non Mapped Timeline Entries (sales.geico.com)");
     expect(note.html.startsWith("<h2>Non Mapped Timeline Entries</h2>")).toBe(true);
     expect(note.count).toBe(4);
-    expect(note.html).toContain("<h3>Notes</h3>");
-    expect(note.html).toContain("<td>Customer since</td><td>11-04-2019</td>");
+    expect(note.html).toContain("<h3>Insured</h3>");
+    expect(note.html).toContain("<th>Customer since</th>");
+    expect(note.html).toContain("<td>11-04-2019</td>");
     expect(note.html).toContain("<h3>Vehicles list</h3>");
     expect(note.html).toContain("<tr><th>VIN</th></tr><tr><td>JTMBF4DV4A5030644</td></tr><tr><td>5TDDKRFH9FS121015</td></tr>");
     expect(note.html).toContain("&lt;script&gt;x&lt;/script&gt; &amp; more");

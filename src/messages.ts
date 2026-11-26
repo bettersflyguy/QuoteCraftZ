@@ -26,6 +26,7 @@ export interface CrmLink {
   id: string;
   name: string;
 }
+export interface LeadSelection { frameId: number; label: string; key: string }
 
 export interface CaptureUpdatedBroadcast {
   type: "portal/captureUpdated";
@@ -41,6 +42,10 @@ export type BridgeRequest =
   | { type: "ezlynx/getApplicant"; applicantId: number };
 
 export type PanelRequest =
+  | { type: "panel/leadPick"; tabId: number }
+  | { type: "panel/leadCancel"; tabId: number }
+  | { type: "panel/leadClear"; tabId: number }
+  | { type: "panel/leadStatus"; tabId: number }
   | { type: "panel/getEzlynxContext" }
   | { type: "panel/listRuns"; applicantId: number }
   | { type: "panel/captureRun"; applicantId: number; run: RunListItem }
@@ -48,7 +53,7 @@ export type PanelRequest =
   | { type: "panel/getOpportunities"; accountId: string }
   | { type: "panel/getCarriers" }
   | { type: "panel/searchUsers"; query: string }
-  | { type: "panel/createAccount"; fields: NewAccountFields }
+  | { type: "panel/createAccount"; fields: NewAccountFields; fromCapture?:boolean }
   | { type: "panel/getLobs" }
   | { type: "panel/createOpportunity"; accountId: string; lobId: string; name: string; pipelineId: string | null; stageId: string | null; leadSource?: string | null; extra?: Record<string, string> }
   | { type: "panel/crmFieldCatalog"; refresh?: boolean }
@@ -57,7 +62,7 @@ export type PanelRequest =
   | { type: "panel/linkRiskAnswers"; accountId: string; items: { asset: string; id: string; row: string }[] }
   | { type: "panel/upsertChild"; child: string; accountId: string; parent: { asset: string; id: string }; values: Record<string, string>; fallbackName: string }
   | { type: "panel/upsertPriorCoverage"; accountId: string; opportunityId: string | null; lobId: string | null; carrierId: string | null; values: Record<string, unknown>; extra?: Record<string, string> }
-  | { type: "panel/upsertNote"; record: "account" | "contact" | "property" | "opportunity" | "quote" | "policy"; id: string; subject: string; html: string }
+  | { type: "panel/upsertNote"; record: "account" | "contact" | "property" | "vehicle" | "opportunity" | "quote" | "policy"; id: string; subject: string; html: string }
   | { type: "panel/getStagesForLob"; lobId: string | null; insuredType?: 1 | 2 | null; lobName?: string | null }
   | { type: "panel/portalScan"; tabId: number }
   | { type: "panel/portalPick"; tabId: number }
@@ -83,6 +88,8 @@ export type PanelRequest =
   | { type: "panel/getPageContext" }
   | { type: "panel/bpCapture" }
   | { type: "panel/bpGetCaptured" }
+  | { type: "panel/saveApplicationAnswer"; target:string; value:string; revision:string; leadKey:string }
+  | { type: "panel/confirmNameSplit"; group:string; fingerprint:string; firstName:string; lastName:string }
   | { type: "panel/bpClear" }
   | { type: "panel/portalFill"; tabId: number; overwrite: boolean; autoAdvance: boolean }
   | { type: "panel/portalIngest"; tabId: number }
@@ -93,7 +100,7 @@ export type PanelRequest =
       primary?: { slot: number; explicit: boolean };
       /** The address the agent picked for the account (Address 1 columns). */
       accountAddress?: Record<string, string> }
-  | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields }
+  | { type: "panel/createLead"; fields: import("@/crm/dataverse").NewLeadFields; fromCapture?:boolean }
   | { type: "panel/findMatches"; query: import("@/crm/dataverse").MatchQuery }
   | { type: "panel/createPolicy"; fields: import("@/crm/dataverse").NewPolicyFields }
   | { type: "panel/autoCapture"; tabId: number; enable: boolean }
@@ -105,6 +112,7 @@ export type PanelRequest =
   | { type: "panel/getCrmLink" }
   | { type: "env/list" }
   | { type: "env/setActive"; id: string }
+  | { type: "auth/status" }
   | { type: "auth/signIn" };
 
 export interface CaptureRunResponse { run: CapturedRun; aliases: Record<number, string> }

@@ -1,8 +1,10 @@
+import {DestinationCart} from "../DestinationCart";
 import { useEffect, useState } from "react";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { send, PanelError } from "../api";
 import { ErrorBar } from "../ErrorBar";
 import { LoadToCrm } from "./LoadToCrm";
+import { NameReview } from "../NameReview";
 import { exportCaptureToExcel } from "../downloadCapture";
 import type { CapturedApplication } from "@/messages";
 
@@ -72,7 +74,7 @@ export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () =
 
   return (
     <div className={styles.root}>
-      <div className={styles.title}>Bold Penguin: commercial application</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div className={styles.title}>Bold Penguin: commercial application</div><DestinationCart app={app} busy={busy} onSaved={updated=>{setApp(updated);onChanged();}}/></div>
       {error && <ErrorBar error={error} onRetry={capture} />}
       {!app && (
         <>
@@ -109,6 +111,7 @@ export function CommercialCapture({ onChanged, onFlowActive }: { onChanged: () =
             Captured {new Date(app.capturedAt).toLocaleString()}. Switch to a carrier
             portal tab; this panel offers "Fill this page" there.
           </div>
+          <NameReview app={app} onChange={setApp}/>
           <LoadToCrm key={app.capturedAt} app={app} onFlowActive={onFlowActive} />
           <div className={styles.buttons}>
             <Button disabled={busy} onClick={capture}>{busy ? <Spinner size="tiny" /> : "Re-capture"}</Button>
